@@ -7,8 +7,8 @@ This is a macOS screen saver based on the iconic rain of characters and symbols 
 ## Quick install
 
 1. Open the [latest release](https://github.com/patrickschaper/matrixScreenSaver/releases/latest) in this repository's Releases section.
-2. Download the screen saver file from the release assets.
-3. Double-click the downloaded `.saver` file and confirm the macOS install prompt.
+2. Download the versioned `.zip` file from the release assets and unzip it.
+3. Double-click the extracted `.saver` file and confirm the macOS install prompt.
 4. Open **System Settings > Wallpaper > Screen saver** and select **MatrixScreenSaver**.
 
 ## Options
@@ -62,6 +62,22 @@ This creates the screen saver bundle:
 ```text
 build/MatrixScreenSaver.saver
 ```
+
+`build.sh` reads the current version from `./VERSION` and writes it into the saver bundle metadata.
+
+### Release
+
+Run the manual **Release** workflow from the **main** branch in GitHub Actions and choose a semantic version bump (`patch`, `minor`, or `major`).
+
+The workflow now uses a protected-branch-safe two-step flow:
+
+1. bumps `VERSION` with pinned `semver@7.6.3`
+2. validates the build with `./build.sh`
+3. creates and pushes a `release/v${version}` branch
+4. opens a pull request into `main`
+5. after that PR is merged, the push-to-`main` release job builds from the merged commit, creates `${version}.zip` from `./build/`, tags that commit with `${version}`, and publishes the archive to GitHub Releases
+
+This keeps direct workflow commits off `main`, so you can protect `main` with required pull requests and still publish releases.
 
 ### Preview without installing
 

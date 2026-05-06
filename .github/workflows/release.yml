@@ -1,0 +1,220 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Semantic version segment to increment
+        required: true
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+  push:
+    branches:
+      - main
+    paths:
+      - VERSION
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: release-${{ github.event_name }}-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: github.event_name == 'workflow_dispatch'
+    name: Prepare release PR
+    runs-on: macos-15
+    env:
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Ensure release runs from main
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${GITHUB_REF}" != "refs/heads/main" ]]; then
+            echo "Run this workflow from main." >&2
+            exit 1
+          fi
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Configure git author
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Bump VERSION with semver
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          current_version="$(tr -d '[:space:]' < VERSION)"
+          next_version="$(npx --yes semver@7.6.3 "${current_version}" -i "${{ inputs.bump }}")"
+          release_branch="release/v${next_version}"
+
+          if [[ -z "${next_version}" ]]; then
+            echo "semver did not produce a version." >&2
+            exit 1
+          fi
+
+          printf '%s\n' "${next_version}" > VERSION
+
+          echo "current=${current_version}" >> "$GITHUB_OUTPUT"
+          echo "next=${next_version}" >> "$GITHUB_OUTPUT"
+          echo "branch=${release_branch}" >> "$GITHUB_OUTPUT"
+
+      - name: Ensure release refs do not already exist
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version="${{ steps.version.outputs.next }}"
+          branch="${{ steps.version.outputs.branch }}"
+
+          if git ls-remote --exit-code --heads origin "${branch}" >/dev/null 2>&1; then
+            echo "Remote branch ${branch} already exists." >&2
+            exit 1
+          fi
+
+          if git ls-remote --exit-code --tags origin "refs/tags/${version}" >/dev/null 2>&1; then
+            echo "Tag ${version} already exists." >&2
+            exit 1
+          fi
+
+          if gh release view "${version}" >/dev/null 2>&1; then
+            echo "Release ${version} already exists." >&2
+            exit 1
+          fi
+
+      - name: Validate build
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf build
+          ./build.sh
+
+      - name: Create release branch and commit
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version="${{ steps.version.outputs.next }}"
+          branch="${{ steps.version.outputs.branch }}"
+
+          git switch -c "${branch}"
+          git add VERSION
+          git commit -m "chore(release): ${version}" -m "- bump VERSION to ${version}"
+          git push --set-upstream origin "${branch}"
+
+      - name: Open release pull request
+        id: pr
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version="${{ steps.version.outputs.next }}"
+          branch="${{ steps.version.outputs.branch }}"
+          pr_body="$(
+            printf '## Summary\n- bump VERSION to %s\n- prepare the %s release\n\n## Validation\n- `./build.sh`\n' "${version}" "${version}"
+          )"
+
+          pr_url="$(gh pr create --base main --head "${branch}" --title "chore(release): ${version}" --body "${pr_body}")"
+          echo "url=${pr_url}" >> "$GITHUB_OUTPUT"
+
+      - name: Write pull request summary
+        shell: bash
+        run: |
+          printf 'Created release pull request: %s\n' "${{ steps.pr.outputs.url }}" >> "$GITHUB_STEP_SUMMARY"
+
+  publish:
+    if: github.event_name == 'push'
+    name: Publish release
+    runs-on: macos-15
+    env:
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read release version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version="$(tr -d '[:space:]' < VERSION)"
+          archive_path="${RUNNER_TEMP}/${version}.zip"
+
+          if [[ -z "${version}" ]]; then
+            echo "VERSION file is empty." >&2
+            exit 1
+          fi
+
+          echo "value=${version}" >> "$GITHUB_OUTPUT"
+          echo "archive=${archive_path}" >> "$GITHUB_OUTPUT"
+
+      - name: Check for existing release
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version="${{ steps.version.outputs.value }}"
+
+          if gh release view "${version}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build screen saver
+        if: steps.release.outputs.exists != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf build
+          ./build.sh
+
+      - name: Create release archive
+        if: steps.release.outputs.exists != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          pushd build >/dev/null
+          ditto -c -k --sequesterRsrc . "${{ steps.version.outputs.archive }}"
+          popd >/dev/null
+
+      - name: Create GitHub release
+        if: steps.release.outputs.exists != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version="${{ steps.version.outputs.value }}"
+          gh release create "${version}" "${{ steps.version.outputs.archive }}" --title "${version}" --notes "" --target "${GITHUB_SHA}"
