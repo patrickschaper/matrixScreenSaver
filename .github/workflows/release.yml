@@ -1,5 +1,8 @@
 name: Release
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 on:
   workflow_dispatch:
     inputs:
@@ -36,7 +39,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -51,9 +54,9 @@ jobs:
           fi
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
-          node-version: 22
+          node-version: 24
 
       - name: Configure git author
         shell: bash
@@ -83,7 +86,8 @@ jobs:
           echo "next=${next_version}" >> "$GITHUB_OUTPUT"
           echo "branch=${release_branch}" >> "$GITHUB_OUTPUT"
 
-      - name: Ensure release refs do not already exist
+      - name: Inspect release refs
+        id: refs
         shell: bash
         run: |
           set -euo pipefail
@@ -106,6 +110,12 @@ jobs:
             exit 1
           fi
 
+          if git ls-remote --exit-code --heads origin "${branch}" >/dev/null 2>&1; then
+            echo "branch_exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "branch_exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Validate build
         shell: bash
         run: |
@@ -113,20 +123,36 @@ jobs:
           rm -rf build
           ./build.sh
 
-      - name: Create release branch and commit
+      - name: Create or reuse release branch
         shell: bash
         run: |
           set -euo pipefail
 
           version="${{ steps.version.outputs.next }}"
           branch="${{ steps.version.outputs.branch }}"
+          branch_exists="${{ steps.refs.outputs.branch_exists }}"
+
+          if [[ "${branch_exists}" == "true" ]]; then
+            git restore --source=HEAD --staged --worktree VERSION
+            git fetch origin "${branch}"
+            git switch -C "${branch}" "origin/${branch}"
+
+            branch_version="$(tr -d '[:space:]' < VERSION)"
+            if [[ "${branch_version}" != "${version}" ]]; then
+              echo "Existing ${branch} has VERSION ${branch_version}, expected ${version}." >&2
+              exit 1
+            fi
+
+            exit 0
+          fi
 
           git switch -c "${branch}"
+          printf '%s\n' "${version}" > VERSION
           git add VERSION
           git commit -m "chore(release): ${version}" -m "- bump VERSION to ${version}"
           git push --set-upstream origin "${branch}"
 
-      - name: Open release pull request
+      - name: Open or reuse release pull request
         id: pr
         shell: bash
         run: |
@@ -138,13 +164,21 @@ jobs:
             printf '## Summary\n- bump VERSION to %s\n- prepare the %s release\n\n## Validation\n- `./build.sh`\n' "${version}" "${version}"
           )"
 
-          pr_url="$(gh pr create --base main --head "${branch}" --title "chore(release): ${version}" --body "${pr_body}")"
+          pr_url="$(gh pr list --head "${branch}" --base main --state open --json url --jq '.[0].url')"
+          if [[ -z "${pr_url}" || "${pr_url}" == "null" ]]; then
+            pr_url="$(gh pr create --base main --head "${branch}" --title "chore(release): ${version}" --body "${pr_body}")"
+          fi
+
           echo "url=${pr_url}" >> "$GITHUB_OUTPUT"
 
       - name: Write pull request summary
         shell: bash
         run: |
-          printf 'Created release pull request: %s\n' "${{ steps.pr.outputs.url }}" >> "$GITHUB_STEP_SUMMARY"
+          {
+            printf 'Release pull request: %s\n' "${{ steps.pr.outputs.url }}"
+            printf 'Publish is skipped on workflow_dispatch by design.\n'
+            printf 'Merge that pull request into main to trigger the publish job.\n'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   publish:
     if: github.event_name == 'push'
@@ -155,7 +189,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
