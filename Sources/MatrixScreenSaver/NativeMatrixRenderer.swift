@@ -9,6 +9,7 @@ final class NativeMatrixRenderer {
         var frameRate = 25.0
         var errorRate = 1.0
 
+        /// Clamps runtime configuration values to the supported renderer ranges.
         func sanitized() -> Configuration {
             Configuration(
                 numberSceneEnabled: numberSceneEnabled,
@@ -80,6 +81,7 @@ final class NativeMatrixRenderer {
         var content: [LayerCell] = []
         var threads: [RainThread] = []
 
+        /// Resizes the layer storage to the active terminal grid.
         mutating func resize(columns: Int, rows: Int) {
             self.columns = columns
             self.rows = rows
@@ -87,6 +89,7 @@ final class NativeMatrixRenderer {
             threads.removeAll(keepingCapacity: false)
         }
 
+        /// Clears all layer content and active rain threads.
         mutating func clear() {
             content = Array(repeating: LayerCell(), count: columns * rows)
             threads.removeAll(keepingCapacity: false)
@@ -97,10 +100,12 @@ final class NativeMatrixRenderer {
             set { content[(row * columns) + column] = newValue }
         }
 
+        /// Adds a newly spawned rain thread to the layer.
         mutating func addThread(_ thread: RainThread) {
             threads.append(thread)
         }
 
+        /// Advances each rain thread and stamps newly spawned glyphs into the layer.
         mutating func stepThreads(now: Int, glyphProvider: () -> UnicodeScalar) {
             var writeIndex = 0
             var readIndex = 0
@@ -135,6 +140,7 @@ final class NativeMatrixRenderer {
             }
         }
 
+        /// Updates per-cell decay state and optional glyph corruption for the frame.
         mutating func resolveLevels(now: Int, errorRateModulo: Int, glyphProvider: () -> UnicodeScalar) {
             guard columns > 0, rows > 0 else {
                 return
@@ -207,10 +213,12 @@ final class NativeMatrixRenderer {
     private var activeScene: Scene = .numberIntro
     private var sceneFrameIndex = 0
 
+    /// Returns the rendered cell content at the requested grid position.
     subscript(row: Int, column: Int) -> RenderCell {
         renderCells[(row * columns) + column]
     }
 
+    /// Returns the number of visible cells currently present in a row.
     func visibleCount(in row: Int) -> Int {
         guard row >= 0, row < visibleCountByRow.count else {
             return 0
@@ -218,6 +226,7 @@ final class NativeMatrixRenderer {
         return visibleCountByRow[row]
     }
 
+    /// Indicates whether a row changed in the most recent render pass.
     func isRowDirty(_ row: Int) -> Bool {
         guard row >= 0, row < dirtyRows.count else {
             return false
@@ -225,6 +234,7 @@ final class NativeMatrixRenderer {
         return dirtyRows[row]
     }
 
+    /// Clears the dirty-row flags after the view has presented the current frame.
     func clearDirtyRows() {
         guard dirtyRowCount > 0 else {
             return
@@ -239,6 +249,7 @@ final class NativeMatrixRenderer {
         1.0 / max(configuration.frameRate, MatrixScreenSaverOptions.minimumFrameRate)
     }
 
+    /// Starts the renderer state for a new saver session.
     func start() {
         running = true
         lastUpdateTime = Date.timeIntervalSinceReferenceDate
@@ -249,10 +260,12 @@ final class NativeMatrixRenderer {
         }
     }
 
+    /// Stops the renderer so no more simulation work is produced.
     func stop() {
         running = false
     }
 
+    /// Resizes the terminal grid and resets scene state to match it.
     func resize(to size: TerminalSize) {
         columns = max(size.columns, 1)
         rows = max(size.rows, 1)
@@ -272,6 +285,7 @@ final class NativeMatrixRenderer {
         beginSceneSequence()
     }
 
+    /// Applies an updated renderer configuration while preserving intent where possible.
     func updateConfiguration(_ configuration: Configuration) {
         let previousConfiguration = self.configuration
         let sanitizedConfiguration = configuration.sanitized()
@@ -292,6 +306,7 @@ final class NativeMatrixRenderer {
         }
     }
 
+    /// Advances the renderer by the elapsed time and reports whether output changed.
     @discardableResult
     func advance() -> Bool {
         guard running, columns > 0, rows > 0 else {
@@ -318,6 +333,7 @@ final class NativeMatrixRenderer {
         return dirtyRowCount > 0
     }
 
+    /// Dispatches the current frame tick to the active scene implementation.
     private func stepFrame() {
         switch activeScene {
         case .numberIntro:
@@ -327,6 +343,7 @@ final class NativeMatrixRenderer {
         }
     }
 
+    /// Advances the continuous rain scene by one simulation step.
     private func stepRainFrame() {
         if frameIndex % spawnModulo == 0 {
             addRandomThread()
@@ -344,6 +361,7 @@ final class NativeMatrixRenderer {
         constructRenderContent()
     }
 
+    /// Advances the startup number scene by one simulation step.
     private func stepNumberIntroFrame() {
         populateNumberIntroFrame(stripe: currentNumberIntroStripe)
         now += 1
@@ -362,6 +380,7 @@ final class NativeMatrixRenderer {
         numberIntroStripePeriods.count * numberIntroFramesPerStripe
     }
 
+    /// Chooses and initializes the first scene for the current session.
     private func beginSceneSequence() {
         sceneFrameIndex = 0
         now = 100
@@ -382,12 +401,14 @@ final class NativeMatrixRenderer {
         }
     }
 
+    /// Clears all render layers back to a blank state.
     private func resetLayers() {
         for index in layers.indices {
             layers[index].clear()
         }
     }
 
+    /// Generates the current startup number-scene frame directly into the render grid.
     private func populateNumberIntroFrame(stripe: Int) {
         guard columns > 0, rows > 0 else {
             return
@@ -446,6 +467,7 @@ final class NativeMatrixRenderer {
         return max(1, Int(ceil(baseSpawnModulo * frameRateScale)))
     }
 
+    /// Spawns a new falling thread on one of the renderer layers.
     private func addRandomThread() {
         let baseSpeed = Self.baseSpeedTable.randomElement() ?? 6
         let stepInterval = max(1, Int((Double(baseSpeed) * frameRateScale).rounded()))
@@ -461,6 +483,7 @@ final class NativeMatrixRenderer {
         layers[layerIndex].addThread(thread)
     }
 
+    /// Rebuilds the composed render grid from the three simulation layers.
     private func constructRenderContent() {
         let cellCount = columns * rows
         if renderCells.count != cellCount {
@@ -587,10 +610,12 @@ final class NativeMatrixRenderer {
         }
     }
 
+    /// Returns a random glyph from the supported rain character pool.
     private func randomGlyph() -> UnicodeScalar {
         Self.glyphPool.randomElement() ?? UnicodeScalar("0")
     }
 
+    /// Returns a random ASCII numeral for the startup number scene.
     private func randomNumberGlyph() -> UnicodeScalar {
         UnicodeScalar(48 + Int.random(in: 0..<10)) ?? UnicodeScalar("0")
     }
@@ -614,6 +639,7 @@ final class NativeMatrixRenderer {
         configuration.twinkleEnabled ? Self.defaultTwinkle : 0.0
     }
 
+    /// Accumulates diffuse glow contributions around a rendered foreground cell.
     private func accumulateDiffuse(into diffuseLevels: inout [Double], row: Int, column: Int, level: Int, levelCount: Int) {
         guard levelCount > 1 else {
             return
@@ -635,6 +661,7 @@ final class NativeMatrixRenderer {
         addDiffuse(into: &diffuseLevels, row: row + 1, column: column + 1, value: p2)
     }
 
+    /// Adds a single diffuse contribution to a valid neighboring cell.
     private func addDiffuse(into diffuseLevels: inout [Double], row: Int, column: Int, value: Double) {
         guard row >= 0, row < rows, column >= 0, column < columns, value > 0 else {
             return
@@ -642,6 +669,7 @@ final class NativeMatrixRenderer {
         diffuseLevels[(row * columns) + column] += value
     }
 
+    /// Converts accumulated diffuse values into background color levels.
     private func applyDiffuseLevels(into renderCells: inout [RenderCell], levelCount: Int) {
         guard levelCount > 1 else {
             return
@@ -660,6 +688,7 @@ final class NativeMatrixRenderer {
         }
     }
 
+    /// Resets all dirty-row bookkeeping before a new render pass.
     private func prepareDirtyRows() {
         if dirtyRows.count != rows {
             dirtyRows = Array(repeating: false, count: rows)
@@ -669,6 +698,7 @@ final class NativeMatrixRenderer {
         dirtyRowCount = 0
     }
 
+    /// Marks a row as dirty if it changed during rendering.
     private func markRowDirty(_ row: Int) {
         guard row >= 0, row < rows, !dirtyRows[row] else {
             return
@@ -677,6 +707,7 @@ final class NativeMatrixRenderer {
         dirtyRowCount += 1
     }
 
+    /// Marks the entire grid dirty, usually after a full scene reset.
     private func markAllRowsDirty() {
         if dirtyRows.count != rows {
             dirtyRows = Array(repeating: true, count: rows)
@@ -686,13 +717,14 @@ final class NativeMatrixRenderer {
         dirtyRowCount = rows
     }
 
+    /// Quantizes a fractional brightness value into a palette level.
     private func quantizedLevel(for fractionalLevel: Double, upperBound: Int) -> Int {
         let clampedLevel = max(0.0, fractionalLevel)
         let quantizedLevel: Int
 
         if configuration.twinkleEnabled {
             var level = Int(floor(clampedLevel))
-            if Double.random(in: 0...1) > clampedLevel - Double(level) {
+            if Double.random(in: 0...1) < clampedLevel - Double(level) {
                 level += 1
             }
             quantizedLevel = level
@@ -704,10 +736,12 @@ final class NativeMatrixRenderer {
         return min(max(quantizedLevel, 0), upperBound)
     }
 
+    /// Linearly interpolates a value into the supplied output range.
     private func interpolate(_ value: Double, _ lower: Double, _ upper: Double) -> Double {
         lower + (upper - lower) * value
     }
 
+    /// Converts normalized RGB values into an xterm-256 palette index.
     private static func color2index(_ red: Double, _ green: Double, _ blue: Double, levels: Int) -> Int {
         let r = Int(round(red * Double(levels - 1)))
         let g = Int(round(green * Double(levels - 1)))
@@ -715,6 +749,7 @@ final class NativeMatrixRenderer {
         return 16 + (r * levels + g) * levels + b
     }
 
+    /// Converts an xterm-256 palette index back into an RGB color.
     private static func index2color(_ index: Int) -> TerminalColor {
         let r: Int
         let g: Int
@@ -746,6 +781,7 @@ final class NativeMatrixRenderer {
         return TerminalColor(red: UInt8(r), green: UInt8(g), blue: UInt8(b))
     }
 
+    /// Builds the green palette used for foreground and diffuse rendering levels.
     private static func makePalette() -> [TerminalColor] {
         let base = index2color(47)
 
