@@ -1,4 +1,6 @@
-# MatrixScreenSaver
+# macOS Matrix Screen Saver
+
+![macOS Matrix Screen Saver demo](docs/matrix-screensaver.gif)
 
 MatrixScreenSaver is a macOS `.saver` bundle that shows a terminal-window version of the Matrix effect.
 
@@ -15,7 +17,7 @@ The active renderer currently ports `rain-forever` and can optionally start with
 - Native Swift/AppKit screen saver bundle
 - Terminal-style window chrome around the animation
 - In-process renderer for `rain-forever` with an optional upstream `number` intro
-- Native **Options…** sheet for Number scene, Twinkle, Diffuse, Rain density, Frame rate, and Error rate
+- Native **Options…** sheet for Number scene, Twinkle, Diffuse, Character size, Rain density, Frame rate, and Error rate
 - Preview app for fast iteration without reinstalling
 
 ## Repository layout
@@ -69,7 +71,7 @@ This rebuilds the bundle, compiles the preview host, and opens the saver in a no
 
 After installing:
 
-1. open **System Settings > Screen Saver**
+1. open **System Settings > Wallpaper > Screen saver...**
 2. select **MatrixScreenSaver**
 
 To relaunch the screen saver host manually:
@@ -87,14 +89,7 @@ The saver exposes a native **Options…** sheet. The values are stored with `Scr
 | Number scene | Show the startup number scene before continuous rain. | On |
 | Twinkle | Turn on/off the twinkling effect. | On |
 | Diffuse | Turn on/off the background-color effect. | On |
+| Character size | Set the character cell width and height in pixels. | 8 x 15 |
 | Rain density | Set the factor for the density of rain drops. A positive number. | 1.0 |
 | Frame rate | Set the frame rate per second. A positive number less than or equal to 1000. | 25 |
 | Error rate | Set the factor for the rate of character changes. A non-negative number. | 1.0 |
-
-The Twinkle, Diffuse, Rain density, Frame rate, and Error rate descriptions are taken from the original `cxxmatrix --help` text.
-
-## Notes
-
-- The old PTY/subprocess wrapper path has been removed; the current codebase only contains the native renderer implementation used by preview and the installed saver.
-- Rendering uses cached glyph bitmaps plus a composed offscreen frame each tick, which keeps the saver responsive in both preview and the installed host.
-- The build and preview flow now only depends on the native Swift sources listed above; there is no bundled web terminal or external `cxxmatrix` runtime in the repo anymore.

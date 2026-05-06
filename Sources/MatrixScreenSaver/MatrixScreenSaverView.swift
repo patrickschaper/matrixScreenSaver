@@ -4,7 +4,8 @@ import ScreenSaver
 @objc(MatrixScreenSaverView)
 final class MatrixScreenSaverView: ScreenSaverView {
     private static let terminalTitle = "cxxmatrix"
-    private static let nativeRenderer = NativeMatrixRenderer()
+    private static let screenSaverWillStopNotification = Notification.Name("com.apple.screensaver.willstop")
+    private static let screenSaverDidStopNotification = Notification.Name("com.apple.screensaver.didstop")
     private static let defaults: ScreenSaverDefaults = {
         let moduleName = Bundle(for: MatrixScreenSaverView.self).bundleIdentifier ?? "MatrixScreenSaver"
         guard let defaults = ScreenSaverDefaults(forModuleWithName: moduleName) else {
@@ -13,12 +14,14 @@ final class MatrixScreenSaverView: ScreenSaverView {
         MatrixScreenSaverOptions.registerDefaults(in: defaults)
         return defaults
     }()
-    private static let fallbackReferenceSize = NSSize(width: 1280, height: 832)
-    private static let referenceTerminalFontSize: CGFloat = 11
     private static let titlebarHeight: CGFloat = 44
     private static let contentPadding: CGFloat = 18
     private static let windowCornerRadius: CGFloat = 18
     private static let terminalCornerRadius: CGFloat = 10
+    private static let nativeColorSpace = CGColorSpaceCreateDeviceRGB()
+    private static let nativeBitmapInfo = CGBitmapInfo.byteOrder32Little.union(
+        CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue)
+    )
 
     private static let backgroundGradient = NSGradient(colors: [
         NSColor(calibratedRed: 0.02, green: 0.03, blue: 0.02, alpha: 1.0),
@@ -48,10 +51,16 @@ final class MatrixScreenSaverView: ScreenSaverView {
     private var nativeRegularGlyphsByLevel: [[UnicodeScalar: CGImage]] = []
     private var nativeBoldGlyphsByLevel: [[UnicodeScalar: CGImage]] = []
     private var nativeDiffuseColorsByLevel: [CGColor] = []
+    private var nativeFrameBuffer: UnsafeMutableRawPointer?
     private var nativeFrameContext: CGContext?
+    private var nativeFrameImage: CGImage?
     private var nativeFrameSize = CGSize.zero
+    private let nativeRenderer = NativeMatrixRenderer()
     private var saverOptions = MatrixScreenSaverOptions()
-    private lazy var optionsSheetController = MatrixScreenSaverOptionsSheetController(owner: self)
+    private var shouldReloadOptionsOnStart = true
+    private var optionsSheetController: MatrixScreenSaverOptionsSheetController?
+    private var hostWindowObservers: [NSObjectProtocol] = []
+    private var screenSaverLifecycleObservers: [NSObjectProtocol] = []
     private let debugIdentifier = String(UUID().uuidString.prefix(8))
 
     override var isOpaque: Bool {
@@ -63,8 +72,10 @@ final class MatrixScreenSaverView: ScreenSaverView {
     }
 
     override var configureSheet: NSWindow? {
-        optionsSheetController.prepare(using: saverOptions)
-        return optionsSheetController.configureSheet()
+        saverOptions = Self.loadSaverOptions()
+        let controller = makeOptionsSheetController()
+        controller.prepare(using: saverOptions)
+        return controller.configureSheet()
     }
 
     override init?(frame: NSRect, isPreview: Bool) {
@@ -101,31 +112,76 @@ final class MatrixScreenSaverView: ScreenSaverView {
         adoptContainerBoundsIfNeeded()
     }
 
+    override func viewWillMove(toSuperview newSuperview: NSView?) {
+        if newSuperview == nil {
+            handleHostDetachment(reason: "superview-detach")
+        }
+        super.viewWillMove(toSuperview: newSuperview)
+    }
+
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        updateHostWindowObservation()
         adoptContainerBoundsIfNeeded()
+    }
+
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        if newWindow == nil {
+            handleHostDetachment(reason: "window-detach")
+        }
+        if window !== newWindow {
+            stopObservingHostWindow()
+        }
+        super.viewWillMove(toWindow: newWindow)
     }
 
     override func startAnimation() {
         super.startAnimation()
         animationActive = true
+        if shouldReloadOptionsOnStart {
+            saverOptions = Self.loadSaverOptions()
+        }
+        shouldReloadOptionsOnStart = true
+        nativeRenderer.updateConfiguration(saverOptions.rendererConfiguration())
+        animationTimeInterval = nativeRenderer.preferredAnimationTimeInterval
         NSLog("MatrixScreenSaver startAnimation bounds=%@", NSStringFromRect(bounds))
         appendDebugLog("[\(debugIdentifier)] startAnimation bounds=\(NSStringFromRect(bounds))")
+        updateScreenSaverLifecycleObservation()
         updateLayout()
-        Self.nativeRenderer.start()
+        nativeRenderer.start()
     }
 
     override func stopAnimation() {
-        super.stopAnimation()
+        let wasActive = animationActive
         animationActive = false
-        NSLog("MatrixScreenSaver stopAnimation")
-        Self.nativeRenderer.stop()
+        nativeRenderer.stop()
+        releaseRenderingResources()
+        if wasActive {
+            NSLog("MatrixScreenSaver stopAnimation")
+            appendDebugLog("[\(debugIdentifier)] stopAnimation")
+        }
+        super.stopAnimation()
     }
 
     override func animateOneFrame() {
+        guard animationActive else {
+            return
+        }
+        guard isHostWindowVisibleForAnimation else {
+            handleHostDetachment(reason: "window-hidden")
+            return
+        }
         super.animateOneFrame()
-        Self.nativeRenderer.advance()
-        needsDisplay = true
+        if nativeRenderer.advance() {
+            needsDisplay = true
+        }
+    }
+
+    deinit {
+        appendDebugLog("[\(debugIdentifier)] deinit")
+        animationActive = false
+        nativeRenderer.stop()
+        releaseRenderingResources()
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -146,6 +202,7 @@ final class MatrixScreenSaverView: ScreenSaverView {
         appendDebugLog("[\(debugIdentifier)] init frame=\(NSStringFromRect(frame)) preview=\(isPreview)")
         saverOptions = Self.loadSaverOptions()
         applySaverOptions(saverOptions, persist: false, restartAnimation: false)
+        shouldReloadOptionsOnStart = true
         updateLayout()
         needsDisplay = true
     }
@@ -161,7 +218,7 @@ final class MatrixScreenSaverView: ScreenSaverView {
         guard canvasBounds.width > 20, canvasBounds.height > 20 else {
             return
         }
-        let renderBaseSize = preferredRenderBaseSize(for: canvasBounds.size)
+        let hostSize = canvasBounds.size
 
         terminalRect = canvasBounds.integral
 
@@ -176,20 +233,20 @@ final class MatrixScreenSaverView: ScreenSaverView {
             height: Self.titlebarHeight
         ).integral
 
-        let fontSize = preferredTerminalFontSize(for: renderBaseSize)
+        cellWidth = CGFloat(max(saverOptions.characterWidth, MatrixScreenSaverOptions.minimumCharacterWidth))
+        lineHeight = CGFloat(max(saverOptions.characterHeight, MatrixScreenSaverOptions.minimumCharacterHeight))
+
+        let fontSize = fittedTerminalFontSize(forCellWidth: cellWidth, cellHeight: lineHeight)
         regularFont = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .medium)
         boldFont = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .semibold)
 
-        lineHeight = max(12, round(fontSize * 1.35))
-        let characterWidth = ceil(("W" as NSString).size(withAttributes: [.font: regularFont]).width + 1)
-        cellWidth = max(7, characterWidth)
         textInsetY = max(0, floor((lineHeight - regularFont.pointSize) / 2) - 1)
         rebuildNativeGlyphCache()
         rebuildNativeDiffuseColors()
 
         let nextSize = TerminalSize(
-            columns: max(24, Int(floor(renderBaseSize.width / cellWidth))),
-            rows: max(12, Int(floor(renderBaseSize.height / lineHeight)))
+            columns: max(24, Int(floor(hostSize.width / cellWidth))),
+            rows: max(12, Int(floor(hostSize.height / lineHeight)))
         )
         rebuildNativeFrameContext(for: nextSize)
 
@@ -197,7 +254,7 @@ final class MatrixScreenSaverView: ScreenSaverView {
             terminalSize = nextSize
             NSLog("MatrixScreenSaver layout columns=%d rows=%d bounds=%@", nextSize.columns, nextSize.rows, NSStringFromRect(bounds))
             appendDebugLog("[\(debugIdentifier)] layout columns=\(nextSize.columns) rows=\(nextSize.rows) bounds=\(NSStringFromRect(bounds)) terminalRect=\(NSStringFromRect(terminalRect))")
-            Self.nativeRenderer.resize(to: nextSize)
+            nativeRenderer.resize(to: nextSize)
         }
 
         markDisplayDirty()
@@ -205,6 +262,122 @@ final class MatrixScreenSaverView: ScreenSaverView {
 
     private func markDisplayDirty() {
         needsDisplay = true
+    }
+
+    private func handleHostDetachment(reason: String) {
+        appendDebugLog("[\(debugIdentifier)] \(reason)")
+        if animationActive {
+            stopAnimation()
+        } else {
+            releaseRenderingResources()
+        }
+    }
+
+    private var isHostWindowVisibleForAnimation: Bool {
+        guard let window else {
+            return superview != nil
+        }
+        return window.isVisible
+    }
+
+    private func updateHostWindowObservation() {
+        stopObservingHostWindow()
+        guard let window else {
+            return
+        }
+
+        let notificationCenter = NotificationCenter.default
+        hostWindowObservers = [
+            notificationCenter.addObserver(
+                forName: NSWindow.didChangeOcclusionStateNotification,
+                object: window,
+                queue: nil
+            ) { [weak self] _ in
+                guard let self, self.animationActive else {
+                    return
+                }
+                if !window.isVisible {
+                    self.handleHostDetachment(reason: "window-hidden")
+                }
+            },
+            notificationCenter.addObserver(
+                forName: NSWindow.willCloseNotification,
+                object: window,
+                queue: nil
+            ) { [weak self] _ in
+                self?.handleHostDetachment(reason: "window-close")
+            },
+            notificationCenter.addObserver(
+                forName: NSWindow.didMiniaturizeNotification,
+                object: window,
+                queue: nil
+            ) { [weak self] _ in
+                self?.handleHostDetachment(reason: "window-miniaturize")
+            },
+        ]
+    }
+
+    private func stopObservingHostWindow() {
+        guard !hostWindowObservers.isEmpty else {
+            return
+        }
+        let notificationCenter = NotificationCenter.default
+        for observer in hostWindowObservers {
+            notificationCenter.removeObserver(observer)
+        }
+        hostWindowObservers.removeAll(keepingCapacity: false)
+    }
+
+    private func updateScreenSaverLifecycleObservation() {
+        stopObservingScreenSaverLifecycle()
+
+        let center = DistributedNotificationCenter.default()
+        screenSaverLifecycleObservers = [
+            center.addObserver(
+                forName: Self.screenSaverWillStopNotification,
+                object: nil,
+                queue: nil
+            ) { [weak self] _ in
+                guard let self, self.animationActive else {
+                    return
+                }
+                self.handleHostDetachment(reason: "screensaver-willstop")
+            },
+            center.addObserver(
+                forName: Self.screenSaverDidStopNotification,
+                object: nil,
+                queue: nil
+            ) { [weak self] _ in
+                guard let self, self.animationActive else {
+                    return
+                }
+                self.handleHostDetachment(reason: "screensaver-didstop")
+            },
+        ]
+    }
+
+    private func stopObservingScreenSaverLifecycle() {
+        guard !screenSaverLifecycleObservers.isEmpty else {
+            return
+        }
+        let center = DistributedNotificationCenter.default()
+        for observer in screenSaverLifecycleObservers {
+            center.removeObserver(observer)
+        }
+        screenSaverLifecycleObservers.removeAll(keepingCapacity: false)
+    }
+
+    private func releaseRenderingResources() {
+        stopObservingHostWindow()
+        stopObservingScreenSaverLifecycle()
+        releaseNativeFrameResources()
+        terminalSize = nil
+        nativeRegularGlyphsByLevel.removeAll(keepingCapacity: false)
+        nativeBoldGlyphsByLevel.removeAll(keepingCapacity: false)
+        nativeDiffuseColorsByLevel.removeAll(keepingCapacity: false)
+        colorCache.removeAll(keepingCapacity: false)
+        optionsSheetController = nil
+        hasLoggedFirstDraw = false
     }
 
     private func drawBackground() {
@@ -320,8 +493,8 @@ final class MatrixScreenSaverView: ScreenSaverView {
     }
 
     private func drawNativeTerminal(_ localTerminalSize: TerminalSize) {
-        let visibleRows = min(localTerminalSize.rows, Self.nativeRenderer.rows)
-        let visibleColumns = min(localTerminalSize.columns, Self.nativeRenderer.columns)
+        let visibleRows = min(localTerminalSize.rows, nativeRenderer.rows)
+        let visibleColumns = min(localTerminalSize.columns, nativeRenderer.columns)
         guard visibleRows > 0, visibleColumns > 0 else {
             return
         }
@@ -332,31 +505,55 @@ final class MatrixScreenSaverView: ScreenSaverView {
             return
         }
 
-        let frameBounds = CGRect(origin: .zero, size: nativeFrameSize)
-        frameContext.clear(frameBounds)
+        let hasDiffuseBackground = saverOptions.diffuseEnabled && !nativeDiffuseColorsByLevel.isEmpty
 
         var row = 0
         while row < visibleRows {
-            guard Self.nativeRenderer.visibleCount(in: row) > 0 else {
+            guard nativeRenderer.isRowDirty(row) else {
                 row += 1
                 continue
             }
 
             let baseY = nativeFrameSize.height - (CGFloat(row + 1) * lineHeight)
+            frameContext.clear(CGRect(x: 0, y: baseY, width: nativeFrameSize.width, height: lineHeight))
+
+            guard nativeRenderer.visibleCount(in: row) > 0 else {
+                row += 1
+                continue
+            }
+
+            if hasDiffuseBackground {
+                var column = 0
+                while column < visibleColumns {
+                    let backgroundLevel = nativeRenderer[row, column].backgroundLevel
+                    guard backgroundLevel > 0, backgroundLevel < nativeDiffuseColorsByLevel.count else {
+                        column += 1
+                        continue
+                    }
+
+                    let runStart = column
+                    column += 1
+                    while column < visibleColumns, nativeRenderer[row, column].backgroundLevel == backgroundLevel {
+                        column += 1
+                    }
+
+                    let x = CGFloat(runStart) * cellWidth
+                    let width = CGFloat(column - runStart) * cellWidth
+                    frameContext.setFillColor(nativeDiffuseColorsByLevel[backgroundLevel])
+                    frameContext.fill(CGRect(x: x, y: baseY, width: width, height: lineHeight))
+                }
+            }
+
             var column = 0
             while column < visibleColumns {
-                let cell = Self.nativeRenderer[row, column]
-                guard cell.isVisible else {
+                let cell = nativeRenderer[row, column]
+                guard cell.hasForeground else {
                     column += 1
                     continue
                 }
 
                 let x = CGFloat(column) * cellWidth
                 let cellRect = CGRect(x: x, y: baseY, width: cellWidth, height: lineHeight)
-                if cell.backgroundLevel > 0, cell.backgroundLevel < nativeDiffuseColorsByLevel.count {
-                    frameContext.setFillColor(nativeDiffuseColorsByLevel[cell.backgroundLevel])
-                    frameContext.fill(cellRect)
-                }
                 guard let glyph = nativeGlyphImage(for: cell) else {
                     column += 1
                     continue
@@ -367,7 +564,9 @@ final class MatrixScreenSaverView: ScreenSaverView {
             row += 1
         }
 
-        guard let image = frameContext.makeImage() else {
+        frameContext.flush()
+        nativeRenderer.clearDirtyRows()
+        guard let image = nativeFrameImage else {
             return
         }
 
@@ -384,17 +583,17 @@ final class MatrixScreenSaverView: ScreenSaverView {
     }
 
     private func rebuildNativeGlyphCache() {
-        let palette = Self.nativeRenderer.levelColors
+        let palette = nativeRenderer.levelColors
         nativeRegularGlyphsByLevel = makeNativeGlyphCaches(palette: palette, font: regularFont)
         nativeBoldGlyphsByLevel = makeNativeGlyphCaches(palette: palette, font: boldFont)
     }
 
     private func rebuildNativeDiffuseColors() {
-        let palette = Self.nativeRenderer.levelColors
+        let palette = nativeRenderer.levelColors
         let denominator = max(CGFloat(palette.count - 1), 1)
         nativeDiffuseColorsByLevel = palette.enumerated().map { index, terminalColor in
             let intensity = CGFloat(index) / denominator
-            let alpha = 0.03 + (intensity * 0.14)
+            let alpha = 0.05 + (intensity * 0.18)
             return color(for: terminalColor).withAlphaComponent(alpha).cgColor
         }
     }
@@ -426,25 +625,10 @@ final class MatrixScreenSaverView: ScreenSaverView {
     ) -> CGImage? {
         let pixelWidth = max(Int(ceil(cellWidth)), 1)
         let pixelHeight = max(Int(ceil(lineHeight)), 1)
-        guard let bitmap = NSBitmapImageRep(
-            bitmapDataPlanes: nil,
-            pixelsWide: pixelWidth,
-            pixelsHigh: pixelHeight,
-            bitsPerSample: 8,
-            samplesPerPixel: 4,
-            hasAlpha: true,
-            isPlanar: false,
-            colorSpaceName: .deviceRGB,
-            bytesPerRow: 0,
-            bitsPerPixel: 0
-        ) else {
+        guard let glyphContext = makeNativeBitmapContext(width: pixelWidth, height: pixelHeight) else {
             return nil
         }
-
-        bitmap.size = NSSize(width: cellWidth, height: lineHeight)
-        guard let graphicsContext = NSGraphicsContext(bitmapImageRep: bitmap) else {
-            return nil
-        }
+        let graphicsContext = NSGraphicsContext(cgContext: glyphContext, flipped: false)
 
         let text = String(scalar)
         let textSize = (text as NSString).size(withAttributes: attributes)
@@ -455,11 +639,11 @@ final class MatrixScreenSaverView: ScreenSaverView {
 
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = graphicsContext
-        graphicsContext.cgContext.clear(CGRect(origin: .zero, size: CGSize(width: cellWidth, height: lineHeight)))
+        glyphContext.clear(CGRect(origin: .zero, size: CGSize(width: pixelWidth, height: pixelHeight)))
         (text as NSString).draw(at: point, withAttributes: attributes)
         NSGraphicsContext.restoreGraphicsState()
 
-        return bitmap.cgImage
+        return glyphContext.makeImage()
     }
 
     private func nativeGlyphImage(for cell: NativeMatrixRenderer.RenderCell) -> CGImage? {
@@ -476,27 +660,87 @@ final class MatrixScreenSaverView: ScreenSaverView {
         let frameWidth = max(1, Int(ceil(CGFloat(size.columns) * cellWidth)))
         let frameHeight = max(1, Int(ceil(CGFloat(size.rows) * lineHeight)))
         let frameSize = CGSize(width: frameWidth, height: frameHeight)
-        guard frameSize != nativeFrameSize || nativeFrameContext == nil else {
+        guard frameSize != nativeFrameSize || nativeFrameContext == nil || nativeFrameImage == nil else {
             return
         }
 
-        guard let frameContext = CGContext(
-            data: nil,
-            width: frameWidth,
-            height: frameHeight,
-            bitsPerComponent: 8,
-            bytesPerRow: frameWidth * 4,
-            space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ) else {
-            nativeFrameContext = nil
-            nativeFrameSize = .zero
+        releaseNativeFrameResources()
+
+        let bytesPerRow = frameWidth * 4
+        let bufferSize = bytesPerRow * frameHeight
+        let buffer = UnsafeMutableRawPointer.allocate(
+            byteCount: bufferSize,
+            alignment: MemoryLayout<UInt32>.alignment
+        )
+        buffer.initializeMemory(as: UInt8.self, repeating: 0, count: bufferSize)
+
+        guard
+            let frameContext = makeNativeBitmapContext(
+                width: frameWidth,
+                height: frameHeight,
+                data: buffer,
+                bytesPerRow: bytesPerRow
+            ),
+            let provider = CGDataProvider(
+                dataInfo: nil,
+                data: buffer,
+                size: bufferSize,
+                releaseData: { _, _, _ in }
+            ),
+            let frameImage = CGImage(
+                width: frameWidth,
+                height: frameHeight,
+                bitsPerComponent: 8,
+                bitsPerPixel: 32,
+                bytesPerRow: bytesPerRow,
+                space: Self.nativeColorSpace,
+                bitmapInfo: Self.nativeBitmapInfo,
+                provider: provider,
+                decode: nil,
+                shouldInterpolate: false,
+                intent: .defaultIntent
+            )
+        else {
+            buffer.deallocate()
             return
         }
 
-        frameContext.interpolationQuality = .none
+        nativeFrameBuffer = buffer
         nativeFrameContext = frameContext
+        nativeFrameImage = frameImage
         nativeFrameSize = frameSize
+    }
+
+    private func releaseNativeFrameResources() {
+        nativeFrameContext = nil
+        nativeFrameImage = nil
+        if let nativeFrameBuffer {
+            nativeFrameBuffer.deallocate()
+            self.nativeFrameBuffer = nil
+        }
+        nativeFrameSize = .zero
+    }
+
+    private func makeNativeBitmapContext(
+        width: Int,
+        height: Int,
+        data: UnsafeMutableRawPointer? = nil,
+        bytesPerRow: Int? = nil
+    ) -> CGContext? {
+        guard width > 0, height > 0 else {
+            return nil
+        }
+        let context = CGContext(
+            data: data,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: bytesPerRow ?? (width * 4),
+            space: Self.nativeColorSpace,
+            bitmapInfo: Self.nativeBitmapInfo.rawValue
+        )
+        context?.interpolationQuality = .none
+        return context
     }
 
     private func color(for terminalColor: TerminalColor) -> NSColor {
@@ -514,37 +758,32 @@ final class MatrixScreenSaverView: ScreenSaverView {
         return color
     }
 
-    private func clamp(_ value: CGFloat, lower: CGFloat, upper: CGFloat) -> CGFloat {
-        min(upper, max(lower, value))
-    }
+    private func fittedTerminalFontSize(forCellWidth cellWidth: CGFloat, cellHeight: CGFloat) -> CGFloat {
+        let targetWidth = max(cellWidth, 1)
+        let targetHeight = max(cellHeight, 1)
+        var low: CGFloat = 1
+        var high: CGFloat = max(targetHeight, 1)
+        var best: CGFloat = 1
 
-    private func preferredTerminalFontSize(for hostSize: NSSize) -> CGFloat {
-        let referenceSize = Self.largestScreenReferenceSize()
-        let referenceArea = max(referenceSize.width * referenceSize.height, 1)
-        let hostArea = max(hostSize.width * hostSize.height, 1)
-        let areaRatio = Double(max(hostArea / referenceArea, 0.01))
-        let fontScale = CGFloat(pow(areaRatio, 0.25))
+        for _ in 0..<16 {
+            guard low <= high else {
+                break
+            }
 
-        return clamp(Self.referenceTerminalFontSize * fontScale, lower: 9, upper: 18)
-    }
+            let mid = floor((((low + high) / 2) * 2)) / 2
+            let font = NSFont.monospacedSystemFont(ofSize: max(mid, 1), weight: .medium)
+            let measuredWidth = ceil(("W" as NSString).size(withAttributes: [.font: font]).width + 1)
+            let measuredHeight = max(1, round(mid * 1.35))
 
-    private func preferredRenderBaseSize(for hostSize: NSSize) -> NSSize {
-        let referenceSize = Self.largestScreenReferenceSize()
-        return NSSize(
-            width: max(hostSize.width, referenceSize.width),
-            height: max(hostSize.height, referenceSize.height)
-        )
-    }
-
-    private static func largestScreenReferenceSize() -> NSSize {
-        let screenSizes = NSScreen.screens.map(\.frame.size).filter { $0.width > 20 && $0.height > 20 }
-        guard !screenSizes.isEmpty else {
-            return fallbackReferenceSize
+            if measuredWidth <= targetWidth && measuredHeight <= targetHeight {
+                best = max(mid, 1)
+                low = mid + 0.5
+            } else {
+                high = mid - 0.5
+            }
         }
 
-        let width = screenSizes.reduce(fallbackReferenceSize.width) { max($0, $1.width) }
-        let height = screenSizes.reduce(fallbackReferenceSize.height) { max($0, $1.height) }
-        return NSSize(width: width, height: height)
+        return best
     }
 
     func applySaverOptionsFromSheet(_ options: MatrixScreenSaverOptions) {
@@ -557,14 +796,15 @@ final class MatrixScreenSaverView: ScreenSaverView {
 
         if persist {
             sanitizedOptions.save(to: Self.defaults)
+            shouldReloadOptionsOnStart = false
         }
 
         if restartAnimation {
             stopAnimation()
         }
 
-        Self.nativeRenderer.updateConfiguration(sanitizedOptions.rendererConfiguration())
-        animationTimeInterval = Self.nativeRenderer.preferredAnimationTimeInterval
+        nativeRenderer.updateConfiguration(sanitizedOptions.rendererConfiguration())
+        animationTimeInterval = nativeRenderer.preferredAnimationTimeInterval
 
         updateLayout()
 
@@ -576,7 +816,20 @@ final class MatrixScreenSaverView: ScreenSaverView {
     }
 
     private static func loadSaverOptions() -> MatrixScreenSaverOptions {
-        MatrixScreenSaverOptions.load(from: defaults)
+        defaults.synchronize()
+        return MatrixScreenSaverOptions.load(from: defaults)
+    }
+
+    private func makeOptionsSheetController() -> MatrixScreenSaverOptionsSheetController {
+        let controller = MatrixScreenSaverOptionsSheetController(owner: self)
+        controller.onClose = { [weak self, weak controller] in
+            guard let self, let controller, self.optionsSheetController === controller else {
+                return
+            }
+            self.optionsSheetController = nil
+        }
+        optionsSheetController = controller
+        return controller
     }
 
     private func normalizeHostGeometryIfNeeded() {

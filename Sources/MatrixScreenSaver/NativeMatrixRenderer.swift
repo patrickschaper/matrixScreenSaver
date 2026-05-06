@@ -21,7 +21,7 @@ final class NativeMatrixRenderer {
         }
     }
 
-    struct RenderCell {
+    struct RenderCell: Equatable {
         var scalar: UnicodeScalar = Self.blankScalar
         var foregroundLevel: Int = 0
         var backgroundLevel: Int = 0
@@ -29,8 +29,20 @@ final class NativeMatrixRenderer {
 
         static let blankScalar = UnicodeScalar(" ")
 
-        var isVisible: Bool {
+        var hasForeground: Bool {
             scalar != Self.blankScalar && foregroundLevel > 0
+        }
+
+        var hasBackground: Bool {
+            backgroundLevel > 0
+        }
+
+        var isVisible: Bool {
+            hasForeground
+        }
+
+        var isRenderable: Bool {
+            hasForeground || hasBackground
         }
     }
 
@@ -159,6 +171,8 @@ final class NativeMatrixRenderer {
     private static let baseErrorRateModulo = 20.0
     private static let numberIntroStripePeriods = [0, 32, 16, 8, 4, 2, 2, 2]
     private static let numberIntroFramesPerStripe = 20
+    private static let maxBufferedSimulationSteps = 2.0
+    private static let maxSimulationStepsPerTick = 2
     private static let disableBoldFlag: UInt32 = 0x1
     private static let blankRenderCell = RenderCell()
     private static let glyphPool: [UnicodeScalar] = {
@@ -180,7 +194,11 @@ final class NativeMatrixRenderer {
     private var configuration = Configuration()
     private var layers = [Layer(), Layer(), Layer()]
     private var renderCells: [RenderCell] = []
+    private var stagingRenderCells: [RenderCell] = []
+    private var diffuseLevels: [Double] = []
     private var visibleCountByRow: [Int] = []
+    private var dirtyRows: [Bool] = []
+    private var dirtyRowCount = 0
     private var lastUpdateTime = Date.timeIntervalSinceReferenceDate
     private var pendingSimulationSteps = 0.0
     private var running = false
@@ -198,6 +216,23 @@ final class NativeMatrixRenderer {
             return 0
         }
         return visibleCountByRow[row]
+    }
+
+    func isRowDirty(_ row: Int) -> Bool {
+        guard row >= 0, row < dirtyRows.count else {
+            return false
+        }
+        return dirtyRows[row]
+    }
+
+    func clearDirtyRows() {
+        guard dirtyRowCount > 0 else {
+            return
+        }
+        if let baseAddress = dirtyRows.withUnsafeMutableBufferPointer({ $0.baseAddress }) {
+            baseAddress.update(repeating: false, count: dirtyRows.count)
+        }
+        dirtyRowCount = 0
     }
 
     var preferredAnimationTimeInterval: TimeInterval {
@@ -223,7 +258,11 @@ final class NativeMatrixRenderer {
         rows = max(size.rows, 1)
 
         renderCells = Array(repeating: RenderCell(), count: columns * rows)
+        stagingRenderCells = Array(repeating: RenderCell(), count: columns * rows)
+        diffuseLevels = Array(repeating: 0.0, count: columns * rows)
         visibleCountByRow = Array(repeating: 0, count: rows)
+        dirtyRows = Array(repeating: true, count: rows)
+        dirtyRowCount = rows
         for index in layers.indices {
             layers[index].resize(columns: columns, rows: rows)
         }
@@ -234,10 +273,18 @@ final class NativeMatrixRenderer {
     }
 
     func updateConfiguration(_ configuration: Configuration) {
-        self.configuration = configuration.sanitized()
+        let previousConfiguration = self.configuration
+        let sanitizedConfiguration = configuration.sanitized()
+        self.configuration = sanitizedConfiguration
         lastUpdateTime = Date.timeIntervalSinceReferenceDate
         pendingSimulationSteps = 0.0
-        if !running, columns > 0, rows > 0 {
+
+        let shouldResetSceneSequence =
+            columns > 0 &&
+            rows > 0 &&
+            previousConfiguration.numberSceneEnabled != sanitizedConfiguration.numberSceneEnabled
+
+        if shouldResetSceneSequence || (!running && columns > 0 && rows > 0) {
             resetLayers()
             beginSceneSequence()
         } else if columns > 0, rows > 0, activeScene == .rainForever {
@@ -245,9 +292,10 @@ final class NativeMatrixRenderer {
         }
     }
 
-    func advance() {
+    @discardableResult
+    func advance() -> Bool {
         guard running, columns > 0, rows > 0 else {
-            return
+            return false
         }
 
         let nowTime = Date.timeIntervalSinceReferenceDate
@@ -255,17 +303,19 @@ final class NativeMatrixRenderer {
         lastUpdateTime = nowTime
 
         pendingSimulationSteps += elapsed * configuration.frameRate
+        pendingSimulationSteps = min(pendingSimulationSteps, Self.maxBufferedSimulationSteps)
         let availableSteps = Int(pendingSimulationSteps.rounded(.down))
         guard availableSteps > 0 else {
-            return
+            return false
         }
 
-        let steps = min(availableSteps, 5)
+        let steps = min(availableSteps, Self.maxSimulationStepsPerTick)
         pendingSimulationSteps -= Double(steps)
 
         for _ in 0..<steps {
             stepFrame()
         }
+        return dirtyRowCount > 0
     }
 
     private func stepFrame() {
@@ -387,6 +437,7 @@ final class NativeMatrixRenderer {
             visibleCountByRow[row] = visibleCount
             row += 1
         }
+        markAllRowsDirty()
     }
 
     private var spawnModulo: Int {
@@ -411,22 +462,34 @@ final class NativeMatrixRenderer {
     }
 
     private func constructRenderContent() {
-        if renderCells.count != columns * rows {
-            renderCells = Array(repeating: Self.blankRenderCell, count: columns * rows)
+        let cellCount = columns * rows
+        if renderCells.count != cellCount {
+            renderCells = Array(repeating: Self.blankRenderCell, count: cellCount)
+        }
+        if stagingRenderCells.count != cellCount {
+            stagingRenderCells = Array(repeating: Self.blankRenderCell, count: cellCount)
+        }
+        if diffuseLevels.count != cellCount {
+            diffuseLevels = Array(repeating: 0.0, count: cellCount)
         }
         if visibleCountByRow.count != rows {
             visibleCountByRow = Array(repeating: 0, count: rows)
         }
+        prepareDirtyRows()
 
         let layer0 = layers[0].content
         let layer1 = layers[1].content
         let layer2 = layers[2].content
         let levelCount = levelColors.count
+        let diffuseEnabled = configuration.diffuseEnabled
+        if diffuseEnabled, let baseAddress = diffuseLevels.withUnsafeMutableBufferPointer({ $0.baseAddress }) {
+            baseAddress.update(repeating: 0.0, count: diffuseLevels.count)
+        }
 
         var row = 0
         while row < rows {
             let rowOffset = row * columns
-            var visibleCount = 0
+            var renderableCount = 0
             var column = 0
             while column < columns {
                 let index = rowOffset + column
@@ -460,7 +523,7 @@ final class NativeMatrixRenderer {
                 }
 
                 guard let sourceCell else {
-                    renderCells[index] = Self.blankRenderCell
+                    stagingRenderCells[index] = Self.blankRenderCell
                     column += 1
                     continue
                 }
@@ -474,35 +537,52 @@ final class NativeMatrixRenderer {
                 }
 
                 let fractionalLevel = interpolate(adjustedPower, 0.6, Double(levelCount))
-                var level = Int(floor(fractionalLevel))
-                if Double.random(in: 0...1) > fractionalLevel - Double(level) {
-                    level += 1
-                }
-                level = min(level, levelCount - 1)
+                let level = quantizedLevel(for: fractionalLevel, upperBound: levelCount - 1)
 
                 guard level > 0 else {
-                    renderCells[index] = Self.blankRenderCell
+                    stagingRenderCells[index] = Self.blankRenderCell
                     column += 1
                     continue
                 }
 
-                let backgroundLevel: Int
-                if configuration.diffuseEnabled, level > 1 {
-                    backgroundLevel = max(1, Int((Double(level) * 0.35).rounded()))
-                } else {
-                    backgroundLevel = 0
-                }
-
-                renderCells[index] = RenderCell(
+                stagingRenderCells[index] = RenderCell(
                     scalar: sourceCell.scalar,
                     foregroundLevel: level,
-                    backgroundLevel: min(backgroundLevel, levelCount - 1),
+                    backgroundLevel: 0,
                     bold: (sourceCell.flags & Self.disableBoldFlag) == 0 && sourceCell.stage > 0.5
                 )
-                visibleCount += 1
+                renderableCount += 1
+
+                if diffuseEnabled {
+                    accumulateDiffuse(into: &diffuseLevels, row: row, column: column, level: level, levelCount: levelCount)
+                }
                 column += 1
             }
-            visibleCountByRow[row] = visibleCount
+            visibleCountByRow[row] = renderableCount
+            row += 1
+        }
+
+        if diffuseEnabled {
+            applyDiffuseLevels(into: &stagingRenderCells, levelCount: levelCount)
+        }
+
+        row = 0
+        while row < rows {
+            let rowOffset = row * columns
+            var rowDirty = false
+            var column = 0
+            while column < columns {
+                let index = rowOffset + column
+                let nextCell = stagingRenderCells[index]
+                if renderCells[index] != nextCell {
+                    renderCells[index] = nextCell
+                    rowDirty = true
+                }
+                column += 1
+            }
+            if rowDirty {
+                markRowDirty(row)
+            }
             row += 1
         }
     }
@@ -532,6 +612,96 @@ final class NativeMatrixRenderer {
 
     private var twinkleAmount: Double {
         configuration.twinkleEnabled ? Self.defaultTwinkle : 0.0
+    }
+
+    private func accumulateDiffuse(into diffuseLevels: inout [Double], row: Int, column: Int, level: Int, levelCount: Int) {
+        guard levelCount > 1 else {
+            return
+        }
+
+        let twinklePower = Double(level) / Double(levelCount - 1)
+        let p0 = (1.0 / 0.22) * twinklePower
+        let p1 = (1.0 / 0.25) * (twinklePower - 0.2)
+        let p2 = (1.0 / 0.35) * (twinklePower - 0.45)
+
+        addDiffuse(into: &diffuseLevels, row: row, column: column, value: p0)
+        addDiffuse(into: &diffuseLevels, row: row, column: column - 1, value: p1)
+        addDiffuse(into: &diffuseLevels, row: row, column: column + 1, value: p1)
+        addDiffuse(into: &diffuseLevels, row: row - 1, column: column, value: p1)
+        addDiffuse(into: &diffuseLevels, row: row + 1, column: column, value: p1)
+        addDiffuse(into: &diffuseLevels, row: row - 1, column: column - 1, value: p2)
+        addDiffuse(into: &diffuseLevels, row: row - 1, column: column + 1, value: p2)
+        addDiffuse(into: &diffuseLevels, row: row + 1, column: column - 1, value: p2)
+        addDiffuse(into: &diffuseLevels, row: row + 1, column: column + 1, value: p2)
+    }
+
+    private func addDiffuse(into diffuseLevels: inout [Double], row: Int, column: Int, value: Double) {
+        guard row >= 0, row < rows, column >= 0, column < columns, value > 0 else {
+            return
+        }
+        diffuseLevels[(row * columns) + column] += value
+    }
+
+    private func applyDiffuseLevels(into renderCells: inout [RenderCell], levelCount: Int) {
+        guard levelCount > 1 else {
+            return
+        }
+
+        let upperBound = levelCount - 1
+        var index = 0
+        while index < diffuseLevels.count {
+            let diffuse = min(0.06 * diffuseLevels[index], 0.45)
+            let backgroundLevel = min(max(Int(floor(Double(upperBound) * diffuse)), 0), upperBound)
+            if backgroundLevel > 0, !renderCells[index].hasForeground {
+                visibleCountByRow[index / columns] += 1
+            }
+            renderCells[index].backgroundLevel = backgroundLevel
+            index += 1
+        }
+    }
+
+    private func prepareDirtyRows() {
+        if dirtyRows.count != rows {
+            dirtyRows = Array(repeating: false, count: rows)
+        } else if let baseAddress = dirtyRows.withUnsafeMutableBufferPointer({ $0.baseAddress }) {
+            baseAddress.update(repeating: false, count: dirtyRows.count)
+        }
+        dirtyRowCount = 0
+    }
+
+    private func markRowDirty(_ row: Int) {
+        guard row >= 0, row < rows, !dirtyRows[row] else {
+            return
+        }
+        dirtyRows[row] = true
+        dirtyRowCount += 1
+    }
+
+    private func markAllRowsDirty() {
+        if dirtyRows.count != rows {
+            dirtyRows = Array(repeating: true, count: rows)
+        } else if let baseAddress = dirtyRows.withUnsafeMutableBufferPointer({ $0.baseAddress }) {
+            baseAddress.update(repeating: true, count: dirtyRows.count)
+        }
+        dirtyRowCount = rows
+    }
+
+    private func quantizedLevel(for fractionalLevel: Double, upperBound: Int) -> Int {
+        let clampedLevel = max(0.0, fractionalLevel)
+        let quantizedLevel: Int
+
+        if configuration.twinkleEnabled {
+            var level = Int(floor(clampedLevel))
+            if Double.random(in: 0...1) > clampedLevel - Double(level) {
+                level += 1
+            }
+            quantizedLevel = level
+        } else {
+            // Match upstream cxxmatrix: twinkle-off uses stable floor quantization.
+            quantizedLevel = Int(floor(clampedLevel))
+        }
+
+        return min(max(quantizedLevel, 0), upperBound)
     }
 
     private func interpolate(_ value: Double, _ lower: Double, _ upper: Double) -> Double {

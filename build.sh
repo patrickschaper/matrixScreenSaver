@@ -16,6 +16,7 @@ rm -rf "$BUNDLE_DIR"
 mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
 
 swiftc \
+  -O \
   -parse-as-library \
   -module-name "$PRODUCT_NAME" \
   -emit-library \

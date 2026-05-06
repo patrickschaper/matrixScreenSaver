@@ -55,6 +55,7 @@ fi
 
 terminate_matching_processes "ScreenSaverEngine"
 terminate_matching_processes "legacyScreenSaver"
+terminate_matching_processes "legacyScreenSaver-x86_64"
 
 echo "Installed $INSTALL_BUNDLE"
 echo "Relaunch with: open -a ScreenSaverEngine"
