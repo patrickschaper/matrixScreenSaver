@@ -1,2 +1,54 @@
+# Build outputs
 build/
+.build/
+DerivedData/
+out/
+
+# macOS
 .DS_Store
+*.DS_Store
+._*
+.AppleDouble
+.LSOverride
+.localized
+__MACOSX/
+
+# Editors and IDEs
+.idea/
+.idea_modules/
+.vscode/
+.vs/
+.fleet/
+cmake-build-*/
+*.iml
+*.ipr
+*.iws
+*.vsix
+
+# Xcode and Swift user data
+xcuserdata/
+*.xcuserdatad/
+*.xcuserstate
+*.xccheckout
+*.xcscmblueprint
+*.hmap
+*.ipa
+*.dSYM
+*.dSYM.zip
+
+# Swift Package Manager and related tooling
+.swiftpm/
+Carthage/Build/
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output
+
+# Temporary and backup files
+*.log
+*.orig
+*.swp
+*.swo
+*.temp
+*.tmp
+*~

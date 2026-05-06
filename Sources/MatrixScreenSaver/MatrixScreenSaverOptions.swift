@@ -46,6 +46,7 @@ struct MatrixScreenSaverOptions: Equatable {
     var frameRate = defaultFrameRate
     var errorRate = defaultErrorRate
 
+    /// Converts persisted options into the renderer configuration type.
     func rendererConfiguration() -> NativeMatrixRenderer.Configuration {
         NativeMatrixRenderer.Configuration(
             numberSceneEnabled: numberSceneEnabled,
@@ -57,6 +58,7 @@ struct MatrixScreenSaverOptions: Equatable {
         )
     }
 
+    /// Clamps persisted values to the supported ranges.
     func sanitized() -> MatrixScreenSaverOptions {
         MatrixScreenSaverOptions(
             numberSceneEnabled: numberSceneEnabled,
@@ -70,6 +72,7 @@ struct MatrixScreenSaverOptions: Equatable {
         )
     }
 
+    /// Registers the default option values with the screen saver defaults store.
     static func registerDefaults(in defaults: ScreenSaverDefaults) {
         defaults.register(defaults: [
             Keys.numberSceneEnabled: defaultNumberSceneEnabled,
@@ -83,6 +86,7 @@ struct MatrixScreenSaverOptions: Equatable {
         ])
     }
 
+    /// Loads the persisted options from the screen saver defaults store.
     static func load(from defaults: ScreenSaverDefaults) -> MatrixScreenSaverOptions {
         MatrixScreenSaverOptions(
             numberSceneEnabled: defaults.bool(forKey: Keys.numberSceneEnabled),
@@ -96,6 +100,7 @@ struct MatrixScreenSaverOptions: Equatable {
         ).sanitized()
     }
 
+    /// Saves the current options back to the screen saver defaults store.
     func save(to defaults: ScreenSaverDefaults) {
         let options = sanitized()
         defaults.set(options.numberSceneEnabled, forKey: Keys.numberSceneEnabled)
@@ -149,6 +154,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject, NSTextFieldDelega
     private let errorRateField = NSTextField(string: "")
     private var didClose = false
 
+    /// Creates the options sheet controller for a specific saver view instance.
     init(owner: MatrixScreenSaverView) {
         self.owner = owner
         window = NSWindow(
@@ -161,6 +167,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject, NSTextFieldDelega
         buildWindow()
     }
 
+    /// Updates all controls from the supplied options snapshot.
     func prepare(using options: MatrixScreenSaverOptions) {
         numberSceneCheckbox.state = options.numberSceneEnabled ? .on : .off
         twinkleCheckbox.state = options.twinkleEnabled ? .on : .off
@@ -173,10 +180,12 @@ final class MatrixScreenSaverOptionsSheetController: NSObject, NSTextFieldDelega
         sizeWindowToFitContent()
     }
 
+    /// Returns the native sheet window presented by ScreenSaver.framework.
     func configureSheet() -> NSWindow {
         window
     }
 
+    /// Validates and applies the edited options.
     @objc private func apply(_ sender: Any?) {
         do {
             guard let owner else {
@@ -191,14 +200,17 @@ final class MatrixScreenSaverOptionsSheetController: NSObject, NSTextFieldDelega
         }
     }
 
+    /// Dismisses the sheet without persisting any changes.
     @objc private func cancel(_ sender: Any?) {
         closeSheet(with: .cancel)
     }
 
+    /// Restores the controls to the default option values.
     @objc private func resetToDefaults(_ sender: Any?) {
         prepare(using: MatrixScreenSaverOptions())
     }
 
+    /// Constructs the native AppKit options sheet content and layout.
     private func buildWindow() {
         window.title = "MatrixScreenSaver Options"
         window.isReleasedWhenClosed = false
@@ -298,6 +310,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject, NSTextFieldDelega
         sizeWindowToFitContent()
     }
 
+    /// Builds a checkbox row with its explanatory description.
     private func makeCheckboxSection(checkbox: NSButton, description: String) -> NSView {
         let stack = NSStackView()
         stack.orientation = .vertical
@@ -311,6 +324,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject, NSTextFieldDelega
         return stack
     }
 
+    /// Builds a labeled numeric input row with its description.
     private func makeNumericSection(title: String, field: NSTextField, description: String) -> NSView {
         let stack = NSStackView()
         stack.orientation = .vertical
@@ -340,6 +354,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject, NSTextFieldDelega
         return stack
     }
 
+    /// Builds the side-by-side character width and height controls.
     private func makeCharacterSizeSection() -> NSView {
         let stack = NSStackView()
         stack.orientation = .vertical
@@ -387,6 +402,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject, NSTextFieldDelega
         return stack
     }
 
+    /// Creates the smaller descriptive text used under each option row.
     private func makeDescriptionLabel(_ description: String) -> NSTextField {
         let label = NSTextField(wrappingLabelWithString: description)
         label.font = .systemFont(ofSize: 11)
@@ -395,6 +411,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject, NSTextFieldDelega
         return label
     }
 
+    /// Validates all control values and returns a sanitized options snapshot.
     private func validatedOptions() throws -> MatrixScreenSaverOptions {
         let characterWidth = try parseInteger(from: characterWidthField, error: .characterWidth)
         let characterHeight = try parseInteger(from: characterHeightField, error: .characterHeight)
@@ -430,6 +447,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject, NSTextFieldDelega
         ).sanitized()
     }
 
+    /// Parses and validates an integer field.
     private func parseInteger(from field: NSTextField, error: ValidationError) throws -> Int {
         let trimmed = Self.normalizedIntegerText(field.stringValue)
         field.stringValue = trimmed
@@ -439,6 +457,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject, NSTextFieldDelega
         return value
     }
 
+    /// Parses and validates a decimal field.
     private func parseDouble(from field: NSTextField, error: ValidationError) throws -> Double {
         let trimmed = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalized = Self.normalizedDecimalText(trimmed)
@@ -449,6 +468,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject, NSTextFieldDelega
         return value
     }
 
+    /// Normalizes edited text before AppKit ends text field editing.
     func control(_ control: NSControl, textShouldEndEditing fieldEditor: NSText) -> Bool {
         let normalized: String
         if control === characterWidthField || control === characterHeightField {
@@ -463,15 +483,18 @@ final class MatrixScreenSaverOptionsSheetController: NSObject, NSTextFieldDelega
         return true
     }
 
+    /// Routes the window close button through the sheet dismissal path.
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         closeSheet(with: .cancel)
         return false
     }
 
+    /// Finalizes cleanup when the sheet window closes.
     func windowWillClose(_ notification: Notification) {
         finishClosing()
     }
 
+    /// Presents a native validation error alert above the options sheet.
     private func presentValidationAlert(message: String) {
         let alert = NSAlert()
         alert.messageText = "Invalid option value"
@@ -480,6 +503,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject, NSTextFieldDelega
         alert.beginSheetModal(for: window)
     }
 
+    /// Closes the sheet with the provided modal response code.
     private func closeSheet(with returnCode: NSApplication.ModalResponse) {
         if let sheetParent = window.sheetParent {
             sheetParent.endSheet(window, returnCode: returnCode)
@@ -488,6 +512,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject, NSTextFieldDelega
         finishClosing()
     }
 
+    /// Runs the one-time close callback shared by all dismissal paths.
     private func finishClosing() {
         guard !didClose else {
             return
@@ -496,22 +521,27 @@ final class MatrixScreenSaverOptionsSheetController: NSObject, NSTextFieldDelega
         onClose?()
     }
 
+    /// Formats a decimal option for display in a text field.
     private static func format(_ value: Double) -> String {
         numberFormatter.string(from: NSNumber(value: value)) ?? "\(value)"
     }
 
+    /// Formats an integer option for display in a text field.
     private static func format(_ value: Int) -> String {
         "\(value)"
     }
 
+    /// Normalizes decimal text to use a period separator.
     private static func normalizedDecimalText(_ value: String) -> String {
         value.replacingOccurrences(of: ",", with: ".")
     }
 
+    /// Trims integer text before parsing.
     private static func normalizedIntegerText(_ value: String) -> String {
         value.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// Resizes the sheet window so it fits the current stack view content.
     private func sizeWindowToFitContent() {
         guard let contentView = window.contentView else {
             return
@@ -545,7 +575,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject, NSTextFieldDelega
         formatter.numberStyle = .decimal
         formatter.usesGroupingSeparator = false
         formatter.minimumFractionDigits = 0
-        formatter.maximumFractionDigits = 3
+        formatter.maximumFractionDigits = 6
         return formatter
     }()
 

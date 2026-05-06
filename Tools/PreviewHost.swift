@@ -10,13 +10,15 @@ final class PreviewHost: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var window: NSWindow?
     private var saverView: ScreenSaverView?
 
+    /// Builds the preview host configuration from the command-line arguments.
     init(arguments: [String]) {
-        let bundleArgument = arguments.first ?? "./build/MatrixScreenSaver.saver"
+        let bundleArgument = arguments.first { !$0.hasPrefix("--") } ?? "./build/MatrixScreenSaver.saver"
         bundleURL = URL(fileURLWithPath: bundleArgument).standardizedFileURL
         smokeTest = arguments.contains("--smoke-test")
         super.init()
     }
 
+    /// Starts the preview application entry point.
     static func main() {
         let arguments = Array(CommandLine.arguments.dropFirst())
         let host = PreviewHost(arguments: arguments)
@@ -27,6 +29,7 @@ final class PreviewHost: NSObject, NSApplicationDelegate, NSWindowDelegate {
         app.run()
     }
 
+    /// Creates and shows the preview window once AppKit has finished launching.
     func applicationDidFinishLaunching(_ notification: Notification) {
         do {
             let saver = try loadSaverView()
@@ -47,22 +50,26 @@ final class PreviewHost: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
         } catch {
             fputs("Preview failed: \(error.localizedDescription)\n", stderr)
-            NSApp.terminate(nil)
+            exit(EXIT_FAILURE)
         }
     }
 
+    /// Closes the application when the final preview window closes.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
     }
 
+    /// Stops the saver animation before the preview process exits.
     func applicationWillTerminate(_ notification: Notification) {
         saverView?.stopAnimation()
     }
 
+    /// Terminates the app when the preview window is manually closed.
     func windowWillClose(_ notification: Notification) {
         NSApp.terminate(nil)
     }
 
+    /// Loads and instantiates the screen saver view from the built bundle.
     private func loadSaverView() throws -> ScreenSaverView {
         let previewSize = largestScreenReferenceSize()
         guard let bundle = Bundle(url: bundleURL) else {
@@ -81,6 +88,7 @@ final class PreviewHost: NSObject, NSApplicationDelegate, NSWindowDelegate {
         return saver
     }
 
+    /// Wraps the saver view in a resizable preview window.
     private func makeWindow(with saver: ScreenSaverView) -> NSWindow {
         let previewSize = largestScreenReferenceSize()
         let window = NSWindow(
@@ -96,15 +104,15 @@ final class PreviewHost: NSObject, NSApplicationDelegate, NSWindowDelegate {
         return window
     }
 
+    /// Uses the largest visible attached display as the preview reference size.
     private func largestScreenReferenceSize() -> NSSize {
-        let screenSizes = NSScreen.screens.map(\.frame.size).filter { $0.width > 20 && $0.height > 20 }
-        guard !screenSizes.isEmpty else {
+        let screenSizes = NSScreen.screens.map(\.visibleFrame.size).filter { $0.width > 20 && $0.height > 20 }
+        guard
+            let largestScreen = screenSizes.max(by: { ($0.width * $0.height) < ($1.width * $1.height) })
+        else {
             return Self.fallbackPreviewSize
         }
-
-        let width = screenSizes.reduce(Self.fallbackPreviewSize.width) { max($0, $1.width) }
-        let height = screenSizes.reduce(Self.fallbackPreviewSize.height) { max($0, $1.height) }
-        return NSSize(width: width, height: height)
+        return largestScreen
     }
 }
 
@@ -114,6 +122,7 @@ private enum PreviewError: LocalizedError {
     case principalClass
     case instantiate
 
+    /// Provides user-facing launch errors for the preview host.
     var errorDescription: String? {
         switch self {
         case let .openBundle(path):

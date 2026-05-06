@@ -78,16 +78,19 @@ final class MatrixScreenSaverView: ScreenSaverView {
         return controller.configureSheet()
     }
 
+    /// Creates the saver view for preview hosts and ScreenSaver.framework.
     override init?(frame: NSRect, isPreview: Bool) {
         super.init(frame: frame, isPreview: isPreview)
         commonInit()
     }
 
+    /// Recreates the saver view from Interface Builder or archived state.
     required init?(coder: NSCoder) {
         super.init(coder: coder)
         commonInit()
     }
 
+    /// Keeps the cached layout in sync when AppKit changes the frame size.
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
         updateLayout()
@@ -102,16 +105,19 @@ final class MatrixScreenSaverView: ScreenSaverView {
         }
     }
 
+    /// Recomputes the chrome and renderer layout during standard view layout passes.
     override func layout() {
         super.layout()
         updateLayout()
     }
 
+    /// Adopts host geometry once the saver is attached to a container view.
     override func viewDidMoveToSuperview() {
         super.viewDidMoveToSuperview()
         adoptContainerBoundsIfNeeded()
     }
 
+    /// Stops animation work when the saver is detached from its superview.
     override func viewWillMove(toSuperview newSuperview: NSView?) {
         if newSuperview == nil {
             handleHostDetachment(reason: "superview-detach")
@@ -119,12 +125,14 @@ final class MatrixScreenSaverView: ScreenSaverView {
         super.viewWillMove(toSuperview: newSuperview)
     }
 
+    /// Refreshes host-window observation after moving to a new window.
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         updateHostWindowObservation()
         adoptContainerBoundsIfNeeded()
     }
 
+    /// Tears down host-window observation when the saver leaves a window.
     override func viewWillMove(toWindow newWindow: NSWindow?) {
         if newWindow == nil {
             handleHostDetachment(reason: "window-detach")
@@ -135,6 +143,7 @@ final class MatrixScreenSaverView: ScreenSaverView {
         super.viewWillMove(toWindow: newWindow)
     }
 
+    /// Starts the renderer and host lifecycle observers for an active saver session.
     override func startAnimation() {
         super.startAnimation()
         animationActive = true
@@ -151,6 +160,7 @@ final class MatrixScreenSaverView: ScreenSaverView {
         nativeRenderer.start()
     }
 
+    /// Stops the renderer and releases temporary rendering resources.
     override func stopAnimation() {
         let wasActive = animationActive
         animationActive = false
@@ -163,6 +173,7 @@ final class MatrixScreenSaverView: ScreenSaverView {
         super.stopAnimation()
     }
 
+    /// Advances the simulation and schedules redraws when the frame changed.
     override func animateOneFrame() {
         guard animationActive else {
             return
@@ -177,6 +188,7 @@ final class MatrixScreenSaverView: ScreenSaverView {
         }
     }
 
+    /// Releases renderer resources when the saver view is torn down.
     deinit {
         appendDebugLog("[\(debugIdentifier)] deinit")
         animationActive = false
@@ -184,6 +196,7 @@ final class MatrixScreenSaverView: ScreenSaverView {
         releaseRenderingResources()
     }
 
+    /// Paints the full terminal-window scene for the current frame.
     override func draw(_ dirtyRect: NSRect) {
         if !hasLoggedFirstDraw {
             hasLoggedFirstDraw = true
@@ -191,10 +204,11 @@ final class MatrixScreenSaverView: ScreenSaverView {
         }
         drawBackground()
         drawWindow()
-        drawTitlebar()
         drawTerminal()
+        drawTitlebar()
     }
 
+    /// Applies one-time defaults and initial layout state for new instances.
     private func commonInit() {
         autoresizingMask = [.width, .height]
         translatesAutoresizingMaskIntoConstraints = true
@@ -207,10 +221,12 @@ final class MatrixScreenSaverView: ScreenSaverView {
         needsDisplay = true
     }
 
+    /// Gives the saver a chance to normalize host geometry after attachment.
     private func adoptContainerBoundsIfNeeded() {
         normalizeHostGeometryIfNeeded()
     }
 
+    /// Recomputes geometry, fonts, and renderer resources for the current bounds.
     private func updateLayout() {
         normalizeHostGeometryIfNeeded()
 
@@ -221,10 +237,7 @@ final class MatrixScreenSaverView: ScreenSaverView {
         let hostSize = canvasBounds.size
 
         terminalRect = canvasBounds.integral
-
-        var expandedWindowRect = terminalRect.insetBy(dx: -Self.contentPadding, dy: -Self.contentPadding)
-        expandedWindowRect.size.height += Self.titlebarHeight
-        windowRect = expandedWindowRect.integral
+        windowRect = canvasBounds.integral
 
         titlebarRect = NSRect(
             x: windowRect.minX,
@@ -260,10 +273,12 @@ final class MatrixScreenSaverView: ScreenSaverView {
         markDisplayDirty()
     }
 
+    /// Marks the saver view as needing display on the next run-loop turn.
     private func markDisplayDirty() {
         needsDisplay = true
     }
 
+    /// Stops animation and frees resources once the host is no longer visible.
     private func handleHostDetachment(reason: String) {
         appendDebugLog("[\(debugIdentifier)] \(reason)")
         if animationActive {
@@ -280,6 +295,7 @@ final class MatrixScreenSaverView: ScreenSaverView {
         return window.isVisible
     }
 
+    /// Starts observing window notifications that indicate the saver left the host.
     private func updateHostWindowObservation() {
         stopObservingHostWindow()
         guard let window else {
@@ -317,6 +333,7 @@ final class MatrixScreenSaverView: ScreenSaverView {
         ]
     }
 
+    /// Removes all host-window observers created for the current host session.
     private func stopObservingHostWindow() {
         guard !hostWindowObservers.isEmpty else {
             return
@@ -328,6 +345,7 @@ final class MatrixScreenSaverView: ScreenSaverView {
         hostWindowObservers.removeAll(keepingCapacity: false)
     }
 
+    /// Starts observing distributed screen saver lifecycle notifications.
     private func updateScreenSaverLifecycleObservation() {
         stopObservingScreenSaverLifecycle()
 
@@ -356,6 +374,7 @@ final class MatrixScreenSaverView: ScreenSaverView {
         ]
     }
 
+    /// Removes the distributed screen saver lifecycle observers.
     private func stopObservingScreenSaverLifecycle() {
         guard !screenSaverLifecycleObservers.isEmpty else {
             return
@@ -367,6 +386,7 @@ final class MatrixScreenSaverView: ScreenSaverView {
         screenSaverLifecycleObservers.removeAll(keepingCapacity: false)
     }
 
+    /// Releases transient rendering caches and host observation state.
     private func releaseRenderingResources() {
         stopObservingHostWindow()
         stopObservingScreenSaverLifecycle()
@@ -380,6 +400,7 @@ final class MatrixScreenSaverView: ScreenSaverView {
         hasLoggedFirstDraw = false
     }
 
+    /// Paints the background outside the faux terminal window.
     private func drawBackground() {
         let canvasBounds = NSRect(origin: .zero, size: bounds.size)
 
@@ -401,6 +422,7 @@ final class MatrixScreenSaverView: ScreenSaverView {
         glowPath.fill()
     }
 
+    /// Paints the outer terminal-window frame.
     private func drawWindow() {
         let path = NSBezierPath(
             roundedRect: windowRect,
@@ -416,6 +438,7 @@ final class MatrixScreenSaverView: ScreenSaverView {
         path.stroke()
     }
 
+    /// Paints the faux titlebar chrome above the terminal content.
     private func drawTitlebar() {
         let clipPath = NSBezierPath(
             roundedRect: titlebarRect,
@@ -469,6 +492,7 @@ final class MatrixScreenSaverView: ScreenSaverView {
         (Self.terminalTitle as NSString).draw(in: titleRect, withAttributes: attributes)
     }
 
+    /// Paints the clipped terminal surface and its rendered frame buffer.
     private func drawTerminal() {
         let terminalPath = NSBezierPath(
             roundedRect: terminalRect,
@@ -492,6 +516,7 @@ final class MatrixScreenSaverView: ScreenSaverView {
         NSGraphicsContext.restoreGraphicsState()
     }
 
+    /// Repaints dirty terminal rows into the cached frame buffer and presents it.
     private func drawNativeTerminal(_ localTerminalSize: TerminalSize) {
         let visibleRows = min(localTerminalSize.rows, nativeRenderer.rows)
         let visibleColumns = min(localTerminalSize.columns, nativeRenderer.columns)
@@ -582,12 +607,14 @@ final class MatrixScreenSaverView: ScreenSaverView {
         context.restoreGState()
     }
 
+    /// Rebuilds the colored glyph cache for the current font metrics.
     private func rebuildNativeGlyphCache() {
         let palette = nativeRenderer.levelColors
         nativeRegularGlyphsByLevel = makeNativeGlyphCaches(palette: palette, font: regularFont)
         nativeBoldGlyphsByLevel = makeNativeGlyphCaches(palette: palette, font: boldFont)
     }
 
+    /// Rebuilds the diffuse background fill palette used by the renderer.
     private func rebuildNativeDiffuseColors() {
         let palette = nativeRenderer.levelColors
         let denominator = max(CGFloat(palette.count - 1), 1)
@@ -598,6 +625,7 @@ final class MatrixScreenSaverView: ScreenSaverView {
         }
     }
 
+    /// Builds per-level glyph images for all supported scalar values.
     private func makeNativeGlyphCaches(
         palette: [TerminalColor],
         font: NSFont
@@ -619,6 +647,7 @@ final class MatrixScreenSaverView: ScreenSaverView {
         return caches
     }
 
+    /// Rasterizes a single glyph into a native Core Graphics image.
     private func makeNativeGlyphImage(
         for scalar: UnicodeScalar,
         attributes: [NSAttributedString.Key: Any]
@@ -646,6 +675,7 @@ final class MatrixScreenSaverView: ScreenSaverView {
         return glyphContext.makeImage()
     }
 
+    /// Returns the cached glyph image for a rendered cell.
     private func nativeGlyphImage(for cell: NativeMatrixRenderer.RenderCell) -> CGImage? {
         let caches = cell.bold ? nativeBoldGlyphsByLevel : nativeRegularGlyphsByLevel
         guard !caches.isEmpty else {
@@ -656,6 +686,7 @@ final class MatrixScreenSaverView: ScreenSaverView {
         return caches[level][cell.scalar]
     }
 
+    /// Recreates the persistent frame buffer when the terminal grid size changes.
     private func rebuildNativeFrameContext(for size: TerminalSize) {
         let frameWidth = max(1, Int(ceil(CGFloat(size.columns) * cellWidth)))
         let frameHeight = max(1, Int(ceil(CGFloat(size.rows) * lineHeight)))
@@ -711,6 +742,7 @@ final class MatrixScreenSaverView: ScreenSaverView {
         nativeFrameSize = frameSize
     }
 
+    /// Releases the persistent frame buffer and associated Core Graphics objects.
     private func releaseNativeFrameResources() {
         nativeFrameContext = nil
         nativeFrameImage = nil
@@ -721,6 +753,7 @@ final class MatrixScreenSaverView: ScreenSaverView {
         nativeFrameSize = .zero
     }
 
+    /// Creates a BGRA bitmap context for glyph or frame compositing.
     private func makeNativeBitmapContext(
         width: Int,
         height: Int,
@@ -743,6 +776,7 @@ final class MatrixScreenSaverView: ScreenSaverView {
         return context
     }
 
+    /// Memoizes terminal palette colors as NSColor instances.
     private func color(for terminalColor: TerminalColor) -> NSColor {
         if let cached = colorCache[terminalColor] {
             return cached
@@ -758,6 +792,7 @@ final class MatrixScreenSaverView: ScreenSaverView {
         return color
     }
 
+    /// Finds the largest font size that fits within the configured cell dimensions.
     private func fittedTerminalFontSize(forCellWidth cellWidth: CGFloat, cellHeight: CGFloat) -> CGFloat {
         let targetWidth = max(cellWidth, 1)
         let targetHeight = max(cellHeight, 1)
@@ -786,10 +821,12 @@ final class MatrixScreenSaverView: ScreenSaverView {
         return best
     }
 
+    /// Applies options coming back from the configure sheet.
     func applySaverOptionsFromSheet(_ options: MatrixScreenSaverOptions) {
         applySaverOptions(options, persist: true, restartAnimation: animationActive)
     }
 
+    /// Applies options to the live saver and optionally persists or restarts it.
     private func applySaverOptions(_ options: MatrixScreenSaverOptions, persist: Bool, restartAnimation: Bool) {
         let sanitizedOptions = options.sanitized()
         saverOptions = sanitizedOptions
@@ -815,11 +852,13 @@ final class MatrixScreenSaverView: ScreenSaverView {
         }
     }
 
+    /// Loads persisted options from ScreenSaverDefaults.
     private static func loadSaverOptions() -> MatrixScreenSaverOptions {
         defaults.synchronize()
         return MatrixScreenSaverOptions.load(from: defaults)
     }
 
+    /// Creates a fresh configure-sheet controller for each presentation.
     private func makeOptionsSheetController() -> MatrixScreenSaverOptionsSheetController {
         let controller = MatrixScreenSaverOptionsSheetController(owner: self)
         controller.onClose = { [weak self, weak controller] in
@@ -832,12 +871,11 @@ final class MatrixScreenSaverView: ScreenSaverView {
         return controller
     }
 
+    /// Keeps the view origin normalized without resizing itself during layout.
     private func normalizeHostGeometryIfNeeded() {
         guard !geometrySyncInProgress else {
             return
         }
-
-        let targetSize = preferredHostSize()
 
         geometrySyncInProgress = true
         defer { geometrySyncInProgress = false }
@@ -846,61 +884,12 @@ final class MatrixScreenSaverView: ScreenSaverView {
             NSLog("MatrixScreenSaver normalizing bounds origin=%@", NSStringFromPoint(bounds.origin))
             setBoundsOrigin(.zero)
         }
-
-        if shouldSyncBoundsSize(to: targetSize) {
-            NSLog("MatrixScreenSaver syncing bounds size=%@", NSStringFromSize(targetSize))
-            setBoundsSize(targetSize)
-        }
-
-        let targetFrame = NSRect(origin: .zero, size: targetSize)
-        if frame.origin != targetFrame.origin || frame.size != targetFrame.size {
-            NSLog("MatrixScreenSaver syncing frame=%@", NSStringFromRect(targetFrame))
-            frame = targetFrame
-        }
-    }
-
-    private func preferredHostSize() -> NSSize {
-        let externalContentViewSize: NSSize?
-        if let contentView = window?.contentView, contentView !== self {
-            externalContentViewSize = contentView.bounds.size
-        } else {
-            externalContentViewSize = nil
-        }
-
-        let candidates: [NSSize?] = [
-            externalContentViewSize,
-            superview?.bounds.size,
-            bounds.size,
-            frame.size,
-            window.map { $0.contentRect(forFrameRect: $0.frame).size },
-            window?.screen?.frame.size,
-        ]
-
-        for candidate in candidates {
-            guard let candidate, candidate.width > 20, candidate.height > 20 else {
-                continue
-            }
-            return candidate
-        }
-
-        return frame.size
-    }
-
-    private func shouldSyncBoundsSize(to targetSize: NSSize) -> Bool {
-        guard bounds.width > 20, bounds.height > 20 else {
-            return true
-        }
-
-        let widthDelta = abs(bounds.width - targetSize.width)
-        let heightDelta = abs(bounds.height - targetSize.height)
-
-        return (widthDelta / max(targetSize.width, 1)) > 0.05 ||
-            (heightDelta / max(targetSize.height, 1)) > 0.05
     }
 }
 
 private let debugLogQueue = DispatchQueue(label: "MatrixScreenSaver.debug.log")
 
+/// Appends a timestamped line to the saver debug log file.
 func appendDebugLog(_ message: String) {
     let timestamp = ISO8601DateFormatter().string(from: Date())
     let line = "\(timestamp) \(message)\n"

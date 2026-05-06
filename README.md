@@ -2,17 +2,32 @@
 
 ![macOS Matrix Screen Saver demo](docs/matrix-screensaver.gif)
 
-MatrixScreenSaver is a macOS `.saver` bundle that shows a terminal-window version of the Matrix effect.
+This is a macOS screen saver based on the iconic rain of characters and symbols known from the movie The Matrix.
 
-## Origin
+## Quick install
 
-This project started as an attempt to wrap `cxxmatrix` inside a macOS screen saver.
+1. Open the [latest release](https://github.com/patrickschaper/matrixScreenSaver/releases/latest) in this repository's Releases section.
+2. Download the screen saver file from the release assets.
+3. Double-click the downloaded `.saver` file and confirm the macOS install prompt.
+4. Open **System Settings > Wallpaper > Screen saver** and select **MatrixScreenSaver**.
 
-The current implementation is based on the upstream [`akinomyoga/cxxmatrix`](https://github.com/akinomyoga/cxxmatrix) project and keeps its look and scene behavior, but it no longer launches an external terminal process at runtime. The active saver is a native in-process Swift/AppKit renderer because `ScreenSaverEngine` did not reliably render the external terminal stream.
+## Options
 
-The active renderer currently ports `rain-forever` and can optionally start with the upstream `number` intro.
+The saver exposes a native **Options…** sheet. The values are stored with `ScreenSaverDefaults`.
 
-## Current state
+| Option | Description | Default |
+| --- | --- | --- |
+| Number scene | Show the startup number scene before continuous rain. | On |
+| Twinkle | Turn on/off the twinkling effect. | On |
+| Diffuse | Turn on/off the background-color effect. | On |
+| Character size | Set the character cell width and height in pixels. | 8 x 15 |
+| Rain density | Set the factor for the density of rain drops. A positive number. | 1.0 |
+| Frame rate | Set the frame rate per second. A positive number less than or equal to 1000. | 25 |
+| Error rate | Set the factor for the rate of character changes. A non-negative number. | 1.0 |
+
+## Development
+
+### Current state
 
 - Native Swift/AppKit screen saver bundle
 - Terminal-style window chrome around the animation
@@ -20,7 +35,7 @@ The active renderer currently ports `rain-forever` and can optionally start with
 - Native **Options…** sheet for Number scene, Twinkle, Diffuse, Character size, Rain density, Frame rate, and Error rate
 - Preview app for fast iteration without reinstalling
 
-## Repository layout
+### Repository layout
 
 - `Sources/MatrixScreenSaver/MatrixScreenSaverView.swift` - screen saver view, layout, drawing, and option wiring
 - `Sources/MatrixScreenSaver/NativeMatrixRenderer.swift` - native Matrix scene renderer
@@ -29,14 +44,14 @@ The active renderer currently ports `rain-forever` and can optionally start with
 - `Tools/PreviewHost.swift` - local preview host used by `./preview.sh`
 - `Resources/Info.plist` - bundle metadata
 
-## Requirements
+### Requirements
 
 - macOS
 - Xcode Command Line Tools with `swiftc`
 
 Full Xcode is not required.
 
-## Build
+### Build
 
 ```bash
 ./build.sh
@@ -48,7 +63,7 @@ This creates the screen saver bundle:
 build/MatrixScreenSaver.saver
 ```
 
-## Preview without installing
+### Preview without installing
 
 ```bash
 ./preview.sh
@@ -56,7 +71,7 @@ build/MatrixScreenSaver.saver
 
 This rebuilds the bundle, compiles the preview host, and opens the saver in a normal macOS window for quick iteration.
 
-## Install
+### Install
 
 ```bash
 ./install.sh
@@ -80,16 +95,10 @@ To relaunch the screen saver host manually:
 open -a ScreenSaverEngine
 ```
 
-## Options
+### Origin
 
-The saver exposes a native **Options…** sheet. The values are stored with `ScreenSaverDefaults`.
+This project started as an attempt to wrap `cxxmatrix` inside a macOS screen saver.
 
-| Option | Description | Default |
-| --- | --- | --- |
-| Number scene | Show the startup number scene before continuous rain. | On |
-| Twinkle | Turn on/off the twinkling effect. | On |
-| Diffuse | Turn on/off the background-color effect. | On |
-| Character size | Set the character cell width and height in pixels. | 8 x 15 |
-| Rain density | Set the factor for the density of rain drops. A positive number. | 1.0 |
-| Frame rate | Set the frame rate per second. A positive number less than or equal to 1000. | 25 |
-| Error rate | Set the factor for the rate of character changes. A non-negative number. | 1.0 |
+The current implementation is based on the upstream [`akinomyoga/cxxmatrix`](https://github.com/akinomyoga/cxxmatrix) project and keeps its look and scene behavior, but it no longer launches an external terminal process at runtime. The active saver is a native in-process Swift/AppKit renderer because `ScreenSaverEngine` did not reliably render the external terminal stream.
+
+The active renderer currently ports `rain-forever` and can optionally start with the upstream `number` intro.
