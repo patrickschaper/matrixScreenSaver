@@ -10,7 +10,14 @@ MACOS_DIR="$CONTENTS_DIR/MacOS"
 RESOURCES_DIR="$CONTENTS_DIR/Resources"
 SOURCE_DIR="$ROOT_DIR/Sources/$PRODUCT_NAME"
 INPUT_RESOURCES_DIR="$ROOT_DIR/Resources"
-BUNDLE_VERSION="$(date +%s)"
+VERSION_FILE="$ROOT_DIR/VERSION"
+
+if [[ ! -s "$VERSION_FILE" ]]; then
+  echo "VERSION file is missing or empty." >&2
+  exit 1
+fi
+
+BUNDLE_VERSION="$(tr -d '[:space:]' < "$VERSION_FILE")"
 
 rm -rf "$BUNDLE_DIR"
 mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
@@ -32,6 +39,7 @@ swiftc \
 
 cp "$INPUT_RESOURCES_DIR/Info.plist" "$CONTENTS_DIR/Info.plist"
 if command -v /usr/libexec/PlistBuddy >/dev/null 2>&1; then
+  /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $BUNDLE_VERSION" "$CONTENTS_DIR/Info.plist"
   /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUNDLE_VERSION" "$CONTENTS_DIR/Info.plist"
 fi
 

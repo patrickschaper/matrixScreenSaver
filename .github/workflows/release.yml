@@ -1,0 +1,116 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Semantic version segment to increment
+        required: true
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and publish release
+    runs-on: macos-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Ensure release runs from main
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${GITHUB_REF}" != "refs/heads/main" ]]; then
+            echo "Run this workflow from main." >&2
+            exit 1
+          fi
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Configure git author
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Bump VERSION with semver
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          current_version="$(tr -d '[:space:]' < VERSION)"
+          next_version="$(npx --yes semver "${current_version}" -i "${{ inputs.bump }}")"
+
+          if [[ -z "${next_version}" ]]; then
+            echo "semver did not produce a version." >&2
+            exit 1
+          fi
+
+          printf '%s\n' "${next_version}" > VERSION
+
+          echo "current=${current_version}" >> "$GITHUB_OUTPUT"
+          echo "next=${next_version}" >> "$GITHUB_OUTPUT"
+
+      - name: Build screen saver
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf build
+          ./build.sh
+
+      - name: Create release archive
+        id: archive
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          archive_path="${RUNNER_TEMP}/${{ steps.version.outputs.next }}.zip"
+
+          pushd build >/dev/null
+          ditto -c -k --sequesterRsrc . "${archive_path}"
+          popd >/dev/null
+
+          echo "path=${archive_path}" >> "$GITHUB_OUTPUT"
+
+      - name: Commit VERSION and tag release
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version="${{ steps.version.outputs.next }}"
+
+          git add VERSION
+          git commit -m "chore(release): ${version}" -m "- bump VERSION to ${version}"
+          git tag -a "${version}" -m "${version}"
+          git push origin HEAD --follow-tags
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version="${{ steps.version.outputs.next }}"
+          gh release create "${version}" "${{ steps.archive.outputs.path }}" --title "${version}" --notes "" --verify-tag
