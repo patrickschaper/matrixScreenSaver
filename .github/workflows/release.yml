@@ -95,11 +95,6 @@ jobs:
           version="${{ steps.version.outputs.next }}"
           branch="${{ steps.version.outputs.branch }}"
 
-          if git ls-remote --exit-code --heads origin "${branch}" >/dev/null 2>&1; then
-            echo "Remote branch ${branch} already exists." >&2
-            exit 1
-          fi
-
           if git ls-remote --exit-code --tags origin "refs/tags/${version}" >/dev/null 2>&1; then
             echo "Tag ${version} already exists." >&2
             exit 1
@@ -232,15 +227,31 @@ jobs:
           rm -rf build
           ./build.sh
 
+      - name: Stage release files
+        if: steps.release.outputs.exists != 'true'
+        id: stage
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version="${{ steps.version.outputs.value }}"
+          release_dir="${RUNNER_TEMP}/MatrixScreenSaver-${version}"
+
+          rm -rf "${release_dir}"
+          mkdir -p "${release_dir}"
+          ditto "build/MatrixScreenSaver.saver" "${release_dir}/MatrixScreenSaver.saver"
+          cp "Scripts/install-saver.sh" "${release_dir}/Install MatrixScreenSaver.command"
+          chmod +x "${release_dir}/Install MatrixScreenSaver.command"
+
+          echo "dir=${release_dir}" >> "$GITHUB_OUTPUT"
+
       - name: Create release archive
         if: steps.release.outputs.exists != 'true'
         shell: bash
         run: |
           set -euo pipefail
 
-          pushd build >/dev/null
-          ditto -c -k --sequesterRsrc . "${{ steps.version.outputs.archive }}"
-          popd >/dev/null
+          ditto -c -k --sequesterRsrc "${{ steps.stage.outputs.dir }}" "${{ steps.version.outputs.archive }}"
 
       - name: Create GitHub release
         if: steps.release.outputs.exists != 'true'

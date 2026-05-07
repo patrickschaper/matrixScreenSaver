@@ -8,7 +8,7 @@ This is a macOS screen saver based on the iconic rain of characters and symbols 
 
 1. Open the [latest release](https://github.com/patrickschaper/matrixScreenSaver/releases/latest) in this repository's Releases section.
 2. Download the versioned `.zip` file from the release assets and unzip it.
-3. Double-click the extracted `.saver` file and confirm the macOS install prompt.
+3. Open the extracted folder and double-click `Install MatrixScreenSaver.command` to strip quarantine from the bundled saver and install it.
 4. Open **System Settings > Wallpaper > Screen saver** and select **MatrixScreenSaver**.
 5. Enjoy and donate<br>
    <a href="https://www.buymeacoffee.com/yesman82"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" width="150"></a><br>
@@ -44,6 +44,7 @@ The saver exposes a native **Options…** sheet. The values are stored with `Scr
 - `Sources/MatrixScreenSaver/NativeMatrixRenderer.swift` - native Matrix scene renderer
 - `Sources/MatrixScreenSaver/MatrixScreenSaverOptions.swift` - options model and native configure sheet
 - `Sources/MatrixScreenSaver/TerminalSupport.swift` - small shared terminal types used by the active renderer
+- `Scripts/install-saver.sh` - shared ditto-based installer used by local installs and release archives
 - `Tools/PreviewHost.swift` - local preview host used by `./preview.sh`
 - `Resources/Info.plist` - bundle metadata
 
@@ -85,9 +86,11 @@ This rebuilds the bundle, compiles the preview host, and opens the saver in a no
 `install.sh`:
 
 1. rebuilds the saver bundle
-2. copies it to `~/Library/Screen Savers/MatrixScreenSaver.saver`
+2. strips quarantine from the source bundle and copies it to `~/Library/Screen Savers/MatrixScreenSaver.saver`
 3. verifies the installed executable matches the build output
 4. stops running `ScreenSaverEngine` / `legacyScreenSaver` processes so macOS reloads the updated bundle
+
+Release archives also include `Install MatrixScreenSaver.command`, which strips quarantine from the bundled saver and uses the same ditto-based install flow from the extracted folder.
 
 After installing:
 

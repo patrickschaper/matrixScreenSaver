@@ -28,6 +28,11 @@ This repository is hosted on GitHub. When relevant, assume GitHub-native feature
 - Use a short title line.
 - Add a few very concise bullet points for the meaningful changes.
 
+## Pull requests
+
+- Use a concise title that summarizes the branch changes.
+- Write a short message with concise bullet points that summarize the meaningful changes from the commits in the branch.
+
 ## Pushing
 
 - Never push automatically.
