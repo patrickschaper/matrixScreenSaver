@@ -4,6 +4,8 @@
 
 MatrixScreenSaver is a native macOS `.saver` bundle that renders a terminal-style Matrix effect in process.
 
+This repository is hosted on GitHub. When relevant, assume GitHub-native features and conventions apply, including GitHub Actions workflows, pull requests, releases, and GitHub-flavored Markdown rendering.
+
 ## Tech stack
 
 - Swift

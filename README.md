@@ -10,6 +10,9 @@ This is a macOS screen saver based on the iconic rain of characters and symbols 
 2. Download the versioned `.zip` file from the release assets and unzip it.
 3. Double-click the extracted `.saver` file and confirm the macOS install prompt.
 4. Open **System Settings > Wallpaper > Screen saver** and select **MatrixScreenSaver**.
+5. Enjoy and donate<br>
+   <a href="https://www.buymeacoffee.com/yesman82"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" width="150"></a><br>
+   <img src="docs/bmc_qr.png" alt="Buy Me a Coffee QR code" width="150">
 
 ## Options
 
@@ -19,7 +22,7 @@ The saver exposes a native **Options…** sheet. The values are stored with `Scr
 | --- | --- | --- |
 | Number scene | Show the startup number scene before continuous rain. | On |
 | Twinkle | Turn on/off the twinkling effect. | On |
-| Diffuse | Turn on/off the background-color effect. | On |
+| Diffuse | Turn on/off the glow effect. | On |
 | Character size | Set the character cell width and height in pixels. | 8 x 15 |
 | Rain density | Set the factor for the density of rain drops. A positive number. | 1.0 |
 | Frame rate | Set the frame rate per second. A positive number less than or equal to 1000. | 25 |
