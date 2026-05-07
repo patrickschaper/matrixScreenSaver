@@ -625,7 +625,7 @@ final class MatrixScreenSaverView: ScreenSaverView {
         let denominator = max(CGFloat(palette.count - 1), 1)
         nativeDiffuseColorsByLevel = palette.enumerated().map { index, terminalColor in
             let intensity = CGFloat(index) / denominator
-            let alpha = 0.05 + (intensity * 0.18)
+            let alpha = 0.06 + (intensity * 0.21)
             return color(for: terminalColor).withAlphaComponent(alpha).cgColor
         }
     }
