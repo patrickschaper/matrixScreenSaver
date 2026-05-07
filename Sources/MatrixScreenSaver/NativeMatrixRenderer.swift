@@ -678,7 +678,7 @@ final class NativeMatrixRenderer {
         let upperBound = levelCount - 1
         var index = 0
         while index < diffuseLevels.count {
-            let diffuse = min(0.06 * diffuseLevels[index], 0.45)
+            let diffuse = min(0.08 * diffuseLevels[index], 0.55)
             let backgroundLevel = min(max(Int(floor(Double(upperBound) * diffuse)), 0), upperBound)
             if backgroundLevel > 0, !renderCells[index].hasForeground {
                 visibleCountByRow[index / columns] += 1
