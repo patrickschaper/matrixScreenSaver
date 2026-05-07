@@ -11,6 +11,7 @@ struct MatrixScreenSaverOptions: Equatable {
         static let rainDensity = "RainDensity"
         static let frameRate = "FrameRate"
         static let errorRate = "ErrorRate"
+        static let characters = "Characters"
     }
 
     static let defaultNumberSceneEnabled = true
@@ -21,6 +22,7 @@ struct MatrixScreenSaverOptions: Equatable {
     static let defaultRainDensity = 1.0
     static let defaultFrameRate = 25.0
     static let defaultErrorRate = 1.0
+    static let defaultCharacters = ""
 
     static let minimumRainDensity = 0.0001
     static let minimumFrameRate = 0.0001
@@ -36,6 +38,7 @@ struct MatrixScreenSaverOptions: Equatable {
     static let rainDensityDescription = "Set the factor for the density of rain drops. A positive number. The default is 1.0."
     static let frameRateDescription = "Set the frame rate per second. A positive number less than or equal to 1000. The default is 25."
     static let errorRateDescription = "Set the factor for the rate of character changes. A non-negative number. The default is 1.0."
+    static let charactersDescription = "Restrict the rain to these characters. Leave empty for the full default set.\nExample: ATGC"
 
     var numberSceneEnabled = defaultNumberSceneEnabled
     var twinkleEnabled = defaultTwinkleEnabled
@@ -45,6 +48,7 @@ struct MatrixScreenSaverOptions: Equatable {
     var rainDensity = defaultRainDensity
     var frameRate = defaultFrameRate
     var errorRate = defaultErrorRate
+    var characters = defaultCharacters
 
     /// Converts persisted options into the renderer configuration type.
     func rendererConfiguration() -> NativeMatrixRenderer.Configuration {
@@ -54,7 +58,8 @@ struct MatrixScreenSaverOptions: Equatable {
             diffuseEnabled: diffuseEnabled,
             rainDensity: rainDensity,
             frameRate: frameRate,
-            errorRate: errorRate
+            errorRate: errorRate,
+            characters: characters
         )
     }
 
@@ -68,7 +73,8 @@ struct MatrixScreenSaverOptions: Equatable {
             characterHeight: max(characterHeight, Self.minimumCharacterHeight),
             rainDensity: max(rainDensity, Self.minimumRainDensity),
             frameRate: min(max(frameRate, Self.minimumFrameRate), Self.maximumFrameRate),
-            errorRate: max(errorRate, Self.minimumErrorRate)
+            errorRate: max(errorRate, Self.minimumErrorRate),
+            characters: characters
         )
     }
 
@@ -83,6 +89,7 @@ struct MatrixScreenSaverOptions: Equatable {
             Keys.rainDensity: defaultRainDensity,
             Keys.frameRate: defaultFrameRate,
             Keys.errorRate: defaultErrorRate,
+            Keys.characters: defaultCharacters,
         ])
     }
 
@@ -96,7 +103,8 @@ struct MatrixScreenSaverOptions: Equatable {
             characterHeight: defaults.integer(forKey: Keys.characterHeight),
             rainDensity: defaults.double(forKey: Keys.rainDensity),
             frameRate: defaults.double(forKey: Keys.frameRate),
-            errorRate: defaults.double(forKey: Keys.errorRate)
+            errorRate: defaults.double(forKey: Keys.errorRate),
+            characters: defaults.string(forKey: Keys.characters) ?? defaultCharacters
         ).sanitized()
     }
 
@@ -111,6 +119,7 @@ struct MatrixScreenSaverOptions: Equatable {
         defaults.set(options.rainDensity, forKey: Keys.rainDensity)
         defaults.set(options.frameRate, forKey: Keys.frameRate)
         defaults.set(options.errorRate, forKey: Keys.errorRate)
+        defaults.set(options.characters, forKey: Keys.characters)
         defaults.synchronize()
     }
 }
@@ -152,6 +161,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject, NSTextFieldDelega
     private let rainDensityField = NSTextField(string: "")
     private let frameRateField = NSTextField(string: "")
     private let errorRateField = NSTextField(string: "")
+    private let charactersField = NSTextField(string: "")
     private var didClose = false
 
     /// Creates the options sheet controller for a specific saver view instance.
@@ -177,6 +187,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject, NSTextFieldDelega
         rainDensityField.stringValue = Self.format(options.rainDensity)
         frameRateField.stringValue = Self.format(options.frameRate)
         errorRateField.stringValue = Self.format(options.errorRate)
+        charactersField.stringValue = options.characters
         sizeWindowToFitContent()
     }
 
@@ -252,6 +263,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject, NSTextFieldDelega
         rootStack.addArrangedSubview(makeNumericSection(title: "Rain density", field: rainDensityField, description: MatrixScreenSaverOptions.rainDensityDescription))
         rootStack.addArrangedSubview(makeNumericSection(title: "Frame rate", field: frameRateField, description: MatrixScreenSaverOptions.frameRateDescription))
         rootStack.addArrangedSubview(makeNumericSection(title: "Error rate", field: errorRateField, description: MatrixScreenSaverOptions.errorRateDescription))
+        rootStack.addArrangedSubview(makeTextSection(title: "Characters", field: charactersField, description: MatrixScreenSaverOptions.charactersDescription))
 
         let buttons = NSStackView()
         buttons.orientation = .horizontal
@@ -354,6 +366,36 @@ final class MatrixScreenSaverOptionsSheetController: NSObject, NSTextFieldDelega
         return stack
     }
 
+    /// Builds a labeled text input row with its description.
+    private func makeTextSection(title: String, field: NSTextField, description: String) -> NSView {
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 4
+        stack.setHuggingPriority(.required, for: .vertical)
+
+        let row = NSStackView()
+        row.orientation = .horizontal
+        row.spacing = 12
+        row.alignment = .centerY
+
+        let label = NSTextField(labelWithString: title)
+        label.font = .systemFont(ofSize: 13, weight: .semibold)
+        label.setContentHuggingPriority(.required, for: .horizontal)
+
+        field.alignment = .left
+        field.controlSize = .regular
+        field.translatesAutoresizingMaskIntoConstraints = false
+        field.widthAnchor.constraint(equalToConstant: Self.textFieldWidth).isActive = true
+
+        row.addArrangedSubview(label)
+        row.addArrangedSubview(field)
+
+        stack.addArrangedSubview(row)
+        stack.addArrangedSubview(makeDescriptionLabel(description))
+        return stack
+    }
+
     /// Builds the side-by-side character width and height controls.
     private func makeCharacterSizeSection() -> NSView {
         let stack = NSStackView()
@@ -443,7 +485,8 @@ final class MatrixScreenSaverOptionsSheetController: NSObject, NSTextFieldDelega
             characterHeight: characterHeight,
             rainDensity: rainDensity,
             frameRate: frameRate,
-            errorRate: errorRate
+            errorRate: errorRate,
+            characters: charactersField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         ).sanitized()
     }
 
@@ -566,6 +609,12 @@ final class MatrixScreenSaverOptionsSheetController: NSObject, NSTextFieldDelega
     private static let threeDigitFieldWidth: CGFloat = {
         let font = NSFont.systemFont(ofSize: NSFont.systemFontSize)
         let textWidth = ceil(("000" as NSString).size(withAttributes: [.font: font]).width)
+        return textWidth + 20
+    }()
+
+    private static let textFieldWidth: CGFloat = {
+        let font = NSFont.systemFont(ofSize: NSFont.systemFontSize)
+        let textWidth = ceil(("0000000000" as NSString).size(withAttributes: [.font: font]).width)
         return textWidth + 20
     }()
 

@@ -8,6 +8,7 @@ final class NativeMatrixRenderer {
         var rainDensity = 1.0
         var frameRate = 25.0
         var errorRate = 1.0
+        var characters = ""
 
         /// Clamps runtime configuration values to the supported renderer ranges.
         func sanitized() -> Configuration {
@@ -17,7 +18,8 @@ final class NativeMatrixRenderer {
                 diffuseEnabled: diffuseEnabled,
                 rainDensity: max(rainDensity, MatrixScreenSaverOptions.minimumRainDensity),
                 frameRate: min(max(frameRate, MatrixScreenSaverOptions.minimumFrameRate), MatrixScreenSaverOptions.maximumFrameRate),
-                errorRate: max(errorRate, MatrixScreenSaverOptions.minimumErrorRate)
+                errorRate: max(errorRate, MatrixScreenSaverOptions.minimumErrorRate),
+                characters: characters
             )
         }
     }
@@ -181,7 +183,7 @@ final class NativeMatrixRenderer {
     private static let maxSimulationStepsPerTick = 2
     private static let disableBoldFlag: UInt32 = 0x1
     private static let blankRenderCell = RenderCell()
-    private static let glyphPool: [UnicodeScalar] = {
+    private static let defaultGlyphPool: [UnicodeScalar] = {
         var glyphs = Array("0123456789".unicodeScalars)
         glyphs.append(contentsOf: (0..<46).compactMap { UnicodeScalar(0xFF70 + $0) })
         glyphs.append(contentsOf: "<>*+.:=_|".unicodeScalars)
@@ -189,8 +191,20 @@ final class NativeMatrixRenderer {
     }()
     private static let palette = makePalette()
 
-    static var supportedScalars: [UnicodeScalar] {
-        glyphPool
+    /// Returns the glyph pool for the given characters string, deduplicating and falling back to the default pool when empty.
+    private static func resolveGlyphPool(characters: String) -> [UnicodeScalar] {
+        let trimmed = characters.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return defaultGlyphPool
+        }
+        var seen = Set<UnicodeScalar>()
+        var pool = [UnicodeScalar]()
+        for scalar in trimmed.unicodeScalars {
+            if seen.insert(scalar).inserted {
+                pool.append(scalar)
+            }
+        }
+        return pool.isEmpty ? defaultGlyphPool : pool
     }
 
     private(set) var columns = 0
@@ -198,6 +212,12 @@ final class NativeMatrixRenderer {
     private(set) var levelColors = NativeMatrixRenderer.palette
 
     private var configuration = Configuration()
+    private var activeGlyphPool: [UnicodeScalar] = NativeMatrixRenderer.defaultGlyphPool
+
+    var supportedScalars: [UnicodeScalar] {
+        activeGlyphPool
+    }
+
     private var layers = [Layer(), Layer(), Layer()]
     private var renderCells: [RenderCell] = []
     private var stagingRenderCells: [RenderCell] = []
@@ -292,6 +312,8 @@ final class NativeMatrixRenderer {
         self.configuration = sanitizedConfiguration
         lastUpdateTime = Date.timeIntervalSinceReferenceDate
         pendingSimulationSteps = 0.0
+
+        activeGlyphPool = Self.resolveGlyphPool(characters: sanitizedConfiguration.characters)
 
         let shouldResetSceneSequence =
             columns > 0 &&
@@ -612,7 +634,7 @@ final class NativeMatrixRenderer {
 
     /// Returns a random glyph from the supported rain character pool.
     private func randomGlyph() -> UnicodeScalar {
-        Self.glyphPool.randomElement() ?? UnicodeScalar("0")
+        activeGlyphPool.randomElement() ?? UnicodeScalar("0")
     }
 
     /// Returns a random ASCII numeral for the startup number scene.
