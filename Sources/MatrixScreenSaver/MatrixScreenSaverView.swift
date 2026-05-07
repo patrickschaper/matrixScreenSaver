@@ -62,6 +62,7 @@ final class MatrixScreenSaverView: ScreenSaverView {
     private var hostWindowObservers: [NSObjectProtocol] = []
     private var screenSaverLifecycleObservers: [NSObjectProtocol] = []
     private let debugIdentifier = String(UUID().uuidString.prefix(8))
+    private var showsWindowChrome: Bool { isPreview }
 
     override var isOpaque: Bool {
         true
@@ -203,9 +204,13 @@ final class MatrixScreenSaverView: ScreenSaverView {
             NSLog("MatrixScreenSaver draw bounds=%@", NSStringFromRect(bounds))
         }
         drawBackground()
-        drawWindow()
+        if showsWindowChrome {
+            drawWindow()
+        }
         drawTerminal()
-        drawTitlebar()
+        if showsWindowChrome {
+            drawTitlebar()
+        }
     }
 
     /// Applies one-time defaults and initial layout state for new instances.
@@ -871,11 +876,13 @@ final class MatrixScreenSaverView: ScreenSaverView {
         return controller
     }
 
-    /// Keeps the view origin normalized without resizing itself during layout.
+    /// Keeps the saver view aligned to the host content rect during layout.
     private func normalizeHostGeometryIfNeeded() {
         guard !geometrySyncInProgress else {
             return
         }
+
+        let targetSize = preferredHostSize()
 
         geometrySyncInProgress = true
         defer { geometrySyncInProgress = false }
@@ -884,6 +891,58 @@ final class MatrixScreenSaverView: ScreenSaverView {
             NSLog("MatrixScreenSaver normalizing bounds origin=%@", NSStringFromPoint(bounds.origin))
             setBoundsOrigin(.zero)
         }
+
+        if shouldSyncBoundsSize(to: targetSize) {
+            NSLog("MatrixScreenSaver syncing bounds size=%@", NSStringFromSize(targetSize))
+            setBoundsSize(targetSize)
+        }
+
+        let targetFrame = NSRect(origin: .zero, size: targetSize)
+        if frame.origin != targetFrame.origin || frame.size != targetFrame.size {
+            NSLog("MatrixScreenSaver syncing frame=%@", NSStringFromRect(targetFrame))
+            frame = targetFrame
+        }
+    }
+
+    /// Chooses the most reliable host content size from the current container hierarchy.
+    private func preferredHostSize() -> NSSize {
+        let externalContentViewSize: NSSize?
+        if let contentView = window?.contentView, contentView !== self {
+            externalContentViewSize = contentView.bounds.size
+        } else {
+            externalContentViewSize = nil
+        }
+
+        let candidates: [NSSize?] = [
+            externalContentViewSize,
+            superview?.bounds.size,
+            bounds.size,
+            frame.size,
+            window.map { $0.contentRect(forFrameRect: $0.frame).size },
+            window?.screen?.frame.size,
+        ]
+
+        for candidate in candidates {
+            guard let candidate, candidate.width > 20, candidate.height > 20 else {
+                continue
+            }
+            return candidate
+        }
+
+        return frame.size
+    }
+
+    /// Resyncs the saver view when AppKit reports a host size that differs materially.
+    private func shouldSyncBoundsSize(to targetSize: NSSize) -> Bool {
+        guard bounds.width > 20, bounds.height > 20 else {
+            return true
+        }
+
+        let widthDelta = abs(bounds.width - targetSize.width)
+        let heightDelta = abs(bounds.height - targetSize.height)
+
+        return (widthDelta / max(targetSize.width, 1)) > 0.05 ||
+            (heightDelta / max(targetSize.height, 1)) > 0.05
     }
 }
 
