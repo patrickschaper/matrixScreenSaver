@@ -30,7 +30,7 @@ struct MatrixScreenSaverOptions: Equatable {
     static let minimumCharacterHeight = 1
 
     static let numberSceneDescription = "Show the startup number scene before continuous rain. Turned on by default."
-    static let diffuseDescription = "Turn on/off the background-color effect. Turned on by default."
+    static let diffuseDescription = "Turn on/off the glow effect. Turned on by default."
     static let twinkleDescription = "Turn on/off the twinkling effect. Turned on by default."
     static let characterSizeDescription = "Set the character cell width and height in pixels. The default is 8x15."
     static let rainDensityDescription = "Set the factor for the density of rain drops. A positive number. The default is 1.0."
