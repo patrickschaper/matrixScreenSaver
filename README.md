@@ -6,8 +6,8 @@ This is a macOS screen saver based on the iconic rain of characters and symbols 
 
 ## Quick install
 
-1. Open the [latest release](https://github.com/patrickschaper/matrixScreenSaver/releases/latest) in this repository's Releases section.
-2. Download the versioned `.zip` file from the release assets and unzip it.
+1. Open the [latest release](https://github.com/patrickschaper/matrixScreenSaver/releases/latest) and download the versioned `.zip` file from the release assets.
+2. Double-click the downloaded `.zip` file to extract `MatrixScreenSaver.saver`.
 3. In Terminal, run the following commands from the directory that contains the extracted `MatrixScreenSaver.saver` file:
 
    ```bash
@@ -32,7 +32,7 @@ The saver exposes a native **Options…** sheet. The values are stored with `Scr
 | Number scene | Show the startup number scene before continuous rain. | On |
 | Twinkle | Turn on/off the twinkling effect. | On |
 | Diffuse | Turn on/off the glow effect. | On |
-| Character size | Set the character cell width and height in pixels. | 8 x 15 |
+| Character size | Set the character cell width and height in pixels.<br>Example pairs: 8 x 15, 9 x 17, 10 x 19, 11 x 21, 12 x 23, and 13 x 24. | 9 x 17 |
 | Rain density | Set the factor for the density of rain drops. A positive number. | 1.0 |
 | Frame rate | Set the frame rate per second. A positive number less than or equal to 1000. | 25 |
 | Error rate | Set the factor for the rate of character changes. A non-negative number. | 1.0 |
