@@ -240,8 +240,6 @@ jobs:
           rm -rf "${release_dir}"
           mkdir -p "${release_dir}"
           ditto "build/MatrixScreenSaver.saver" "${release_dir}/MatrixScreenSaver.saver"
-          cp "Scripts/install-saver.sh" "${release_dir}/Install MatrixScreenSaver.command"
-          chmod +x "${release_dir}/Install MatrixScreenSaver.command"
 
           echo "dir=${release_dir}" >> "$GITHUB_OUTPUT"
 
