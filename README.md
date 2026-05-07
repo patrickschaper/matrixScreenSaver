@@ -30,7 +30,7 @@ The saver exposes a native **Options…** sheet. The values are stored with `Scr
 ### Current state
 
 - Native Swift/AppKit screen saver bundle
-- Terminal-style window chrome around the animation
+- Edge-to-edge full-screen saver output, with terminal-style chrome kept in the preview host
 - In-process renderer for `rain-forever` with an optional upstream `number` intro
 - Native **Options…** sheet for Number scene, Twinkle, Diffuse, Character size, Rain density, Frame rate, and Error rate
 - Preview app for fast iteration without reinstalling
