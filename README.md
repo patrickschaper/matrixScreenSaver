@@ -65,20 +65,6 @@ build/MatrixScreenSaver.saver
 
 `build.sh` reads the current version from `./VERSION` and writes it into the saver bundle metadata.
 
-### Release
-
-Run the manual **Release** workflow from the **main** branch in GitHub Actions and choose a semantic version bump (`patch`, `minor`, or `major`).
-
-The workflow now uses a protected-branch-safe two-step flow:
-
-1. bumps `VERSION` with pinned `semver@7.6.3`
-2. validates the build with `./build.sh`
-3. creates and pushes a `release/v${version}` branch
-4. opens a pull request into `main` or reuses the existing one for that release branch if you rerun the manual job
-5. after that PR is merged, the push-to-`main` release job builds from the merged commit, creates `${version}.zip` from `./build/`, tags that commit with `${version}`, and publishes the archive to GitHub Releases
-
-This keeps direct workflow commits off `main`, so you can protect `main` with required pull requests and still publish releases. The `publish` job is intentionally skipped on the manual run; it only runs on the later push to `main` after the release PR merges.
-
 ### Preview without installing
 
 ```bash
