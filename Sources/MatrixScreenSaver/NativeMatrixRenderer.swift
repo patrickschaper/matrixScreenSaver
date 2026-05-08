@@ -179,6 +179,7 @@ final class NativeMatrixRenderer {
     private static let numberIntroFramesPerStripe = 20
     private static let maxBufferedSimulationSteps = 2.0
     private static let maxSimulationStepsPerTick = 2
+    private static let fadeInDuration: TimeInterval = 1.0
     private static let disableBoldFlag: UInt32 = 0x1
     private static let blankRenderCell = RenderCell()
     private static let glyphPool: [UnicodeScalar] = {
@@ -212,6 +213,15 @@ final class NativeMatrixRenderer {
     private var frameIndex = 0
     private var activeScene: Scene = .numberIntro
     private var sceneFrameIndex = 0
+    private var sceneStartTime: TimeInterval = 0
+
+    /// Ease-in-out fade alpha for the current scene (0…1).
+    var sceneFadeAlpha: Double {
+        guard activeScene == .numberIntro else { return 1.0 }
+        let t = min(max((Date.timeIntervalSinceReferenceDate - sceneStartTime) / Self.fadeInDuration, 0.0), 1.0)
+        // Cubic ease-in-out
+        return t < 0.5 ? 4 * t * t * t : 1 - pow(-2 * t + 2, 3) / 2
+    }
 
     /// Returns the rendered cell content at the requested grid position.
     subscript(row: Int, column: Int) -> RenderCell {
@@ -385,6 +395,7 @@ final class NativeMatrixRenderer {
         sceneFrameIndex = 0
         now = 100
         frameIndex = 0
+        sceneStartTime = Date.timeIntervalSinceReferenceDate
 
         guard columns > 0, rows > 0 else {
             activeScene = configuration.numberSceneEnabled ? .numberIntro : .rainForever
