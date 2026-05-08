@@ -1,5 +1,9 @@
 # AGENTS.md
 
+## Context management
+
+- Always re-read this file (`AGENTS.md`) after compacting context history.
+
 ## Project
 
 MatrixScreenSaver is a native macOS `.saver` bundle that renders a terminal-style Matrix effect in process.

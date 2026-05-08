@@ -37,6 +37,8 @@ final class MatrixScreenSaverView: ScreenSaverView {
     private var terminalSize: TerminalSize?
     private var hasLoggedFirstDraw = false
     private var geometrySyncInProgress = false
+    private var firstHiddenFrameTime: TimeInterval = 0
+    private static let hiddenFrameToleranceSeconds: TimeInterval = 5.0
 
     private var windowRect = NSRect.zero
     private var titlebarRect = NSRect.zero
@@ -148,6 +150,7 @@ final class MatrixScreenSaverView: ScreenSaverView {
     override func startAnimation() {
         super.startAnimation()
         animationActive = true
+        firstHiddenFrameTime = 0
         if shouldReloadOptionsOnStart {
             saverOptions = Self.loadSaverOptions()
         }
@@ -180,9 +183,15 @@ final class MatrixScreenSaverView: ScreenSaverView {
             return
         }
         guard isHostWindowVisibleForAnimation else {
-            handleHostDetachment(reason: "window-hidden")
+            let now = Date.timeIntervalSinceReferenceDate
+            if firstHiddenFrameTime == 0 {
+                firstHiddenFrameTime = now
+            } else if now - firstHiddenFrameTime >= Self.hiddenFrameToleranceSeconds {
+                handleHostDetachment(reason: "window-hidden")
+            }
             return
         }
+        firstHiddenFrameTime = 0
         super.animateOneFrame()
         if nativeRenderer.advance() {
             needsDisplay = true
@@ -596,7 +605,7 @@ final class MatrixScreenSaverView: ScreenSaverView {
 
         frameContext.flush()
         nativeRenderer.clearDirtyRows()
-        guard let image = nativeFrameImage else {
+        guard let image = frameContext.makeImage() else {
             return
         }
 
