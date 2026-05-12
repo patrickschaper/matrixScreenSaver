@@ -3,6 +3,7 @@ import ScreenSaver
 
 struct MatrixScreenSaverOptions: Equatable {
     private enum Keys {
+        static let neoMessageSceneEnabled = "NeoMessageSceneEnabled"
         static let numberSceneEnabled = "NumberSceneEnabled"
         static let twinkleEnabled = "TwinkleEnabled"
         static let diffuseEnabled = "DiffuseEnabled"
@@ -13,6 +14,7 @@ struct MatrixScreenSaverOptions: Equatable {
         static let errorRate = "ErrorRate"
     }
 
+    static let defaultNeoMessageSceneEnabled = true
     static let defaultNumberSceneEnabled = true
     static let defaultTwinkleEnabled = true
     static let defaultDiffuseEnabled = true
@@ -29,6 +31,7 @@ struct MatrixScreenSaverOptions: Equatable {
     static let minimumCharacterWidth = 1
     static let minimumCharacterHeight = 1
 
+    static let neoMessageSceneDescription = "Show the Neo message intro before the main scene. Turned on by default."
     static let numberSceneDescription = "Show the startup number scene before continuous rain. Turned on by default."
     static let diffuseDescription = "Turn on/off the glow effect. Turned on by default."
     static let twinkleDescription = "Turn on/off the twinkling effect. Turned on by default."
@@ -37,6 +40,7 @@ struct MatrixScreenSaverOptions: Equatable {
     static let frameRateDescription = "Set the frame rate per second. A positive number less than or equal to 1000. The default is 25."
     static let errorRateDescription = "Set the factor for the rate of character changes. A non-negative number. The default is 1.0."
 
+    var neoMessageSceneEnabled = defaultNeoMessageSceneEnabled
     var numberSceneEnabled = defaultNumberSceneEnabled
     var twinkleEnabled = defaultTwinkleEnabled
     var diffuseEnabled = defaultDiffuseEnabled
@@ -49,6 +53,7 @@ struct MatrixScreenSaverOptions: Equatable {
     /// Converts persisted options into the renderer configuration type.
     func rendererConfiguration() -> NativeMatrixRenderer.Configuration {
         NativeMatrixRenderer.Configuration(
+            neoMessageSceneEnabled: neoMessageSceneEnabled,
             numberSceneEnabled: numberSceneEnabled,
             twinkleEnabled: twinkleEnabled,
             diffuseEnabled: diffuseEnabled,
@@ -61,6 +66,7 @@ struct MatrixScreenSaverOptions: Equatable {
     /// Clamps persisted values to the supported ranges.
     func sanitized() -> MatrixScreenSaverOptions {
         MatrixScreenSaverOptions(
+            neoMessageSceneEnabled: neoMessageSceneEnabled,
             numberSceneEnabled: numberSceneEnabled,
             twinkleEnabled: twinkleEnabled,
             diffuseEnabled: diffuseEnabled,
@@ -75,6 +81,7 @@ struct MatrixScreenSaverOptions: Equatable {
     /// Registers the default option values with the screen saver defaults store.
     static func registerDefaults(in defaults: ScreenSaverDefaults) {
         defaults.register(defaults: [
+            Keys.neoMessageSceneEnabled: defaultNeoMessageSceneEnabled,
             Keys.numberSceneEnabled: defaultNumberSceneEnabled,
             Keys.twinkleEnabled: defaultTwinkleEnabled,
             Keys.diffuseEnabled: defaultDiffuseEnabled,
@@ -89,6 +96,7 @@ struct MatrixScreenSaverOptions: Equatable {
     /// Loads the persisted options from the screen saver defaults store.
     static func load(from defaults: ScreenSaverDefaults) -> MatrixScreenSaverOptions {
         MatrixScreenSaverOptions(
+            neoMessageSceneEnabled: defaults.bool(forKey: Keys.neoMessageSceneEnabled),
             numberSceneEnabled: defaults.bool(forKey: Keys.numberSceneEnabled),
             twinkleEnabled: defaults.bool(forKey: Keys.twinkleEnabled),
             diffuseEnabled: defaults.bool(forKey: Keys.diffuseEnabled),
@@ -103,6 +111,7 @@ struct MatrixScreenSaverOptions: Equatable {
     /// Saves the current options back to the screen saver defaults store.
     func save(to defaults: ScreenSaverDefaults) {
         let options = sanitized()
+        defaults.set(options.neoMessageSceneEnabled, forKey: Keys.neoMessageSceneEnabled)
         defaults.set(options.numberSceneEnabled, forKey: Keys.numberSceneEnabled)
         defaults.set(options.twinkleEnabled, forKey: Keys.twinkleEnabled)
         defaults.set(options.diffuseEnabled, forKey: Keys.diffuseEnabled)
@@ -144,6 +153,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject, NSTextFieldDelega
 
     private let window: NSWindow
     private let rootStack = NSStackView()
+    private let neoMessageSceneCheckbox = NSButton(checkboxWithTitle: "Neo message scene", target: nil, action: nil)
     private let numberSceneCheckbox = NSButton(checkboxWithTitle: "Number scene", target: nil, action: nil)
     private let twinkleCheckbox = NSButton(checkboxWithTitle: "Twinkle", target: nil, action: nil)
     private let diffuseCheckbox = NSButton(checkboxWithTitle: "Diffuse", target: nil, action: nil)
@@ -169,6 +179,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject, NSTextFieldDelega
 
     /// Updates all controls from the supplied options snapshot.
     func prepare(using options: MatrixScreenSaverOptions) {
+        neoMessageSceneCheckbox.state = options.neoMessageSceneEnabled ? .on : .off
         numberSceneCheckbox.state = options.numberSceneEnabled ? .on : .off
         twinkleCheckbox.state = options.twinkleEnabled ? .on : .off
         diffuseCheckbox.state = options.diffuseEnabled ? .on : .off
@@ -233,6 +244,10 @@ final class MatrixScreenSaverOptionsSheetController: NSObject, NSTextFieldDelega
         rootStack.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
         rootStack.translatesAutoresizingMaskIntoConstraints = false
 
+        let neoMessageSceneSection = makeCheckboxSection(
+            checkbox: neoMessageSceneCheckbox,
+            description: MatrixScreenSaverOptions.neoMessageSceneDescription
+        )
         let numberSceneSection = makeCheckboxSection(
             checkbox: numberSceneCheckbox,
             description: MatrixScreenSaverOptions.numberSceneDescription
@@ -244,6 +259,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject, NSTextFieldDelega
         toggleStack.alignment = .leading
         toggleStack.spacing = 16
         toggleStack.setHuggingPriority(.required, for: .vertical)
+        toggleStack.addArrangedSubview(neoMessageSceneSection)
         toggleStack.addArrangedSubview(numberSceneSection)
         toggleStack.addArrangedSubview(twinkleSection)
         toggleStack.addArrangedSubview(diffuseSection)
@@ -436,6 +452,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject, NSTextFieldDelega
         }
 
         return MatrixScreenSaverOptions(
+            neoMessageSceneEnabled: neoMessageSceneCheckbox.state == .on,
             numberSceneEnabled: numberSceneCheckbox.state == .on,
             twinkleEnabled: twinkleCheckbox.state == .on,
             diffuseEnabled: diffuseCheckbox.state == .on,
