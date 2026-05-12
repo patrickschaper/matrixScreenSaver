@@ -216,7 +216,11 @@ final class MatrixScreenSaverView: ScreenSaverView {
         if showsWindowChrome {
             drawWindow()
         }
-        drawTerminal()
+        if nativeRenderer.isInNeoMessageScene {
+            drawNeoMessageScene()
+        } else {
+            drawTerminal()
+        }
         if showsWindowChrome {
             drawTitlebar()
         }
@@ -506,9 +510,51 @@ final class MatrixScreenSaverView: ScreenSaverView {
         (Self.terminalTitle as NSString).draw(in: titleRect, withAttributes: attributes)
     }
 
+    /// Paints the Neo message intro scene: black background with typewriter text in Matrix green.
+    private func drawNeoMessageScene() {
+        NSColor.black.setFill()
+        terminalRect.fill()
+
+        guard let renderState = nativeRenderer.neoMessageRenderState,
+              let currentLine = renderState.currentLine,
+              (renderState.visibleCharCount > 0 || renderState.cursorVisible)
+        else {
+            return
+        }
+
+        let neoFont = NSFont.monospacedSystemFont(ofSize: regularFont.pointSize * 1.5, weight: .medium)
+
+        // Use the same mid-range level the number intro and rain body use (~half of max),
+        // giving the characteristic Matrix green rather than the near-white top level.
+        let palette = nativeRenderer.levelColors
+        let neoColorLevel = max(0, palette.count / 2)
+        let neoColor: NSColor = palette.isEmpty
+            ? NSColor(calibratedRed: 0, green: 0.75, blue: 0.3, alpha: 1)
+            : color(for: palette[neoColorLevel])
+
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: neoFont,
+            .foregroundColor: neoColor,
+        ]
+
+        let endIndex = currentLine.index(
+            currentLine.startIndex,
+            offsetBy: min(renderState.visibleCharCount, currentLine.count)
+        )
+        let visibleText = String(currentLine[..<endIndex])
+        let textWithCursor = renderState.cursorVisible ? visibleText + "█" : visibleText
+
+        guard !textWithCursor.isEmpty else { return }
+
+        // Anchor: 5% from the left, 10% from the top (AppKit Y grows upward)
+        let anchorX = terminalRect.minX + terminalRect.width * 0.05
+        let anchorY = terminalRect.minY + terminalRect.height * 0.90
+
+        (textWithCursor as NSString).draw(at: NSPoint(x: anchorX, y: anchorY), withAttributes: attributes)
+    }
+
     /// Paints the clipped terminal surface and its rendered frame buffer.
-    private func drawTerminal() {
-        let terminalPath = NSBezierPath(
+    private func drawTerminal() {        let terminalPath = NSBezierPath(
             roundedRect: terminalRect,
             xRadius: Self.terminalCornerRadius,
             yRadius: Self.terminalCornerRadius

@@ -3,6 +3,8 @@ import ScreenSaver
 
 struct MatrixScreenSaverOptions: Equatable {
     private enum Keys {
+        static let neoMessageSceneEnabled = "NeoMessageSceneEnabled"
+        static let neoMessageSpeedFactor = "NeoMessageSpeedFactor"
         static let numberSceneEnabled = "NumberSceneEnabled"
         static let twinkleEnabled = "TwinkleEnabled"
         static let diffuseEnabled = "DiffuseEnabled"
@@ -13,6 +15,8 @@ struct MatrixScreenSaverOptions: Equatable {
         static let errorRate = "ErrorRate"
     }
 
+    static let defaultNeoMessageSceneEnabled = true
+    static let defaultNeoMessageSpeedFactor = 1.0
     static let defaultNumberSceneEnabled = true
     static let defaultTwinkleEnabled = true
     static let defaultDiffuseEnabled = true
@@ -26,9 +30,12 @@ struct MatrixScreenSaverOptions: Equatable {
     static let minimumFrameRate = 0.0001
     static let maximumFrameRate = 1000.0
     static let minimumErrorRate = 0.0
+    static let minimumNeoMessageSpeedFactor = 0.0001
     static let minimumCharacterWidth = 1
     static let minimumCharacterHeight = 1
 
+    static let neoMessageSceneDescription = "Show the Neo message intro before the main scene. Turned on by default."
+    static let neoMessageSpeedFactorDescription = "Multiplier for the Neo message typing and pause speed. A positive number. The default is 1.0."
     static let numberSceneDescription = "Show the startup number scene before continuous rain. Turned on by default."
     static let diffuseDescription = "Turn on/off the glow effect. Turned on by default."
     static let twinkleDescription = "Turn on/off the twinkling effect. Turned on by default."
@@ -37,6 +44,8 @@ struct MatrixScreenSaverOptions: Equatable {
     static let frameRateDescription = "Set the frame rate per second. A positive number less than or equal to 1000. The default is 25."
     static let errorRateDescription = "Set the factor for the rate of character changes. A non-negative number. The default is 1.0."
 
+    var neoMessageSceneEnabled = defaultNeoMessageSceneEnabled
+    var neoMessageSpeedFactor = defaultNeoMessageSpeedFactor
     var numberSceneEnabled = defaultNumberSceneEnabled
     var twinkleEnabled = defaultTwinkleEnabled
     var diffuseEnabled = defaultDiffuseEnabled
@@ -49,6 +58,8 @@ struct MatrixScreenSaverOptions: Equatable {
     /// Converts persisted options into the renderer configuration type.
     func rendererConfiguration() -> NativeMatrixRenderer.Configuration {
         NativeMatrixRenderer.Configuration(
+            neoMessageSceneEnabled: neoMessageSceneEnabled,
+            neoMessageSpeedFactor: neoMessageSpeedFactor,
             numberSceneEnabled: numberSceneEnabled,
             twinkleEnabled: twinkleEnabled,
             diffuseEnabled: diffuseEnabled,
@@ -61,6 +72,8 @@ struct MatrixScreenSaverOptions: Equatable {
     /// Clamps persisted values to the supported ranges.
     func sanitized() -> MatrixScreenSaverOptions {
         MatrixScreenSaverOptions(
+            neoMessageSceneEnabled: neoMessageSceneEnabled,
+            neoMessageSpeedFactor: max(neoMessageSpeedFactor, Self.minimumNeoMessageSpeedFactor),
             numberSceneEnabled: numberSceneEnabled,
             twinkleEnabled: twinkleEnabled,
             diffuseEnabled: diffuseEnabled,
@@ -75,6 +88,8 @@ struct MatrixScreenSaverOptions: Equatable {
     /// Registers the default option values with the screen saver defaults store.
     static func registerDefaults(in defaults: ScreenSaverDefaults) {
         defaults.register(defaults: [
+            Keys.neoMessageSceneEnabled: defaultNeoMessageSceneEnabled,
+            Keys.neoMessageSpeedFactor: defaultNeoMessageSpeedFactor,
             Keys.numberSceneEnabled: defaultNumberSceneEnabled,
             Keys.twinkleEnabled: defaultTwinkleEnabled,
             Keys.diffuseEnabled: defaultDiffuseEnabled,
@@ -89,6 +104,8 @@ struct MatrixScreenSaverOptions: Equatable {
     /// Loads the persisted options from the screen saver defaults store.
     static func load(from defaults: ScreenSaverDefaults) -> MatrixScreenSaverOptions {
         MatrixScreenSaverOptions(
+            neoMessageSceneEnabled: defaults.bool(forKey: Keys.neoMessageSceneEnabled),
+            neoMessageSpeedFactor: defaults.double(forKey: Keys.neoMessageSpeedFactor),
             numberSceneEnabled: defaults.bool(forKey: Keys.numberSceneEnabled),
             twinkleEnabled: defaults.bool(forKey: Keys.twinkleEnabled),
             diffuseEnabled: defaults.bool(forKey: Keys.diffuseEnabled),
@@ -103,6 +120,8 @@ struct MatrixScreenSaverOptions: Equatable {
     /// Saves the current options back to the screen saver defaults store.
     func save(to defaults: ScreenSaverDefaults) {
         let options = sanitized()
+        defaults.set(options.neoMessageSceneEnabled, forKey: Keys.neoMessageSceneEnabled)
+        defaults.set(options.neoMessageSpeedFactor, forKey: Keys.neoMessageSpeedFactor)
         defaults.set(options.numberSceneEnabled, forKey: Keys.numberSceneEnabled)
         defaults.set(options.twinkleEnabled, forKey: Keys.twinkleEnabled)
         defaults.set(options.diffuseEnabled, forKey: Keys.diffuseEnabled)
@@ -119,6 +138,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject, NSTextFieldDelega
     private enum ValidationError: LocalizedError {
         case characterWidth
         case characterHeight
+        case neoMessageSpeedFactor
         case rainDensity
         case frameRate
         case errorRate
@@ -129,6 +149,8 @@ final class MatrixScreenSaverOptionsSheetController: NSObject, NSTextFieldDelega
                 return "Character width must be a positive whole number."
             case .characterHeight:
                 return "Character height must be a positive whole number."
+            case .neoMessageSpeedFactor:
+                return "Neo message speed must be a positive number."
             case .rainDensity:
                 return "Rain density must be a positive number."
             case .frameRate:
@@ -144,6 +166,8 @@ final class MatrixScreenSaverOptionsSheetController: NSObject, NSTextFieldDelega
 
     private let window: NSWindow
     private let rootStack = NSStackView()
+    private let neoMessageSceneCheckbox = NSButton(checkboxWithTitle: "Neo message scene", target: nil, action: nil)
+    private let neoMessageSpeedFactorField = NSTextField(string: "")
     private let numberSceneCheckbox = NSButton(checkboxWithTitle: "Number scene", target: nil, action: nil)
     private let twinkleCheckbox = NSButton(checkboxWithTitle: "Twinkle", target: nil, action: nil)
     private let diffuseCheckbox = NSButton(checkboxWithTitle: "Diffuse", target: nil, action: nil)
@@ -169,6 +193,8 @@ final class MatrixScreenSaverOptionsSheetController: NSObject, NSTextFieldDelega
 
     /// Updates all controls from the supplied options snapshot.
     func prepare(using options: MatrixScreenSaverOptions) {
+        neoMessageSceneCheckbox.state = options.neoMessageSceneEnabled ? .on : .off
+        neoMessageSpeedFactorField.stringValue = Self.format(options.neoMessageSpeedFactor)
         numberSceneCheckbox.state = options.numberSceneEnabled ? .on : .off
         twinkleCheckbox.state = options.twinkleEnabled ? .on : .off
         diffuseCheckbox.state = options.diffuseEnabled ? .on : .off
@@ -218,11 +244,13 @@ final class MatrixScreenSaverOptionsSheetController: NSObject, NSTextFieldDelega
 
         characterWidthField.formatter = Self.integerFormatter
         characterHeightField.formatter = Self.integerFormatter
+        neoMessageSpeedFactorField.formatter = Self.numberFormatter
         rainDensityField.formatter = Self.numberFormatter
         frameRateField.formatter = Self.numberFormatter
         errorRateField.formatter = Self.numberFormatter
         characterWidthField.delegate = self
         characterHeightField.delegate = self
+        neoMessageSpeedFactorField.delegate = self
         rainDensityField.delegate = self
         frameRateField.delegate = self
         errorRateField.delegate = self
@@ -233,6 +261,10 @@ final class MatrixScreenSaverOptionsSheetController: NSObject, NSTextFieldDelega
         rootStack.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
         rootStack.translatesAutoresizingMaskIntoConstraints = false
 
+        let neoMessageSceneSection = makeCheckboxSection(
+            checkbox: neoMessageSceneCheckbox,
+            description: MatrixScreenSaverOptions.neoMessageSceneDescription
+        )
         let numberSceneSection = makeCheckboxSection(
             checkbox: numberSceneCheckbox,
             description: MatrixScreenSaverOptions.numberSceneDescription
@@ -244,10 +276,12 @@ final class MatrixScreenSaverOptionsSheetController: NSObject, NSTextFieldDelega
         toggleStack.alignment = .leading
         toggleStack.spacing = 16
         toggleStack.setHuggingPriority(.required, for: .vertical)
+        toggleStack.addArrangedSubview(neoMessageSceneSection)
         toggleStack.addArrangedSubview(numberSceneSection)
         toggleStack.addArrangedSubview(twinkleSection)
         toggleStack.addArrangedSubview(diffuseSection)
         rootStack.addArrangedSubview(toggleStack)
+        rootStack.addArrangedSubview(makeNumericSection(title: "Neo message speed", field: neoMessageSpeedFactorField, description: MatrixScreenSaverOptions.neoMessageSpeedFactorDescription))
         rootStack.addArrangedSubview(makeCharacterSizeSection())
         rootStack.addArrangedSubview(makeNumericSection(title: "Rain density", field: rainDensityField, description: MatrixScreenSaverOptions.rainDensityDescription))
         rootStack.addArrangedSubview(makeNumericSection(title: "Frame rate", field: frameRateField, description: MatrixScreenSaverOptions.frameRateDescription))
@@ -279,14 +313,28 @@ final class MatrixScreenSaverOptionsSheetController: NSObject, NSTextFieldDelega
         leadingPadding.widthAnchor.constraint(equalToConstant: rootStack.edgeInsets.left).isActive = true
         leadingPadding.setContentHuggingPriority(.required, for: .horizontal)
 
-        let spacer = NSView()
-        spacer.translatesAutoresizingMaskIntoConstraints = false
-        spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        spacer.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        let spacerLeft = NSView()
+        spacerLeft.translatesAutoresizingMaskIntoConstraints = false
+        spacerLeft.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        spacerLeft.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        let versionString = Bundle(for: MatrixScreenSaverOptionsSheetController.self)
+            .infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
+        let versionLabel = NSTextField(labelWithString: versionString.isEmpty ? "" : "v\(versionString)")
+        versionLabel.font = .systemFont(ofSize: 11)
+        versionLabel.textColor = .tertiaryLabelColor
+        versionLabel.setContentHuggingPriority(.required, for: .horizontal)
+
+        let spacerRight = NSView()
+        spacerRight.translatesAutoresizingMaskIntoConstraints = false
+        spacerRight.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        spacerRight.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         footer.addArrangedSubview(leadingPadding)
         footer.addArrangedSubview(resetButton)
-        footer.addArrangedSubview(spacer)
+        footer.addArrangedSubview(spacerLeft)
+        footer.addArrangedSubview(versionLabel)
+        footer.addArrangedSubview(spacerRight)
         footer.addArrangedSubview(buttons)
         footer.setCustomSpacing(0, after: leadingPadding)
 
@@ -415,6 +463,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject, NSTextFieldDelega
     private func validatedOptions() throws -> MatrixScreenSaverOptions {
         let characterWidth = try parseInteger(from: characterWidthField, error: .characterWidth)
         let characterHeight = try parseInteger(from: characterHeightField, error: .characterHeight)
+        let neoMessageSpeedFactor = try parseDouble(from: neoMessageSpeedFactorField, error: .neoMessageSpeedFactor)
         let rainDensity = try parseDouble(from: rainDensityField, error: .rainDensity)
         let frameRate = try parseDouble(from: frameRateField, error: .frameRate)
         let errorRate = try parseDouble(from: errorRateField, error: .errorRate)
@@ -424,6 +473,9 @@ final class MatrixScreenSaverOptionsSheetController: NSObject, NSTextFieldDelega
         }
         guard characterHeight > 0 else {
             throw ValidationError.characterHeight
+        }
+        guard neoMessageSpeedFactor > 0 else {
+            throw ValidationError.neoMessageSpeedFactor
         }
         guard rainDensity > 0 else {
             throw ValidationError.rainDensity
@@ -436,6 +488,8 @@ final class MatrixScreenSaverOptionsSheetController: NSObject, NSTextFieldDelega
         }
 
         return MatrixScreenSaverOptions(
+            neoMessageSceneEnabled: neoMessageSceneCheckbox.state == .on,
+            neoMessageSpeedFactor: neoMessageSpeedFactor,
             numberSceneEnabled: numberSceneCheckbox.state == .on,
             twinkleEnabled: twinkleCheckbox.state == .on,
             diffuseEnabled: diffuseCheckbox.state == .on,

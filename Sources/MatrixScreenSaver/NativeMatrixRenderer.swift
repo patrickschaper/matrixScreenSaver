@@ -2,6 +2,8 @@ import Foundation
 
 final class NativeMatrixRenderer {
     struct Configuration: Equatable {
+        var neoMessageSceneEnabled = true
+        var neoMessageSpeedFactor = 1.0
         var numberSceneEnabled = true
         var twinkleEnabled = true
         var diffuseEnabled = true
@@ -12,6 +14,8 @@ final class NativeMatrixRenderer {
         /// Clamps runtime configuration values to the supported renderer ranges.
         func sanitized() -> Configuration {
             Configuration(
+                neoMessageSceneEnabled: neoMessageSceneEnabled,
+                neoMessageSpeedFactor: max(neoMessageSpeedFactor, MatrixScreenSaverOptions.minimumNeoMessageSpeedFactor),
                 numberSceneEnabled: numberSceneEnabled,
                 twinkleEnabled: twinkleEnabled,
                 diffuseEnabled: diffuseEnabled,
@@ -71,6 +75,7 @@ final class NativeMatrixRenderer {
     }
 
     private enum Scene {
+        case neoMessage
         case numberIntro
         case rainForever
     }
@@ -199,6 +204,7 @@ final class NativeMatrixRenderer {
     private(set) var levelColors = NativeMatrixRenderer.palette
 
     private var configuration = Configuration()
+    private var neoScene = NeoMessageScene()
     private var layers = [Layer(), Layer(), Layer()]
     private var renderCells: [RenderCell] = []
     private var stagingRenderCells: [RenderCell] = []
@@ -221,6 +227,17 @@ final class NativeMatrixRenderer {
         let t = min(max((Date.timeIntervalSinceReferenceDate - sceneStartTime) / Self.fadeInDuration, 0.0), 1.0)
         // Cubic ease-in-out
         return t < 0.5 ? 4 * t * t * t : 1 - pow(-2 * t + 2, 3) / 2
+    }
+
+    /// Whether the Neo message intro scene is currently active.
+    var isInNeoMessageScene: Bool {
+        activeScene == .neoMessage
+    }
+
+    /// The Neo message render state for the current frame, or nil when not in that scene.
+    var neoMessageRenderState: NeoMessageRenderState? {
+        guard activeScene == .neoMessage else { return nil }
+        return neoScene.renderState
     }
 
     /// Returns the rendered cell content at the requested grid position.
@@ -306,7 +323,8 @@ final class NativeMatrixRenderer {
         let shouldResetSceneSequence =
             columns > 0 &&
             rows > 0 &&
-            previousConfiguration.numberSceneEnabled != sanitizedConfiguration.numberSceneEnabled
+            (previousConfiguration.neoMessageSceneEnabled != sanitizedConfiguration.neoMessageSceneEnabled ||
+             previousConfiguration.numberSceneEnabled != sanitizedConfiguration.numberSceneEnabled)
 
         if shouldResetSceneSequence || (!running && columns > 0 && rows > 0) {
             resetLayers()
@@ -346,6 +364,8 @@ final class NativeMatrixRenderer {
     /// Dispatches the current frame tick to the active scene implementation.
     private func stepFrame() {
         switch activeScene {
+        case .neoMessage:
+            stepNeoMessageFrame()
         case .numberIntro:
             stepNumberIntroFrame()
         case .rainForever:
@@ -381,6 +401,29 @@ final class NativeMatrixRenderer {
         }
     }
 
+    /// Advances the Neo message intro scene by one simulation step.
+    private func stepNeoMessageFrame() {
+        neoScene.advance(now: Date.timeIntervalSinceReferenceDate, speedFactor: configuration.neoMessageSpeedFactor)
+        markAllRowsDirty()
+        if neoScene.phase == .done {
+            transitionFromNeoMessage()
+        }
+    }
+
+    /// Moves from the Neo message scene to the next scene in the sequence.
+    private func transitionFromNeoMessage() {
+        sceneFrameIndex = 0
+        sceneStartTime = Date.timeIntervalSinceReferenceDate
+        if configuration.numberSceneEnabled {
+            activeScene = .numberIntro
+            populateNumberIntroFrame(stripe: currentNumberIntroStripe)
+            sceneFrameIndex = min(1, Self.totalNumberIntroFrames)
+        } else {
+            activeScene = .rainForever
+            stepRainFrame()
+        }
+    }
+
     private var currentNumberIntroStripe: Int {
         let stripeIndex = min(sceneFrameIndex / Self.numberIntroFramesPerStripe, Self.numberIntroStripePeriods.count - 1)
         return Self.numberIntroStripePeriods[stripeIndex]
@@ -398,11 +441,20 @@ final class NativeMatrixRenderer {
         sceneStartTime = Date.timeIntervalSinceReferenceDate
 
         guard columns > 0, rows > 0 else {
-            activeScene = configuration.numberSceneEnabled ? .numberIntro : .rainForever
+            if configuration.neoMessageSceneEnabled {
+                activeScene = .neoMessage
+            } else if configuration.numberSceneEnabled {
+                activeScene = .numberIntro
+            } else {
+                activeScene = .rainForever
+            }
             return
         }
 
-        if configuration.numberSceneEnabled {
+        if configuration.neoMessageSceneEnabled {
+            activeScene = .neoMessage
+            neoScene.reset(startTime: Date.timeIntervalSinceReferenceDate)
+        } else if configuration.numberSceneEnabled {
             activeScene = .numberIntro
             populateNumberIntroFrame(stripe: currentNumberIntroStripe)
             sceneFrameIndex = min(1, Self.totalNumberIntroFrames)

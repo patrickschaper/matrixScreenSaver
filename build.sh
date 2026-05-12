@@ -34,6 +34,7 @@ swiftc \
   -framework ScreenSaver \
   "$SOURCE_DIR/TerminalSupport.swift" \
   "$SOURCE_DIR/MatrixScreenSaverOptions.swift" \
+  "$SOURCE_DIR/NeoMessageScene.swift" \
   "$SOURCE_DIR/NativeMatrixRenderer.swift" \
   "$SOURCE_DIR/MatrixScreenSaverView.swift"
 
