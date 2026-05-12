@@ -34,10 +34,16 @@ swiftc \
   -framework ScreenSaver \
   "$SOURCE_DIR/TerminalSupport.swift" \
   "$SOURCE_DIR/MatrixScreenSaverOptions.swift" \
+  "$SOURCE_DIR/NeoMessageScene.swift" \
   "$SOURCE_DIR/NativeMatrixRenderer.swift" \
   "$SOURCE_DIR/MatrixScreenSaverView.swift"
 
 cp "$INPUT_RESOURCES_DIR/Info.plist" "$CONTENTS_DIR/Info.plist"
+for f in Preview.png "Preview@2x.png"; do
+  if [[ -f "$INPUT_RESOURCES_DIR/$f" ]]; then
+    cp "$INPUT_RESOURCES_DIR/$f" "$RESOURCES_DIR/$f"
+  fi
+done
 if command -v /usr/libexec/PlistBuddy >/dev/null 2>&1; then
   /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $BUNDLE_VERSION" "$CONTENTS_DIR/Info.plist"
   /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUNDLE_VERSION" "$CONTENTS_DIR/Info.plist"
