@@ -37,6 +37,17 @@ This repository is hosted on GitHub. When relevant, assume GitHub-native feature
 - Use a concise title that summarizes the branch changes.
 - Write a short message with concise bullet points that summarize the meaningful changes from the commits in the branch.
 
+## Git operations — require explicit instruction
+
+**Never perform any of the following automatically.** Always wait for the user to explicitly ask:
+
+- Create a branch (`git checkout -b`)
+- Commit (`git commit`)
+- Push (`git push`)
+- Create a pull request (`gh pr create`)
+- Merge a pull request (`gh pr merge`)
+- Trigger or re-run GitHub Actions workflows
+
 ## Pushing
 
 - Never push automatically.

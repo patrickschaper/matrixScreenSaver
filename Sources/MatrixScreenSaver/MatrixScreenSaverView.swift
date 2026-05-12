@@ -663,6 +663,7 @@ final class MatrixScreenSaverView: ScreenSaverView {
         )
         context.saveGState()
         context.interpolationQuality = .none
+        context.setAlpha(1.0)
         context.draw(image, in: drawRect)
         context.restoreGState()
     }

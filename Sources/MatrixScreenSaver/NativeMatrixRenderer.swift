@@ -180,9 +180,13 @@ final class NativeMatrixRenderer {
     private static let defaultTwinkle = 0.2
     private static let baseSpeedTable = [2, 2, 2, 2, 3, 3, 6, 6, 6, 7, 7, 8, 8, 8]
     private static let baseErrorRateModulo = 20.0
-    private static let numberIntroStripePeriods = [0, 32, 16, 8, 4, 2, 2, 2]
-    private static let numberIntroFramesPerStripe = 20
-    private static let numberIntroFillFrames = 40
+    private static let numberIntroCursorBlinkPeriod: TimeInterval = 0.3
+    private static let numberIntroCursorBlinkCount = 3
+    private static let numberIntroTypingInterval: TimeInterval = 0.05
+    private static let numberIntroPauseDuration: TimeInterval = 1.0
+    private static let numberIntroRainFrames = 160
+    private static let numberIntroBlackoutInterval: TimeInterval = 1.0
+    private static let numberIntroBlackoutFraction = 0.10
     private static let maxBufferedSimulationSteps = 2.0
     private static let maxSimulationStepsPerTick = 2
     private static let disableBoldFlag: UInt32 = 0x1
@@ -191,6 +195,10 @@ final class NativeMatrixRenderer {
         var glyphs = Array("0123456789".unicodeScalars)
         glyphs.append(contentsOf: (0..<46).compactMap { UnicodeScalar(0xFF70 + $0) })
         glyphs.append(contentsOf: "<>*+.:=_|".unicodeScalars)
+        // Printable ASCII for terminal text lines
+        glyphs.append(contentsOf: (0x20..<0x7F).compactMap { UnicodeScalar($0) })
+        // Block cursor used in number intro
+        glyphs.append(UnicodeScalar(0x2588)!)
         return glyphs
     }()
     private static let palette = makePalette()
@@ -218,11 +226,19 @@ final class NativeMatrixRenderer {
     private var now = 100
     private var frameIndex = 0
     private var activeScene: Scene = .numberIntro
-    private var sceneFrameIndex = 0
-    private var sceneStartTime: TimeInterval = 0
-    private var isInNumberFillPhase = false
-    private var numberIntroShuffledIndices: [Int] = []
-    private var numberIntroRevealIndex = 0
+    private enum NumberIntroPhase {
+        case cursorBlink, typingFirstLine, pauseAfterFirst, secondLine, pauseAfterSecond, rain
+    }
+    private var numberIntroPhase: NumberIntroPhase = .cursorBlink
+    private var numberIntroPhaseStart: TimeInterval = 0
+    private var numberIntroTypingText = ""
+    private var numberIntroTypedCount = 0
+    private var numberIntroLastCharTime: TimeInterval = 0
+    private var numberIntroCursorVisible = false
+    private var numberIntroRainFrame = 0
+    private var numberIntroLastBlackout: TimeInterval = 0
+    private var numberIntroBlackoutCount = 0
+    private var numberIntroBlackedColumns = Set<Int>()
 
     /// Whether the Neo message intro scene is currently active.
     var isInNeoMessageScene: Bool {
@@ -362,11 +378,7 @@ final class NativeMatrixRenderer {
         case .neoMessage:
             stepNeoMessageFrame()
         case .numberIntro:
-            if isInNumberFillPhase {
-                stepNumberFillFrame()
-            } else {
-                stepNumberIntroFrame()
-            }
+            stepNumberIntroScene()
         case .rainForever:
             stepRainFrame()
         }
@@ -390,72 +402,203 @@ final class NativeMatrixRenderer {
         constructRenderContent()
     }
 
-    /// Advances the startup number scene by one simulation step.
-    private func stepNumberIntroFrame() {
-        populateNumberIntroFrame(stripe: currentNumberIntroStripe)
+    // MARK: - Number intro scene
+
+    private func initNumberIntroScene() {
+        let t = Date.timeIntervalSinceReferenceDate
+        numberIntroPhase = .cursorBlink
+        numberIntroPhaseStart = t
+        numberIntroCursorVisible = true
+        numberIntroRainFrame = 0
+        numberIntroLastBlackout = t
+        numberIntroBlackoutCount = 0
+        numberIntroBlackedColumns = []
+        numberIntroTypedCount = 0
+        numberIntroTypingText = ""
+        numberIntroLastCharTime = t
+        for i in renderCells.indices { renderCells[i] = Self.blankRenderCell }
+        for i in visibleCountByRow.indices { visibleCountByRow[i] = 0 }
+        setRow0(text: "", typedCount: 0, showCursor: true)
+        markAllRowsDirty()
+    }
+
+    private func stepNumberIntroScene() {
+        let t = Date.timeIntervalSinceReferenceDate
+        switch numberIntroPhase {
+        case .cursorBlink:      stepCursorBlink(t: t)
+        case .typingFirstLine:  stepTypingFirstLine(t: t)
+        case .pauseAfterFirst:  stepPauseAfterFirst(t: t)
+        case .secondLine:       commitSecondLine(t: t)
+        case .pauseAfterSecond: stepPauseAfterSecond(t: t)
+        case .rain:             stepNumberRain(t: t)
+        }
+        markAllRowsDirty()
+    }
+
+    private func stepCursorBlink(t: TimeInterval) {
+        let elapsed = t - numberIntroPhaseStart
+        let halfPeriod = Int(elapsed / Self.numberIntroCursorBlinkPeriod)
+        if halfPeriod >= Self.numberIntroCursorBlinkCount * 2 {
+            let date = Date()
+            let fmt = DateFormatter()
+            fmt.dateFormat = "MM-dd-yy"
+            let dateStr = fmt.string(from: date)
+            fmt.dateFormat = "H:mm:ss"
+            let timeStr = fmt.string(from: date)
+            numberIntroTypingText = "Call trans opt: received. \(dateStr) \(timeStr) REC:Log>"
+            numberIntroTypedCount = 0
+            numberIntroLastCharTime = t
+            numberIntroPhase = .typingFirstLine
+            numberIntroPhaseStart = t
+            setRow0(text: "", typedCount: 0, showCursor: false)
+            return
+        }
+        let visible = (halfPeriod % 2 == 0)
+        if visible != numberIntroCursorVisible {
+            numberIntroCursorVisible = visible
+            setRow0(text: "", typedCount: 0, showCursor: visible)
+        }
+    }
+
+    private func stepTypingFirstLine(t: TimeInterval) {
+        let totalChars = numberIntroTypingText.unicodeScalars.count
+        while t >= numberIntroLastCharTime + Self.numberIntroTypingInterval,
+              numberIntroTypedCount < totalChars {
+            numberIntroTypedCount += 1
+            numberIntroLastCharTime += Self.numberIntroTypingInterval
+        }
+        if numberIntroTypedCount >= totalChars {
+            setRow0(text: numberIntroTypingText, typedCount: totalChars, showCursor: false)
+            numberIntroPhase = .pauseAfterFirst
+            numberIntroPhaseStart = t
+            return
+        }
+        let elapsed = t - numberIntroPhaseStart
+        let halfPeriod = Int(elapsed / Self.numberIntroCursorBlinkPeriod)
+        setRow0(text: numberIntroTypingText, typedCount: numberIntroTypedCount,
+                showCursor: halfPeriod % 2 == 0)
+    }
+
+    private func stepPauseAfterFirst(t: TimeInterval) {
+        if t - numberIntroPhaseStart >= Self.numberIntroPauseDuration {
+            numberIntroPhase = .secondLine
+        }
+    }
+
+    private func commitSecondLine(t: TimeInterval) {
+        let text = "Trace program: running"
+        setRow0(text: text, typedCount: text.unicodeScalars.count, showCursor: false)
+        numberIntroPhase = .pauseAfterSecond
+        numberIntroPhaseStart = t
+    }
+
+    private func stepPauseAfterSecond(t: TimeInterval) {
+        if t - numberIntroPhaseStart >= Self.numberIntroPauseDuration {
+            fillNumberRain()
+            numberIntroPhase = .rain
+            numberIntroRainFrame = 0
+            numberIntroLastBlackout = t
+        }
+    }
+
+    private func stepNumberRain(t: TimeInterval) {
+        scrollNumberRain()
         now += 1
-        sceneFrameIndex += 1
-        if sceneFrameIndex >= Self.totalNumberIntroFrames {
+        if t - numberIntroLastBlackout >= Self.numberIntroBlackoutInterval {
+            blackoutColumns(t: t)
+        }
+    }
+
+    /// Writes cursor / typed text into row 0 of the render grid.
+    private func setRow0(text: String, typedCount: Int, showCursor: Bool) {
+        guard rows > 0, columns > 0 else { return }
+        let baseGreenLevel = max(levelColors.count / 2, 1)
+        let scalars = Array(text.unicodeScalars)
+        for col in 0..<columns { renderCells[col] = Self.blankRenderCell }
+        var col = 0
+        for i in 0..<min(typedCount, scalars.count) {
+            guard col < columns else { break }
+            renderCells[col] = RenderCell(scalar: scalars[i], foregroundLevel: baseGreenLevel,
+                                          backgroundLevel: 0, bold: false)
+            col += 1
+        }
+        if showCursor, col < columns {
+            renderCells[col] = RenderCell(scalar: UnicodeScalar(0x2588)!, foregroundLevel: baseGreenLevel,
+                                          backgroundLevel: 0, bold: false)
+            col += 1
+        }
+        visibleCountByRow[0] = col
+    }
+
+    /// Instantly fills rows 1..N-1 with random number glyphs and clears row 0.
+    private func fillNumberRain() {
+        guard rows > 1, columns > 0 else { return }
+        for col in 0..<columns { renderCells[col] = Self.blankRenderCell }
+        visibleCountByRow[0] = 0
+        let levelCount = max(levelColors.count, 1)
+        for row in 1..<rows {
+            let rowOffset = row * columns
+            for col in 0..<columns {
+                renderCells[rowOffset + col] = RenderCell(
+                    scalar: randomNumberGlyph(),
+                    foregroundLevel: numberRainLevel(levelCount: levelCount),
+                    backgroundLevel: 0, bold: false)
+            }
+            visibleCountByRow[row] = columns
+        }
+        markAllRowsDirty()
+    }
+
+    /// Shifts number rows down by one and inserts a fresh row at position 1.
+    private func scrollNumberRain() {
+        guard rows > 2, columns > 0 else { return }
+        let levelCount = max(levelColors.count, 1)
+        for row in stride(from: rows - 1, through: 2, by: -1) {
+            let dst = row * columns
+            let src = (row - 1) * columns
+            for col in 0..<columns { renderCells[dst + col] = renderCells[src + col] }
+            visibleCountByRow[row] = visibleCountByRow[row - 1]
+        }
+        let row1 = columns
+        for col in 0..<columns {
+            guard !numberIntroBlackedColumns.contains(col) else { continue }
+            renderCells[row1 + col] = RenderCell(
+                scalar: randomNumberGlyph(),
+                foregroundLevel: numberRainLevel(levelCount: levelCount),
+                backgroundLevel: 0, bold: false)
+        }
+        visibleCountByRow[1] = columns
+    }
+
+    /// Randomly blacks out ~10 % of total columns, chosen only from still-populated ones.
+    private func blackoutColumns(t: TimeInterval) {
+        guard rows > 1, columns > 0 else { return }
+        let count = max(1, Int((Double(columns) * Self.numberIntroBlackoutFraction).rounded()))
+        let available = (0..<columns).filter { !numberIntroBlackedColumns.contains($0) }
+        guard !available.isEmpty else { return }
+        let chosen = available.shuffled().prefix(min(count, available.count))
+        for col in chosen {
+            for row in 1..<rows { renderCells[row * columns + col] = Self.blankRenderCell }
+            renderCells[col] = RenderCell(
+                scalar: randomNumberGlyph(),
+                foregroundLevel: max(levelColors.count / 2, 1),
+                backgroundLevel: 0, bold: false)
+            numberIntroBlackedColumns.insert(col)
+        }
+        visibleCountByRow[0] = columns
+        numberIntroLastBlackout = t
+        numberIntroBlackoutCount += 1
+        if numberIntroBlackoutCount >= 8 {
             activeScene = .rainForever
         }
     }
 
-    /// Advances the random-fill phase of the number intro scene.
-    private func stepNumberFillFrame() {
-        let total = columns * rows
-        guard total > 0 else {
-            isInNumberFillPhase = false
-            return
-        }
-        let levelCount = max(levelColors.count, 1)
-        let decay = self.decay
-        let perFrame = max(1, total / Self.numberIntroFillFrames)
-        let newRevealIndex = min(numberIntroRevealIndex + perFrame, total)
-
-        // Reveal newly added cells
-        for i in numberIntroRevealIndex..<newRevealIndex {
-            let cellIndex = numberIntroShuffledIndices[i]
-            let scalar = randomNumberGlyph()
-            layers[1].content[cellIndex] = LayerCell(
-                scalar: scalar,
-                birth: now - Int((Double(decay) * (0.5 + 0.1 * Double.random(in: 0...1))).rounded()),
-                power: 1.0,
-                decay: decay,
-                flags: Self.disableBoldFlag,
-                stage: 0.0,
-                currentPower: 0.0
-            )
-        }
-        numberIntroRevealIndex = newRevealIndex
-
-        // Refresh all revealed cells with new random glyphs each frame
-        for i in 0..<numberIntroRevealIndex {
-            let cellIndex = numberIntroShuffledIndices[i]
-            let scalar = randomNumberGlyph()
-            let level = min(levelCount - 1, Int(Double(levelCount - 1) * (0.5 + 0.3 * Double.random(in: 0...1))))
-            renderCells[cellIndex] = RenderCell(scalar: scalar, foregroundLevel: level, backgroundLevel: 0, bold: false)
-            let row = cellIndex / columns
-            visibleCountByRow[row] = min(visibleCountByRow[row] + 1, columns)
-        }
-        markAllRowsDirty()
-        now += 1
-
-        if numberIntroRevealIndex >= total {
-            isInNumberFillPhase = false
-            sceneFrameIndex = 0
-        }
-    }
-
-    /// Initialises the random-fill phase for the number intro scene.
-    private func initNumberFillPhase() {
-        let total = columns * rows
-        numberIntroShuffledIndices = Array(0..<total).shuffled()
-        numberIntroRevealIndex = 0
-        isInNumberFillPhase = true
-        // Clear render cells so we start from a blank screen
-        for i in renderCells.indices { renderCells[i] = Self.blankRenderCell }
-        for i in visibleCountByRow.indices { visibleCountByRow[i] = 0 }
-        markAllRowsDirty()
+    /// Returns a random palette level with power clamped to 0.2–0.6.
+    private func numberRainLevel(levelCount: Int) -> Int {
+        if Double.random(in: 0...1) < 0.001 { return levelCount - 1 }
+        let power = Double.random(in: 0.2...0.6)
+        let fractional = interpolate(power, 0.6, Double(levelCount))
+        return max(1, quantizedLevel(for: fractional, upperBound: levelCount - 1))
     }
 
     /// Advances the Neo message intro scene by one simulation step.
@@ -469,31 +612,19 @@ final class NativeMatrixRenderer {
 
     /// Moves from the Neo message scene to the next scene in the sequence.
     private func transitionFromNeoMessage() {
-        sceneStartTime = Date.timeIntervalSinceReferenceDate
         if configuration.numberSceneEnabled {
             activeScene = .numberIntro
-            initNumberFillPhase()
+            initNumberIntroScene()
         } else {
             activeScene = .rainForever
             stepRainFrame()
         }
     }
 
-    private var currentNumberIntroStripe: Int {
-        let stripeIndex = min(sceneFrameIndex / Self.numberIntroFramesPerStripe, Self.numberIntroStripePeriods.count - 1)
-        return Self.numberIntroStripePeriods[stripeIndex]
-    }
-
-    private static var totalNumberIntroFrames: Int {
-        numberIntroStripePeriods.count * numberIntroFramesPerStripe
-    }
-
     /// Chooses and initializes the first scene for the current session.
     private func beginSceneSequence() {
-        sceneFrameIndex = 0
         now = 100
         frameIndex = 0
-        sceneStartTime = Date.timeIntervalSinceReferenceDate
 
         guard columns > 0, rows > 0 else {
             if configuration.neoMessageSceneEnabled {
@@ -511,7 +642,7 @@ final class NativeMatrixRenderer {
             neoScene.reset(startTime: Date.timeIntervalSinceReferenceDate)
         } else if configuration.numberSceneEnabled {
             activeScene = .numberIntro
-            initNumberFillPhase()
+            initNumberIntroScene()
         } else {
             activeScene = .rainForever
             stepRainFrame()
@@ -523,59 +654,6 @@ final class NativeMatrixRenderer {
         for index in layers.indices {
             layers[index].clear()
         }
-    }
-
-    /// Generates the current startup number-scene frame directly into the render grid.
-    private func populateNumberIntroFrame(stripe: Int) {
-        guard columns > 0, rows > 0 else {
-            return
-        }
-
-        let rowCount = rows
-        let columnCount = columns
-        let decay = self.decay
-        let levelCount = max(levelColors.count, 1)
-        let layerIndex = 1
-
-        var row = 0
-        while row < rowCount {
-            let rowOffset = row * columnCount
-            var visibleCount = 0
-            var column = 0
-            while column < columnCount {
-                let index = rowOffset + column
-                if stripe != 0, column % stripe == 0 {
-                    layers[layerIndex].content[index] = LayerCell()
-                    renderCells[index] = Self.blankRenderCell
-                    column += 1
-                    continue
-                }
-
-                let scalar = randomNumberGlyph()
-                layers[layerIndex].content[index] = LayerCell(
-                    scalar: scalar,
-                    birth: now - Int((Double(decay) * (0.5 + 0.1 * Double.random(in: 0...1))).rounded()),
-                    power: 1.0,
-                    decay: decay,
-                    flags: Self.disableBoldFlag,
-                    stage: 0.0,
-                    currentPower: 0.0
-                )
-
-                let level = min(levelCount - 1, Int(Double(levelCount - 1) * (0.5 + 0.3 * Double.random(in: 0...1))))
-                renderCells[index] = RenderCell(
-                    scalar: scalar,
-                    foregroundLevel: level,
-                    backgroundLevel: 0,
-                    bold: false
-                )
-                visibleCount += 1
-                column += 1
-            }
-            visibleCountByRow[row] = visibleCount
-            row += 1
-        }
-        markAllRowsDirty()
     }
 
     private var spawnModulo: Int {
