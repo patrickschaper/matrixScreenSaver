@@ -3,6 +3,7 @@ import Foundation
 final class NativeMatrixRenderer {
     struct Configuration: Equatable {
         var neoMessageSceneEnabled = true
+        var neoMessageSpeedFactor = 1.0
         var numberSceneEnabled = true
         var twinkleEnabled = true
         var diffuseEnabled = true
@@ -14,6 +15,7 @@ final class NativeMatrixRenderer {
         func sanitized() -> Configuration {
             Configuration(
                 neoMessageSceneEnabled: neoMessageSceneEnabled,
+                neoMessageSpeedFactor: max(neoMessageSpeedFactor, MatrixScreenSaverOptions.minimumNeoMessageSpeedFactor),
                 numberSceneEnabled: numberSceneEnabled,
                 twinkleEnabled: twinkleEnabled,
                 diffuseEnabled: diffuseEnabled,
@@ -401,7 +403,7 @@ final class NativeMatrixRenderer {
 
     /// Advances the Neo message intro scene by one simulation step.
     private func stepNeoMessageFrame() {
-        neoScene.advance(now: Date.timeIntervalSinceReferenceDate)
+        neoScene.advance(now: Date.timeIntervalSinceReferenceDate, speedFactor: configuration.neoMessageSpeedFactor)
         markAllRowsDirty()
         if neoScene.phase == .done {
             transitionFromNeoMessage()

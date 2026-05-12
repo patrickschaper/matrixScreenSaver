@@ -26,9 +26,9 @@ struct NeoMessageScene {
         "Knock, knock, Neo.",
     ]
 
-    static let charsPerSecond: Double = 10.0
-    static let pauseAfterLineDuration: TimeInterval = 2.0
-    static let blankBetweenLinesDuration: TimeInterval = 1.0
+    static let charsPerSecond: Double = 20.0
+    static let pauseAfterLineDuration: TimeInterval = 1.0
+    static let blankBetweenLinesDuration: TimeInterval = 0.5
     static let cursorBlinkInterval: TimeInterval = 0.5
 
     private(set) var phase: Phase = .typing
@@ -47,7 +47,7 @@ struct NeoMessageScene {
         lastCursorToggle = startTime
     }
 
-    mutating func advance(now: TimeInterval) {
+    mutating func advance(now: TimeInterval, speedFactor: Double = 1.0) {
         guard phase != .done else { return }
 
         if now - lastCursorToggle >= Self.cursorBlinkInterval {
@@ -58,7 +58,7 @@ struct NeoMessageScene {
         switch phase {
         case .typing:
             let elapsed = now - phaseStartTime
-            let targetCharIndex = Int(elapsed * Self.charsPerSecond)
+            let targetCharIndex = Int(elapsed * Self.charsPerSecond * speedFactor)
             let lineLength = Self.lines[lineIndex].count
             charIndex = min(targetCharIndex, lineLength)
             if charIndex >= lineLength {
@@ -66,7 +66,7 @@ struct NeoMessageScene {
                 phaseStartTime = now
             }
         case .pauseAfterLine:
-            if now - phaseStartTime >= Self.pauseAfterLineDuration {
+            if now - phaseStartTime >= Self.pauseAfterLineDuration / speedFactor {
                 if lineIndex == Self.lines.count - 1 {
                     phase = .done
                 } else {
@@ -75,7 +75,7 @@ struct NeoMessageScene {
                 }
             }
         case .blankBetweenLines:
-            if now - phaseStartTime >= Self.blankBetweenLinesDuration {
+            if now - phaseStartTime >= Self.blankBetweenLinesDuration / speedFactor {
                 lineIndex += 1
                 charIndex = 0
                 phase = .typing

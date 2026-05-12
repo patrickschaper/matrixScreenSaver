@@ -522,18 +522,19 @@ final class MatrixScreenSaverView: ScreenSaverView {
             return
         }
 
-        let neoFont = NSFont.monospacedSystemFont(ofSize: regularFont.pointSize * 2, weight: .medium)
+        let neoFont = NSFont.monospacedSystemFont(ofSize: regularFont.pointSize * 1.5, weight: .medium)
 
-        let topColor: NSColor
-        if let topTerminalColor = nativeRenderer.levelColors.last {
-            topColor = color(for: topTerminalColor)
-        } else {
-            topColor = NSColor(calibratedRed: 0, green: 1, blue: 0.4, alpha: 1)
-        }
+        // Use the same mid-range level the number intro and rain body use (~half of max),
+        // giving the characteristic Matrix green rather than the near-white top level.
+        let palette = nativeRenderer.levelColors
+        let neoColorLevel = max(0, palette.count / 2)
+        let neoColor: NSColor = palette.isEmpty
+            ? NSColor(calibratedRed: 0, green: 0.75, blue: 0.3, alpha: 1)
+            : color(for: palette[neoColorLevel])
 
         let attributes: [NSAttributedString.Key: Any] = [
             .font: neoFont,
-            .foregroundColor: topColor,
+            .foregroundColor: neoColor,
         ]
 
         let endIndex = currentLine.index(
@@ -545,9 +546,9 @@ final class MatrixScreenSaverView: ScreenSaverView {
 
         guard !textWithCursor.isEmpty else { return }
 
-        // Anchor: 25% from the left, 75% from the bottom (= 25% from the top)
-        let anchorX = terminalRect.minX + terminalRect.width * 0.25
-        let anchorY = terminalRect.minY + terminalRect.height * 0.75
+        // Anchor: 5% from the left, 10% from the top (AppKit Y grows upward)
+        let anchorX = terminalRect.minX + terminalRect.width * 0.05
+        let anchorY = terminalRect.minY + terminalRect.height * 0.90
 
         (textWithCursor as NSString).draw(at: NSPoint(x: anchorX, y: anchorY), withAttributes: attributes)
     }
