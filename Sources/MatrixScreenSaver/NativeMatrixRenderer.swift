@@ -182,9 +182,9 @@ final class NativeMatrixRenderer {
     private static let baseErrorRateModulo = 20.0
     private static let numberIntroStripePeriods = [0, 32, 16, 8, 4, 2, 2, 2]
     private static let numberIntroFramesPerStripe = 20
+    private static let numberIntroFillFrames = 40
     private static let maxBufferedSimulationSteps = 2.0
     private static let maxSimulationStepsPerTick = 2
-    private static let fadeInDuration: TimeInterval = 1.0
     private static let disableBoldFlag: UInt32 = 0x1
     private static let blankRenderCell = RenderCell()
     private static let glyphPool: [UnicodeScalar] = {
@@ -220,14 +220,9 @@ final class NativeMatrixRenderer {
     private var activeScene: Scene = .numberIntro
     private var sceneFrameIndex = 0
     private var sceneStartTime: TimeInterval = 0
-
-    /// Ease-in-out fade alpha for the current scene (0…1).
-    var sceneFadeAlpha: Double {
-        guard activeScene == .numberIntro else { return 1.0 }
-        let t = min(max((Date.timeIntervalSinceReferenceDate - sceneStartTime) / Self.fadeInDuration, 0.0), 1.0)
-        // Cubic ease-in-out
-        return t < 0.5 ? 4 * t * t * t : 1 - pow(-2 * t + 2, 3) / 2
-    }
+    private var isInNumberFillPhase = false
+    private var numberIntroShuffledIndices: [Int] = []
+    private var numberIntroRevealIndex = 0
 
     /// Whether the Neo message intro scene is currently active.
     var isInNeoMessageScene: Bool {
@@ -367,7 +362,11 @@ final class NativeMatrixRenderer {
         case .neoMessage:
             stepNeoMessageFrame()
         case .numberIntro:
-            stepNumberIntroFrame()
+            if isInNumberFillPhase {
+                stepNumberFillFrame()
+            } else {
+                stepNumberIntroFrame()
+            }
         case .rainForever:
             stepRainFrame()
         }
@@ -401,6 +400,64 @@ final class NativeMatrixRenderer {
         }
     }
 
+    /// Advances the random-fill phase of the number intro scene.
+    private func stepNumberFillFrame() {
+        let total = columns * rows
+        guard total > 0 else {
+            isInNumberFillPhase = false
+            return
+        }
+        let levelCount = max(levelColors.count, 1)
+        let decay = self.decay
+        let perFrame = max(1, total / Self.numberIntroFillFrames)
+        let newRevealIndex = min(numberIntroRevealIndex + perFrame, total)
+
+        // Reveal newly added cells
+        for i in numberIntroRevealIndex..<newRevealIndex {
+            let cellIndex = numberIntroShuffledIndices[i]
+            let scalar = randomNumberGlyph()
+            layers[1].content[cellIndex] = LayerCell(
+                scalar: scalar,
+                birth: now - Int((Double(decay) * (0.5 + 0.1 * Double.random(in: 0...1))).rounded()),
+                power: 1.0,
+                decay: decay,
+                flags: Self.disableBoldFlag,
+                stage: 0.0,
+                currentPower: 0.0
+            )
+        }
+        numberIntroRevealIndex = newRevealIndex
+
+        // Refresh all revealed cells with new random glyphs each frame
+        for i in 0..<numberIntroRevealIndex {
+            let cellIndex = numberIntroShuffledIndices[i]
+            let scalar = randomNumberGlyph()
+            let level = min(levelCount - 1, Int(Double(levelCount - 1) * (0.5 + 0.3 * Double.random(in: 0...1))))
+            renderCells[cellIndex] = RenderCell(scalar: scalar, foregroundLevel: level, backgroundLevel: 0, bold: false)
+            let row = cellIndex / columns
+            visibleCountByRow[row] = min(visibleCountByRow[row] + 1, columns)
+        }
+        markAllRowsDirty()
+        now += 1
+
+        if numberIntroRevealIndex >= total {
+            isInNumberFillPhase = false
+            sceneFrameIndex = 0
+        }
+    }
+
+    /// Initialises the random-fill phase for the number intro scene.
+    private func initNumberFillPhase() {
+        let total = columns * rows
+        numberIntroShuffledIndices = Array(0..<total).shuffled()
+        numberIntroRevealIndex = 0
+        isInNumberFillPhase = true
+        // Clear render cells so we start from a blank screen
+        for i in renderCells.indices { renderCells[i] = Self.blankRenderCell }
+        for i in visibleCountByRow.indices { visibleCountByRow[i] = 0 }
+        markAllRowsDirty()
+    }
+
     /// Advances the Neo message intro scene by one simulation step.
     private func stepNeoMessageFrame() {
         neoScene.advance(now: Date.timeIntervalSinceReferenceDate, speedFactor: configuration.neoMessageSpeedFactor)
@@ -412,12 +469,10 @@ final class NativeMatrixRenderer {
 
     /// Moves from the Neo message scene to the next scene in the sequence.
     private func transitionFromNeoMessage() {
-        sceneFrameIndex = 0
         sceneStartTime = Date.timeIntervalSinceReferenceDate
         if configuration.numberSceneEnabled {
             activeScene = .numberIntro
-            populateNumberIntroFrame(stripe: currentNumberIntroStripe)
-            sceneFrameIndex = min(1, Self.totalNumberIntroFrames)
+            initNumberFillPhase()
         } else {
             activeScene = .rainForever
             stepRainFrame()
@@ -456,8 +511,7 @@ final class NativeMatrixRenderer {
             neoScene.reset(startTime: Date.timeIntervalSinceReferenceDate)
         } else if configuration.numberSceneEnabled {
             activeScene = .numberIntro
-            populateNumberIntroFrame(stripe: currentNumberIntroStripe)
-            sceneFrameIndex = min(1, Self.totalNumberIntroFrames)
+            initNumberFillPhase()
         } else {
             activeScene = .rainForever
             stepRainFrame()

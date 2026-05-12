@@ -663,7 +663,6 @@ final class MatrixScreenSaverView: ScreenSaverView {
         )
         context.saveGState()
         context.interpolationQuality = .none
-        context.setAlpha(CGFloat(nativeRenderer.sceneFadeAlpha))
         context.draw(image, in: drawRect)
         context.restoreGState()
     }
