@@ -183,10 +183,11 @@ final class NativeMatrixRenderer {
     private static let numberIntroCursorBlinkPeriod: TimeInterval = 0.3
     private static let numberIntroCursorBlinkCount = 3
     private static let numberIntroTypingInterval: TimeInterval = 0.05
-    private static let numberIntroPauseDuration: TimeInterval = 1.0
+    private static let rainDuration: TimeInterval = 90.0   // how long rain runs before restarting
     private static let numberIntroRainFrames = 160
     private static let numberIntroBlackoutInterval: TimeInterval = 1.0
     private static let numberIntroBlackoutFraction = 0.10
+    private static let numberIntroMargin = 2
     private static let maxBufferedSimulationSteps = 2.0
     private static let maxSimulationStepsPerTick = 2
     private static let disableBoldFlag: UInt32 = 0x1
@@ -229,16 +230,35 @@ final class NativeMatrixRenderer {
     private enum NumberIntroPhase {
         case cursorBlink, typingFirstLine, pauseAfterFirst, secondLine, pauseAfterSecond, rain
     }
+
+    private struct NumberIntroSchedule {
+        var typingText: String = ""
+        var cursorBlinkEnd: TimeInterval = 1.8
+        var charTimings: [TimeInterval] = []
+        var typingEnd: TimeInterval = 3.8
+        var pause1Duration: TimeInterval = 2.0
+        var pause1End: TimeInterval = 5.8
+        var pause2Duration: TimeInterval = 2.0
+        var rainStart: TimeInterval = 7.8
+        var blackoutRounds: [[Int]] = []
+    }
+
     private var numberIntroPhase: NumberIntroPhase = .cursorBlink
     private var numberIntroPhaseStart: TimeInterval = 0
     private var numberIntroTypingText = ""
     private var numberIntroTypedCount = 0
-    private var numberIntroLastCharTime: TimeInterval = 0
+    private var numberIntroCharTimings: [TimeInterval] = []
     private var numberIntroCursorVisible = false
     private var numberIntroRainFrame = 0
-    private var numberIntroLastBlackout: TimeInterval = 0
+    private var sceneStartTime: TimeInterval = 0   // 5-second-quantised anchor — shared across displays
+    private var sceneSeed: UInt64 = 0             // seed derived from sceneStartTime
+    private var numberSceneRNG: Xorshift64 = Xorshift64(seed: 1)
+    private var rainRNG: Xorshift64 = Xorshift64(seed: 1)
+    private var numberIntroAnchor: TimeInterval = 0
+    private var numberIntroSchedule = NumberIntroSchedule()
     private var numberIntroBlackoutCount = 0
     private var numberIntroBlackedColumns = Set<Int>()
+    private var rainStartTime: TimeInterval = 0   // unused; kept for future use
 
     /// Whether the Neo message intro scene is currently active.
     var isInNeoMessageScene: Bool {
@@ -405,17 +425,73 @@ final class NativeMatrixRenderer {
     // MARK: - Number intro scene
 
     private func initNumberIntroScene() {
-        let t = Date.timeIntervalSinceReferenceDate
+        numberSceneRNG = Xorshift64(seed: sceneSeed &+ 2)
+
+        // Anchor: sceneStartTime + however long the Neo scene takes at 1× speed.
+        // All displays use the same sceneStartTime and same seed → same anchor.
+        let neoWallDuration: TimeInterval = configuration.neoMessageSceneEnabled
+            ? neoScene.scheduledDuration / configuration.neoMessageSpeedFactor
+            : 0
+        numberIntroAnchor = sceneStartTime + neoWallDuration
+
+        let cursorBlinkEnd = Double(Self.numberIntroCursorBlinkCount * 2) * Self.numberIntroCursorBlinkPeriod
+
+        let blinkEndDate = Date(timeIntervalSinceReferenceDate: numberIntroAnchor + cursorBlinkEnd)
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MM-dd-yy"
+        let dateString = formatter.string(from: blinkEndDate)
+        formatter.dateFormat = "H:mm:ss"
+        let timeString = formatter.string(from: blinkEndDate)
+        let typingText = "Call trans opt: received. \(dateString) \(timeString) REC:Log>"
+
+        let charTimings = Self.naturalTypingTimings(for: typingText,
+                                                    baseInterval: Self.numberIntroTypingInterval,
+                                                    rng: &numberSceneRNG)
+        let typingEnd = cursorBlinkEnd + (charTimings.last ?? 0)
+
+        let pause1Duration = Double.random(in: 1...3, using: &numberSceneRNG)
+        let pause1End = typingEnd + pause1Duration
+
+        let pause2Duration = Double.random(in: 1...3, using: &numberSceneRNG)
+        let rainStart = pause1End + pause2Duration
+
+        let margin = Self.numberIntroMargin
+        let colStart = margin
+        let colEnd = max(margin + 1, columns - margin)
+        let contentColumns = colEnd - colStart
+        let blackoutCount = max(1, Int((Double(contentColumns) * Self.numberIntroBlackoutFraction).rounded()))
+        var available = Array(colStart..<colEnd)
+        var blackoutRounds: [[Int]] = []
+        while !available.isEmpty {
+            let count = min(blackoutCount, available.count)
+            let chosen = Array(available.shuffled(using: &numberSceneRNG).prefix(count))
+            blackoutRounds.append(chosen)
+            let chosenSet = Set(chosen)
+            available.removeAll { chosenSet.contains($0) }
+        }
+
+        numberIntroSchedule = NumberIntroSchedule(
+            typingText: typingText,
+            cursorBlinkEnd: cursorBlinkEnd,
+            charTimings: charTimings,
+            typingEnd: typingEnd,
+            pause1Duration: pause1Duration,
+            pause1End: pause1End,
+            pause2Duration: pause2Duration,
+            rainStart: rainStart,
+            blackoutRounds: blackoutRounds
+        )
+
         numberIntroPhase = .cursorBlink
-        numberIntroPhaseStart = t
+        numberIntroPhaseStart = numberIntroAnchor
         numberIntroCursorVisible = true
         numberIntroRainFrame = 0
-        numberIntroLastBlackout = t
         numberIntroBlackoutCount = 0
         numberIntroBlackedColumns = []
         numberIntroTypedCount = 0
-        numberIntroTypingText = ""
-        numberIntroLastCharTime = t
+        numberIntroTypingText = typingText
+        numberIntroCharTimings = charTimings
+
         for i in renderCells.indices { renderCells[i] = Self.blankRenderCell }
         for i in visibleCountByRow.indices { visibleCountByRow[i] = 0 }
         setRow0(text: "", typedCount: 0, showCursor: true)
@@ -423,14 +499,19 @@ final class NativeMatrixRenderer {
     }
 
     private func stepNumberIntroScene() {
-        let t = Date.timeIntervalSinceReferenceDate
-        switch numberIntroPhase {
-        case .cursorBlink:      stepCursorBlink(t: t)
-        case .typingFirstLine:  stepTypingFirstLine(t: t)
-        case .pauseAfterFirst:  stepPauseAfterFirst(t: t)
-        case .secondLine:       commitSecondLine(t: t)
-        case .pauseAfterSecond: stepPauseAfterSecond(t: t)
-        case .rain:             stepNumberRain(t: t)
+        for _ in 0..<20 {
+            guard activeScene == .numberIntro else { break }
+            let previousPhase = numberIntroPhase
+            let t = Date.timeIntervalSinceReferenceDate
+            switch numberIntroPhase {
+            case .cursorBlink:      stepCursorBlink(t: t)
+            case .typingFirstLine:  stepTypingFirstLine(t: t)
+            case .pauseAfterFirst:  stepPauseAfterFirst(t: t)
+            case .secondLine:       commitSecondLine(t: t)
+            case .pauseAfterSecond: stepPauseAfterSecond(t: t)
+            case .rain:             stepNumberRain(t: t)
+            }
+            if numberIntroPhase == previousPhase { break }
         }
         markAllRowsDirty()
     }
@@ -439,17 +520,8 @@ final class NativeMatrixRenderer {
         let elapsed = t - numberIntroPhaseStart
         let halfPeriod = Int(elapsed / Self.numberIntroCursorBlinkPeriod)
         if halfPeriod >= Self.numberIntroCursorBlinkCount * 2 {
-            let date = Date()
-            let fmt = DateFormatter()
-            fmt.dateFormat = "MM-dd-yy"
-            let dateStr = fmt.string(from: date)
-            fmt.dateFormat = "H:mm:ss"
-            let timeStr = fmt.string(from: date)
-            numberIntroTypingText = "Call trans opt: received. \(dateStr) \(timeStr) REC:Log>"
-            numberIntroTypedCount = 0
-            numberIntroLastCharTime = t
             numberIntroPhase = .typingFirstLine
-            numberIntroPhaseStart = t
+            numberIntroPhaseStart = numberIntroAnchor + numberIntroSchedule.cursorBlinkEnd
             setRow0(text: "", typedCount: 0, showCursor: false)
             return
         }
@@ -461,26 +533,23 @@ final class NativeMatrixRenderer {
     }
 
     private func stepTypingFirstLine(t: TimeInterval) {
-        let totalChars = numberIntroTypingText.unicodeScalars.count
-        while t >= numberIntroLastCharTime + Self.numberIntroTypingInterval,
-              numberIntroTypedCount < totalChars {
-            numberIntroTypedCount += 1
-            numberIntroLastCharTime += Self.numberIntroTypingInterval
-        }
-        if numberIntroTypedCount >= totalChars {
-            setRow0(text: numberIntroTypingText, typedCount: totalChars, showCursor: false)
+        let totalChars = numberIntroSchedule.charTimings.count
+        let elapsed = t - numberIntroPhaseStart
+        let count = numberIntroSchedule.charTimings.prefix(while: { $0 <= elapsed }).count
+        numberIntroTypedCount = count
+        if count >= totalChars {
+            setRow0(text: numberIntroSchedule.typingText, typedCount: totalChars, showCursor: false)
             numberIntroPhase = .pauseAfterFirst
-            numberIntroPhaseStart = t
+            numberIntroPhaseStart = numberIntroAnchor + numberIntroSchedule.typingEnd
             return
         }
-        let elapsed = t - numberIntroPhaseStart
         let halfPeriod = Int(elapsed / Self.numberIntroCursorBlinkPeriod)
-        setRow0(text: numberIntroTypingText, typedCount: numberIntroTypedCount,
+        setRow0(text: numberIntroSchedule.typingText, typedCount: count,
                 showCursor: halfPeriod % 2 == 0)
     }
 
     private func stepPauseAfterFirst(t: TimeInterval) {
-        if t - numberIntroPhaseStart >= Self.numberIntroPauseDuration {
+        if t - numberIntroPhaseStart >= numberIntroSchedule.pause1Duration {
             numberIntroPhase = .secondLine
         }
     }
@@ -489,116 +558,158 @@ final class NativeMatrixRenderer {
         let text = "Trace program: running"
         setRow0(text: text, typedCount: text.unicodeScalars.count, showCursor: false)
         numberIntroPhase = .pauseAfterSecond
-        numberIntroPhaseStart = t
+        numberIntroPhaseStart = numberIntroAnchor + numberIntroSchedule.pause1End
     }
 
     private func stepPauseAfterSecond(t: TimeInterval) {
-        if t - numberIntroPhaseStart >= Self.numberIntroPauseDuration {
+        if t - numberIntroPhaseStart >= numberIntroSchedule.pause2Duration {
             fillNumberRain()
             numberIntroPhase = .rain
             numberIntroRainFrame = 0
-            numberIntroLastBlackout = t
         }
     }
 
     private func stepNumberRain(t: TimeInterval) {
-        scrollNumberRain()
-        now += 1
-        if t - numberIntroLastBlackout >= Self.numberIntroBlackoutInterval {
-            blackoutColumns(t: t)
+        while activeScene == .numberIntro {
+            let expectedTime = numberIntroAnchor + numberIntroSchedule.rainStart
+                + Double(numberIntroBlackoutCount) * Self.numberIntroBlackoutInterval
+            if t >= expectedTime {
+                blackoutColumns()
+            } else {
+                break
+            }
         }
+        guard activeScene == .numberIntro else { return }
+        scrollNumberRain()
+        self.now += 1
     }
 
     /// Writes cursor / typed text into row 0 of the render grid.
+    /// Writes cursor / typed text into the content area top-left (row m, col m).
     private func setRow0(text: String, typedCount: Int, showCursor: Bool) {
-        guard rows > 0, columns > 0 else { return }
+        let m = Self.numberIntroMargin
+        guard rows > m, columns > m else { return }
         let baseGreenLevel = max(levelColors.count / 2, 1)
         let scalars = Array(text.unicodeScalars)
-        for col in 0..<columns { renderCells[col] = Self.blankRenderCell }
-        var col = 0
+        let offset = m * columns
+        let colStart = m
+        let colEnd = columns - m
+        for col in colStart..<colEnd { renderCells[offset + col] = Self.blankRenderCell }
+        var col = colStart
         for i in 0..<min(typedCount, scalars.count) {
-            guard col < columns else { break }
-            renderCells[col] = RenderCell(scalar: scalars[i], foregroundLevel: baseGreenLevel,
+            guard col < colEnd else { break }
+            renderCells[offset + col] = RenderCell(scalar: scalars[i], foregroundLevel: baseGreenLevel,
                                           backgroundLevel: 0, bold: false)
             col += 1
         }
-        if showCursor, col < columns {
-            renderCells[col] = RenderCell(scalar: UnicodeScalar(0x2588)!, foregroundLevel: baseGreenLevel,
+        if showCursor, col < colEnd {
+            renderCells[offset + col] = RenderCell(scalar: UnicodeScalar(0x2588)!, foregroundLevel: baseGreenLevel,
                                           backgroundLevel: 0, bold: false)
             col += 1
         }
-        visibleCountByRow[0] = col
+        visibleCountByRow[m] = col - colStart
     }
 
-    /// Instantly fills rows 1..N-1 with random number glyphs and clears row 0.
+    /// Instantly fills rows m+1..rows-m-1 with random numbers; row m stays empty.
     private func fillNumberRain() {
-        guard rows > 1, columns > 0 else { return }
-        for col in 0..<columns { renderCells[col] = Self.blankRenderCell }
-        visibleCountByRow[0] = 0
+        let m = Self.numberIntroMargin
+        guard rows > m * 2 + 1, columns > m * 2 else { return }
         let levelCount = max(levelColors.count, 1)
-        for row in 1..<rows {
+        let rowStart = m + 1; let rowEnd = rows - m
+        let colStart = m;     let colEnd = columns - m
+        // ensure text row is blank
+        let textOffset = m * columns
+        for col in colStart..<colEnd { renderCells[textOffset + col] = Self.blankRenderCell }
+        visibleCountByRow[m] = 0
+        for row in rowStart..<rowEnd {
             let rowOffset = row * columns
-            for col in 0..<columns {
+            for col in colStart..<colEnd {
                 renderCells[rowOffset + col] = RenderCell(
                     scalar: randomNumberGlyph(),
                     foregroundLevel: numberRainLevel(levelCount: levelCount),
                     backgroundLevel: 0, bold: false)
             }
-            visibleCountByRow[row] = columns
+            visibleCountByRow[row] = colEnd - colStart
         }
         markAllRowsDirty()
     }
 
-    /// Shifts number rows down by one and inserts a fresh row at position 1.
+    /// Shifts rows m+1..rows-m-1 down by one, fills the new row m+1; row m untouched.
     private func scrollNumberRain() {
-        guard rows > 2, columns > 0 else { return }
+        let m = Self.numberIntroMargin
+        guard rows > m * 2 + 1, columns > m * 2 else { return }
         let levelCount = max(levelColors.count, 1)
-        for row in stride(from: rows - 1, through: 2, by: -1) {
+        let rowStart = m + 1; let rowEnd = rows - m
+        let colStart = m;     let colEnd = columns - m
+        for row in stride(from: rowEnd - 1, through: rowStart + 1, by: -1) {
             let dst = row * columns
             let src = (row - 1) * columns
-            for col in 0..<columns { renderCells[dst + col] = renderCells[src + col] }
+            for col in colStart..<colEnd { renderCells[dst + col] = renderCells[src + col] }
             visibleCountByRow[row] = visibleCountByRow[row - 1]
         }
-        let row1 = columns
-        for col in 0..<columns {
-            guard !numberIntroBlackedColumns.contains(col) else { continue }
-            renderCells[row1 + col] = RenderCell(
+        let newTopOffset = rowStart * columns
+        for col in colStart..<colEnd {
+            guard !numberIntroBlackedColumns.contains(col) else {
+                renderCells[newTopOffset + col] = Self.blankRenderCell
+                continue
+            }
+            renderCells[newTopOffset + col] = RenderCell(
                 scalar: randomNumberGlyph(),
                 foregroundLevel: numberRainLevel(levelCount: levelCount),
                 backgroundLevel: 0, bold: false)
         }
-        visibleCountByRow[1] = columns
+        visibleCountByRow[rowStart] = colEnd - colStart
     }
 
-    /// Randomly blacks out ~10 % of total columns, chosen only from still-populated ones.
-    private func blackoutColumns(t: TimeInterval) {
-        guard rows > 1, columns > 0 else { return }
-        let count = max(1, Int((Double(columns) * Self.numberIntroBlackoutFraction).rounded()))
-        let available = (0..<columns).filter { !numberIntroBlackedColumns.contains($0) }
-        guard !available.isEmpty else { return }
-        let chosen = available.shuffled().prefix(min(count, available.count))
+    /// Blacks out ~10 % of content columns: clears rows m+1..rowEnd, shows indicator at row m.
+    private func blackoutColumns() {
+        let m = Self.numberIntroMargin
+        guard rows > m * 2 + 1, columns > m * 2 else { return }
+        guard numberIntroBlackoutCount < numberIntroSchedule.blackoutRounds.count else { return }
+        let chosen = numberIntroSchedule.blackoutRounds[numberIntroBlackoutCount]
+        let colStart = m; let colEnd = columns - m
+        let rowStart = m + 1; let rowEnd = rows - m
         for col in chosen {
-            for row in 1..<rows { renderCells[row * columns + col] = Self.blankRenderCell }
-            renderCells[col] = RenderCell(
+            for row in rowStart..<rowEnd { renderCells[row * columns + col] = Self.blankRenderCell }
+            renderCells[m * columns + col] = RenderCell(
                 scalar: randomNumberGlyph(),
                 foregroundLevel: max(levelColors.count / 2, 1),
                 backgroundLevel: 0, bold: false)
             numberIntroBlackedColumns.insert(col)
         }
-        visibleCountByRow[0] = columns
-        numberIntroLastBlackout = t
+        visibleCountByRow[m] = (colStart..<colEnd).filter { numberIntroBlackedColumns.contains($0) }.count
         numberIntroBlackoutCount += 1
-        if numberIntroBlackoutCount >= 8 {
+        if numberIntroBlackedColumns.count >= colEnd - colStart {
             activeScene = .rainForever
+            rainStartTime = Date.timeIntervalSinceReferenceDate
         }
     }
 
     /// Returns a random palette level with power clamped to 0.2–0.6.
     private func numberRainLevel(levelCount: Int) -> Int {
-        if Double.random(in: 0...1) < 0.001 { return levelCount - 1 }
-        let power = Double.random(in: 0.2...0.6)
+        if Double.random(in: 0...1, using: &rainRNG) < 0.001 { return levelCount - 1 }
+        let power = Double.random(in: 0.2...0.6, using: &rainRNG)
         let fractional = interpolate(power, 0.6, Double(levelCount))
         return max(1, quantizedLevel(for: fractional, upperBound: levelCount - 1))
+    }
+
+    /// Returns cumulative character-appear times for natural-feeling typing.
+    /// Adds random per-character variation, longer pauses at punctuation, and
+    /// rare hesitations. All timings are in seconds.
+    private static func naturalTypingTimings(for text: String,
+                                             baseInterval: TimeInterval,
+                                             rng: inout Xorshift64) -> [TimeInterval] {
+        var timings: [TimeInterval] = []
+        var t: TimeInterval = 0
+        for ch in text {
+            var delay = baseInterval * Double.random(in: 0.4...2.2, using: &rng)
+            if ".,!?:>".contains(ch) { delay += baseInterval * Double.random(in: 1.0...3.5, using: &rng) }
+            else if ch == " " { delay += baseInterval * Double.random(in: 0.3...1.2, using: &rng) }
+            if Double.random(in: 0...1, using: &rng) < 0.04 { delay += Double.random(in: 0.12...0.35, using: &rng) }
+            t += delay
+            timings.append(t)
+        }
+        return timings
     }
 
     /// Advances the Neo message intro scene by one simulation step.
@@ -617,6 +728,7 @@ final class NativeMatrixRenderer {
             initNumberIntroScene()
         } else {
             activeScene = .rainForever
+            rainStartTime = Date.timeIntervalSinceReferenceDate
             stepRainFrame()
         }
     }
@@ -625,6 +737,16 @@ final class NativeMatrixRenderer {
     private func beginSceneSequence() {
         now = 100
         frameIndex = 0
+
+        // Quantise to a 5-second boundary so all displays activating within the
+        // same window share an identical startTime and seed → perfect sync.
+        // Tolerates up to 4.9 s of inter-display activation skew; late starters
+        // fast-forward to the current scene position in a single frame.
+        let nowTime = Date.timeIntervalSinceReferenceDate
+        let syncWindow: TimeInterval = 5.0
+        sceneStartTime = floor(nowTime / syncWindow) * syncWindow
+        sceneSeed = UInt64(bitPattern: Int64(sceneStartTime))
+        rainRNG = Xorshift64(seed: sceneSeed &+ 3)
 
         guard columns > 0, rows > 0 else {
             if configuration.neoMessageSceneEnabled {
@@ -639,12 +761,13 @@ final class NativeMatrixRenderer {
 
         if configuration.neoMessageSceneEnabled {
             activeScene = .neoMessage
-            neoScene.reset(startTime: Date.timeIntervalSinceReferenceDate)
+            neoScene.reset(startTime: sceneStartTime, seed: sceneSeed &+ 1)
         } else if configuration.numberSceneEnabled {
             activeScene = .numberIntro
             initNumberIntroScene()
         } else {
             activeScene = .rainForever
+            rainStartTime = nowTime
             stepRainFrame()
         }
     }
@@ -664,10 +787,10 @@ final class NativeMatrixRenderer {
 
     /// Spawns a new falling thread on one of the renderer layers.
     private func addRandomThread() {
-        let baseSpeed = Self.baseSpeedTable.randomElement() ?? 6
+        let baseSpeed = Self.baseSpeedTable.randomElement(using: &rainRNG) ?? 6
         let stepInterval = max(1, Int((Double(baseSpeed) * frameRateScale).rounded()))
         let thread = RainThread(
-            x: Int.random(in: 0..<columns),
+            x: Int.random(in: 0..<columns, using: &rainRNG),
             y: 0,
             age: 0,
             speed: stepInterval,
@@ -807,12 +930,12 @@ final class NativeMatrixRenderer {
 
     /// Returns a random glyph from the supported rain character pool.
     private func randomGlyph() -> UnicodeScalar {
-        Self.glyphPool.randomElement() ?? UnicodeScalar("0")
+        Self.glyphPool.randomElement(using: &rainRNG) ?? UnicodeScalar("0")
     }
 
     /// Returns a random ASCII numeral for the startup number scene.
     private func randomNumberGlyph() -> UnicodeScalar {
-        UnicodeScalar(48 + Int.random(in: 0..<10)) ?? UnicodeScalar("0")
+        UnicodeScalar(48 + Int.random(in: 0..<10, using: &rainRNG)) ?? UnicodeScalar("0")
     }
 
     private var frameRateScale: Double {

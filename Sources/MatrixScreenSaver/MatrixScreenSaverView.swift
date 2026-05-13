@@ -522,7 +522,7 @@ final class MatrixScreenSaverView: ScreenSaverView {
             return
         }
 
-        let neoFont = NSFont.monospacedSystemFont(ofSize: regularFont.pointSize * 1.5, weight: .medium)
+        let neoFont = NSFont.monospacedSystemFont(ofSize: regularFont.pointSize, weight: .medium)
 
         // Use the same mid-range level the number intro and rain body use (~half of max),
         // giving the characteristic Matrix green rather than the near-white top level.
@@ -546,9 +546,9 @@ final class MatrixScreenSaverView: ScreenSaverView {
 
         guard !textWithCursor.isEmpty else { return }
 
-        // Anchor: 5% from the left, 10% from the top (AppKit Y grows upward)
-        let anchorX = terminalRect.minX + terminalRect.width * 0.05
-        let anchorY = terminalRect.minY + terminalRect.height * 0.90
+        // Top-left: 2 columns from left, 2 rows from top (AppKit Y grows upward)
+        let anchorX = terminalRect.minX + cellWidth * 2
+        let anchorY = terminalRect.maxY - lineHeight * 2 - neoFont.pointSize
 
         (textWithCursor as NSString).draw(at: NSPoint(x: anchorX, y: anchorY), withAttributes: attributes)
     }
