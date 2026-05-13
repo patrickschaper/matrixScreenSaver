@@ -180,9 +180,9 @@ final class NativeMatrixRenderer {
     private static let defaultTwinkle = 0.2
     private static let baseSpeedTable = [2, 2, 2, 2, 3, 3, 6, 6, 6, 7, 7, 8, 8, 8]
     private static let baseErrorRateModulo = 20.0
-    private static let numberIntroCursorBlinkPeriod: TimeInterval = 0.3
-    private static let numberIntroCursorBlinkCount = 3
-    private static let numberIntroTypingInterval: TimeInterval = 0.05
+    private static let numberIntroCursorBlinkPeriod: TimeInterval = 0.5   // matches NeoMessageScene
+    private static let numberIntroCursorBlinkCount = 2                    // 4 half-periods × 0.5 s ≈ 2 s
+    private static let numberIntroTypingInterval: TimeInterval = 0.036
     private static let rainDuration: TimeInterval = 90.0   // how long rain runs before restarting
     private static let numberIntroRainFrames = 160
     private static let numberIntroBlackoutInterval: TimeInterval = 1.0
@@ -207,6 +207,9 @@ final class NativeMatrixRenderer {
     static var supportedScalars: [UnicodeScalar] {
         glyphPool
     }
+
+    /// The content margin (in cells) used for the text row and columns in number/neo scenes.
+    static var contentMargin: Int { numberIntroMargin }
 
     private(set) var columns = 0
     private(set) var rows = 0
@@ -260,17 +263,6 @@ final class NativeMatrixRenderer {
     private var numberIntroBlackedColumns = Set<Int>()
     private var rainStartTime: TimeInterval = 0   // unused; kept for future use
 
-    /// Whether the Neo message intro scene is currently active.
-    var isInNeoMessageScene: Bool {
-        activeScene == .neoMessage
-    }
-
-    /// The Neo message render state for the current frame, or nil when not in that scene.
-    var neoMessageRenderState: NeoMessageRenderState? {
-        guard activeScene == .neoMessage else { return nil }
-        return neoScene.renderState
-    }
-
     /// Returns the rendered cell content at the requested grid position.
     subscript(row: Int, column: Int) -> RenderCell {
         renderCells[(row * columns) + column]
@@ -301,6 +293,18 @@ final class NativeMatrixRenderer {
             baseAddress.update(repeating: false, count: dirtyRows.count)
         }
         dirtyRowCount = 0
+    }
+
+    /// When in the Neo message blank-between-lines phase, returns cursor visibility;
+    /// otherwise `nil`. The view uses this to draw the cursor directly on-screen
+    /// (bypassing the frame buffer) so it is guaranteed to appear.
+    /// Covers all Neo scene phases: startup delay, typing, pause, and blank.
+    var neoSceneCursor: (column: Int, visible: Bool)? {
+        guard activeScene == .neoMessage, neoScene.phase != .done else { return nil }
+        let state = neoScene.renderState
+        let m = Self.numberIntroMargin
+        let textCount = state.currentLine.map { min(state.visibleCharCount, $0.unicodeScalars.count) } ?? 0
+        return (column: m + textCount, visible: state.cursorVisible)
     }
 
     var preferredAnimationTimeInterval: TimeInterval {
@@ -696,7 +700,9 @@ final class NativeMatrixRenderer {
     /// Returns cumulative character-appear times for natural-feeling typing.
     /// Adds random per-character variation, longer pauses at punctuation, and
     /// rare hesitations. All timings are in seconds.
-    private static func naturalTypingTimings(for text: String,
+    /// Computes per-character cumulative delays with natural variation for a typing sequence.
+    /// Used by both the Neo message scene and the number intro scene.
+    static func naturalTypingTimings(for text: String,
                                              baseInterval: TimeInterval,
                                              rng: inout Xorshift64) -> [TimeInterval] {
         var timings: [TimeInterval] = []
@@ -715,6 +721,10 @@ final class NativeMatrixRenderer {
     /// Advances the Neo message intro scene by one simulation step.
     private func stepNeoMessageFrame() {
         neoScene.advance(now: Date.timeIntervalSinceReferenceDate, speedFactor: configuration.neoMessageSpeedFactor)
+        let state = neoScene.renderState
+        // Never write the cursor to the frame buffer — the view draws it directly
+        // via neoSceneCursor so it is guaranteed to appear in every phase.
+        setRow0(text: state.currentLine ?? "", typedCount: state.visibleCharCount, showCursor: false)
         markAllRowsDirty()
         if neoScene.phase == .done {
             transitionFromNeoMessage()
@@ -744,7 +754,8 @@ final class NativeMatrixRenderer {
         // fast-forward to the current scene position in a single frame.
         let nowTime = Date.timeIntervalSinceReferenceDate
         let syncWindow: TimeInterval = 5.0
-        sceneStartTime = floor(nowTime / syncWindow) * syncWindow
+        // Add 3 s initial blank delay so the screen goes dark before the first scene.
+        sceneStartTime = floor(nowTime / syncWindow) * syncWindow + 3.0
         sceneSeed = UInt64(bitPattern: Int64(sceneStartTime))
         rainRNG = Xorshift64(seed: sceneSeed &+ 3)
 
@@ -762,6 +773,9 @@ final class NativeMatrixRenderer {
         if configuration.neoMessageSceneEnabled {
             activeScene = .neoMessage
             neoScene.reset(startTime: sceneStartTime, seed: sceneSeed &+ 1)
+            for i in renderCells.indices { renderCells[i] = Self.blankRenderCell }
+            for i in visibleCountByRow.indices { visibleCountByRow[i] = 0 }
+            markAllRowsDirty()
         } else if configuration.numberSceneEnabled {
             activeScene = .numberIntro
             initNumberIntroScene()

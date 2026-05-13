@@ -23,7 +23,7 @@ struct NeoMessageScene {
         "Knock, knock, Neo.",
     ]
 
-    static let charsPerSecond: Double = 20.0
+    static let charsPerSecond: Double = 28.0
     static let cursorBlinkInterval: TimeInterval = 0.5
 
     private struct LineSchedule {
@@ -53,13 +53,18 @@ struct NeoMessageScene {
         var t: TimeInterval = 0
         for (index, line) in Self.lines.enumerated() {
             let isLast = index == Self.lines.count - 1
-            let chars = Self.naturalTypingTimings(for: line, rng: &rng)
+            let chars = NativeMatrixRenderer.naturalTypingTimings(
+                for: line,
+                baseInterval: 1.0 / Self.charsPerSecond,
+                rng: &rng
+            )
             let lineStart = t
             let typingEnd = t + (chars.last ?? 0)
+            // pauseDuration min (2 s) > blankDuration max (1.5 s) — guaranteed by range choice.
             let pauseDuration = isLast
                 ? Double.random(in: 3...5, using: &rng)
-                : Double.random(in: 1...3, using: &rng)
-            let blankDuration = isLast ? 0.0 : Double.random(in: 1...3, using: &rng)
+                : Double.random(in: 2...4, using: &rng)
+            let blankDuration = isLast ? 0.0 : Double.random(in: 0.5...1.5, using: &rng)
             let pauseEnd = typingEnd + pauseDuration
             let blankEnd = pauseEnd + blankDuration
             schedule.append(LineSchedule(
@@ -88,6 +93,14 @@ struct NeoMessageScene {
     }
 
     private mutating func updateState(sceneTime: TimeInterval) {
+        // Before the scene begins: show a blinking cursor at the start position.
+        guard sceneTime >= 0 else {
+            phase = .typing
+            lineIndex = 0
+            charIndex = 0
+            return
+        }
+
         for (index, timing) in schedule.enumerated() {
             let isLast = index == schedule.count - 1
             if sceneTime < timing.typingEnd {
@@ -104,6 +117,11 @@ struct NeoMessageScene {
             } else if !isLast && sceneTime < timing.blankEnd {
                 lineIndex = index
                 phase = .blankBetweenLines
+                // Blink relative to the blank start so the cursor is always visible
+                // at the beginning of each blank period (avoids the cursor starting
+                // in its hidden half-cycle).
+                let blankElapsed = sceneTime - timing.pauseEnd
+                cursorVisible = Int(blankElapsed / Self.cursorBlinkInterval) % 2 == 0
                 return
             } else if isLast {
                 phase = .done
@@ -115,7 +133,9 @@ struct NeoMessageScene {
 
     var renderState: NeoMessageRenderState {
         switch phase {
-        case .blankBetweenLines, .done:
+        case .blankBetweenLines:
+            return NeoMessageRenderState(currentLine: nil, visibleCharCount: 0, cursorVisible: cursorVisible)
+        case .done:
             return NeoMessageRenderState(currentLine: nil, visibleCharCount: 0, cursorVisible: false)
         case .typing, .pauseAfterLine:
             return NeoMessageRenderState(
@@ -126,18 +146,4 @@ struct NeoMessageScene {
         }
     }
 
-    private static func naturalTypingTimings(for line: String, rng: inout Xorshift64) -> [TimeInterval] {
-        let base = 1.0 / Self.charsPerSecond
-        var timings: [TimeInterval] = []
-        var t: TimeInterval = 0
-        for ch in line {
-            var delay = base * Double.random(in: 0.4...2.2, using: &rng)
-            if ".,!?".contains(ch) { delay += base * Double.random(in: 1.0...3.5, using: &rng) }
-            else if ch == " " { delay += base * Double.random(in: 0.3...1.2, using: &rng) }
-            if Double.random(in: 0...1, using: &rng) < 0.04 { delay += Double.random(in: 0.12...0.35, using: &rng) }
-            t += delay
-            timings.append(t)
-        }
-        return timings
-    }
 }
