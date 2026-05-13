@@ -20,8 +20,8 @@ struct MatrixScreenSaverOptions: Equatable {
     static let defaultNumberSceneEnabled = true
     static let defaultTwinkleEnabled = true
     static let defaultDiffuseEnabled = true
-    static let defaultCharacterWidth = 9
-    static let defaultCharacterHeight = 17
+    static let defaultCharacterWidth = 11
+    static let defaultCharacterHeight = 21
     static let defaultRainDensity = 1.0
     static let defaultFrameRate = 25.0
     static let defaultErrorRate = 1.0

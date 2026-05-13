@@ -216,11 +216,7 @@ final class MatrixScreenSaverView: ScreenSaverView {
         if showsWindowChrome {
             drawWindow()
         }
-        if nativeRenderer.isInNeoMessageScene {
-            drawNeoMessageScene()
-        } else {
-            drawTerminal()
-        }
+        drawTerminal()
         if showsWindowChrome {
             drawTitlebar()
         }
@@ -510,49 +506,6 @@ final class MatrixScreenSaverView: ScreenSaverView {
         (Self.terminalTitle as NSString).draw(in: titleRect, withAttributes: attributes)
     }
 
-    /// Paints the Neo message intro scene: black background with typewriter text in Matrix green.
-    private func drawNeoMessageScene() {
-        NSColor.black.setFill()
-        terminalRect.fill()
-
-        guard let renderState = nativeRenderer.neoMessageRenderState,
-              let currentLine = renderState.currentLine,
-              (renderState.visibleCharCount > 0 || renderState.cursorVisible)
-        else {
-            return
-        }
-
-        let neoFont = NSFont.monospacedSystemFont(ofSize: regularFont.pointSize * 1.5, weight: .medium)
-
-        // Use the same mid-range level the number intro and rain body use (~half of max),
-        // giving the characteristic Matrix green rather than the near-white top level.
-        let palette = nativeRenderer.levelColors
-        let neoColorLevel = max(0, palette.count / 2)
-        let neoColor: NSColor = palette.isEmpty
-            ? NSColor(calibratedRed: 0, green: 0.75, blue: 0.3, alpha: 1)
-            : color(for: palette[neoColorLevel])
-
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: neoFont,
-            .foregroundColor: neoColor,
-        ]
-
-        let endIndex = currentLine.index(
-            currentLine.startIndex,
-            offsetBy: min(renderState.visibleCharCount, currentLine.count)
-        )
-        let visibleText = String(currentLine[..<endIndex])
-        let textWithCursor = renderState.cursorVisible ? visibleText + "█" : visibleText
-
-        guard !textWithCursor.isEmpty else { return }
-
-        // Anchor: 5% from the left, 10% from the top (AppKit Y grows upward)
-        let anchorX = terminalRect.minX + terminalRect.width * 0.05
-        let anchorY = terminalRect.minY + terminalRect.height * 0.90
-
-        (textWithCursor as NSString).draw(at: NSPoint(x: anchorX, y: anchorY), withAttributes: attributes)
-    }
-
     /// Paints the clipped terminal surface and its rendered frame buffer.
     private func drawTerminal() {        let terminalPath = NSBezierPath(
             roundedRect: terminalRect,
@@ -573,6 +526,20 @@ final class MatrixScreenSaverView: ScreenSaverView {
         NSGraphicsContext.saveGraphicsState()
         terminalPath.addClip()
         drawNativeTerminal(localTerminalSize)
+
+        // Draw the Neo scene cursor directly on top of the frame buffer.
+        // Covers all phases (startup delay, typing, pause, blank between lines).
+        // Direct draw bypasses the frame buffer pipeline and is guaranteed to appear.
+        if let cursor = nativeRenderer.neoSceneCursor, cursor.visible {
+            let palette = nativeRenderer.levelColors
+            let level = min(max(palette.count / 2, 1), palette.count - 1)
+            color(for: palette[level]).setFill()
+            let x = terminalRect.minX + CGFloat(cursor.column) * cellWidth
+            let m = CGFloat(NativeMatrixRenderer.contentMargin)
+            let y = terminalRect.maxY - (m + 1) * lineHeight
+            NSRect(x: x, y: y, width: cellWidth, height: lineHeight).fill()
+        }
+
         NSGraphicsContext.restoreGraphicsState()
     }
 
@@ -663,6 +630,7 @@ final class MatrixScreenSaverView: ScreenSaverView {
         )
         context.saveGState()
         context.interpolationQuality = .none
+        context.setAlpha(1.0)
         context.draw(image, in: drawRect)
         context.restoreGState()
     }
@@ -719,6 +687,20 @@ final class MatrixScreenSaverView: ScreenSaverView {
         }
         let graphicsContext = NSGraphicsContext(cgContext: glyphContext, flipped: false)
 
+        glyphContext.clear(CGRect(origin: .zero, size: CGSize(width: pixelWidth, height: pixelHeight)))
+
+        // Full-block cursor: fill the entire cell with the foreground color so the
+        // cursor is always exactly one character cell wide, regardless of font metrics.
+        if scalar == UnicodeScalar(0x2588),
+           let fgColor = attributes[.foregroundColor] as? NSColor {
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current = graphicsContext
+            fgColor.setFill()
+            NSRect(x: 0, y: 0, width: CGFloat(pixelWidth), height: CGFloat(pixelHeight)).fill()
+            NSGraphicsContext.restoreGraphicsState()
+            return glyphContext.makeImage()
+        }
+
         let text = String(scalar)
         let textSize = (text as NSString).size(withAttributes: attributes)
         let point = NSPoint(
@@ -728,7 +710,6 @@ final class MatrixScreenSaverView: ScreenSaverView {
 
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = graphicsContext
-        glyphContext.clear(CGRect(origin: .zero, size: CGSize(width: pixelWidth, height: pixelHeight)))
         (text as NSString).draw(at: point, withAttributes: attributes)
         NSGraphicsContext.restoreGraphicsState()
 
