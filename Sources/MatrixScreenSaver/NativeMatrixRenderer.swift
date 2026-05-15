@@ -215,7 +215,7 @@ final class NativeMatrixRenderer {
         var seen = Set<UnicodeScalar>()
         var pool = [UnicodeScalar]()
         for scalar in trimmed.unicodeScalars {
-            guard scalar.properties.isGraphemeBase || scalar.properties.isDiacritic == false,
+            guard !scalar.properties.isDiacritic,
                   !CharacterSet.whitespacesAndNewlines.contains(scalar),
                   !CharacterSet.controlCharacters.contains(scalar) else { continue }
             if seen.insert(scalar).inserted {
@@ -236,9 +236,9 @@ final class NativeMatrixRenderer {
     private var activeGlyphPool: [UnicodeScalar] = NativeMatrixRenderer.defaultGlyphPool
 
     var supportedScalars: [UnicodeScalar] {
-        let custom = Set(activeGlyphPool)
-        let extra = custom.subtracting(Self.defaultGlyphPool)
-        return extra.isEmpty ? Self.defaultGlyphPool : Self.defaultGlyphPool + Array(extra)
+        let defaultSet = Set(Self.defaultGlyphPool)
+        let extra = activeGlyphPool.filter { !defaultSet.contains($0) }
+        return extra.isEmpty ? Self.defaultGlyphPool : Self.defaultGlyphPool + extra
     }
 
     private var neoScene = NeoMessageScene()

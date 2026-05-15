@@ -36,7 +36,7 @@ The saver exposes a native **Options…** sheet. The values are stored with `Scr
 | Rain density | Set the factor for the density of rain drops. A positive number. | 1.0 |
 | Frame rate | Set the frame rate per second. A positive number less than or equal to 1000. | 25 |
 | Error rate | Set the factor for the rate of character changes. A non-negative number. | 1.0 |
-| Characters | Restrict the rain to these characters. Leave empty for the full default set.<br>Example: ATGC | *(empty)* |
+| Characters | Restrict rain glyphs to a custom set (e.g. ATGC). Leave empty for the default. | *(empty)* |
 
 ## Development
 

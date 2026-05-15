@@ -93,6 +93,7 @@ struct MatrixScreenSaverOptions: Equatable {
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                     .unicodeScalars
                     .filter { s in
+                        !s.properties.isDiacritic &&
                         !CharacterSet.whitespacesAndNewlines.contains(s) &&
                         !CharacterSet.controlCharacters.contains(s) &&
                         seen.insert(s).inserted
