@@ -37,6 +37,7 @@ The saver exposes a native **Options…** sheet. The values are stored with `Scr
 | Frame rate | Set the frame rate per second. A positive number less than or equal to 1000. | 25 |
 | Error rate | Set the factor for the rate of character changes. A non-negative number. | 1.0 |
 | Characters | Restrict rain glyphs to a custom set (e.g. ATGC). Leave empty for the default. | *(empty)* |
+| Neo message lines | Lines typed during the Neo message intro. Between 1 and 10 lines, up to 256 characters each. | The 4 classic lines |
 
 ## Development
 

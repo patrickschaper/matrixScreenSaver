@@ -5,6 +5,7 @@ struct MatrixScreenSaverOptions: Equatable {
     private enum Keys {
         static let neoMessageSceneEnabled = "NeoMessageSceneEnabled"
         static let neoMessageSpeedFactor = "NeoMessageSpeedFactor"
+        static let neoMessageLines = "NeoMessageLines"
         static let numberSceneEnabled = "NumberSceneEnabled"
         static let twinkleEnabled = "TwinkleEnabled"
         static let diffuseEnabled = "DiffuseEnabled"
@@ -18,6 +19,7 @@ struct MatrixScreenSaverOptions: Equatable {
 
     static let defaultNeoMessageSceneEnabled = true
     static let defaultNeoMessageSpeedFactor = 1.0
+    static let defaultNeoMessageLines = NeoMessageScene.defaultLines
     static let defaultNumberSceneEnabled = true
     static let defaultTwinkleEnabled = true
     static let defaultDiffuseEnabled = true
@@ -35,9 +37,13 @@ struct MatrixScreenSaverOptions: Equatable {
     static let minimumNeoMessageSpeedFactor = 0.0001
     static let minimumCharacterWidth = 1
     static let minimumCharacterHeight = 1
+    static let minNeoMessageLineCount = 1
+    static let maxNeoMessageLineCount = 10
+    static let maxNeoMessageLineLength = 256
 
     static let neoMessageSceneDescription = "Show the Neo message intro before the main scene. Turned on by default."
     static let neoMessageSpeedFactorDescription = "Multiplier for the Neo message typing and pause speed. A positive number. The default is 1.0."
+    static let neoMessageLinesDescription = "Lines typed during the Neo message intro. Between 1 and 10 lines, up to 256 characters each."
     static let numberSceneDescription = "Show the startup number scene before continuous rain. Turned on by default."
     static let diffuseDescription = "Turn on/off the glow effect. Turned on by default."
     static let twinkleDescription = "Turn on/off the twinkling effect. Turned on by default."
@@ -49,6 +55,7 @@ struct MatrixScreenSaverOptions: Equatable {
 
     var neoMessageSceneEnabled = defaultNeoMessageSceneEnabled
     var neoMessageSpeedFactor = defaultNeoMessageSpeedFactor
+    var neoMessageLines = defaultNeoMessageLines
     var numberSceneEnabled = defaultNumberSceneEnabled
     var twinkleEnabled = defaultTwinkleEnabled
     var diffuseEnabled = defaultDiffuseEnabled
@@ -70,15 +77,25 @@ struct MatrixScreenSaverOptions: Equatable {
             rainDensity: rainDensity,
             frameRate: frameRate,
             errorRate: errorRate,
-            characters: characters
+            characters: characters,
+            neoMessageLines: neoMessageLines
         )
     }
 
     /// Clamps persisted values to the supported ranges.
     func sanitized() -> MatrixScreenSaverOptions {
-        MatrixScreenSaverOptions(
+        let sanitizedLines: [String] = {
+            let result = neoMessageLines
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .map { String($0.prefix(Self.maxNeoMessageLineLength)) }
+                .filter { !$0.isEmpty }
+            let clamped = Array(result.prefix(Self.maxNeoMessageLineCount))
+            return clamped.isEmpty ? Self.defaultNeoMessageLines : clamped
+        }()
+        return MatrixScreenSaverOptions(
             neoMessageSceneEnabled: neoMessageSceneEnabled,
             neoMessageSpeedFactor: max(neoMessageSpeedFactor, Self.minimumNeoMessageSpeedFactor),
+            neoMessageLines: sanitizedLines,
             numberSceneEnabled: numberSceneEnabled,
             twinkleEnabled: twinkleEnabled,
             diffuseEnabled: diffuseEnabled,
@@ -109,6 +126,7 @@ struct MatrixScreenSaverOptions: Equatable {
         defaults.register(defaults: [
             Keys.neoMessageSceneEnabled: defaultNeoMessageSceneEnabled,
             Keys.neoMessageSpeedFactor: defaultNeoMessageSpeedFactor,
+            Keys.neoMessageLines: defaultNeoMessageLines,
             Keys.numberSceneEnabled: defaultNumberSceneEnabled,
             Keys.twinkleEnabled: defaultTwinkleEnabled,
             Keys.diffuseEnabled: defaultDiffuseEnabled,
@@ -126,6 +144,7 @@ struct MatrixScreenSaverOptions: Equatable {
         MatrixScreenSaverOptions(
             neoMessageSceneEnabled: defaults.bool(forKey: Keys.neoMessageSceneEnabled),
             neoMessageSpeedFactor: defaults.double(forKey: Keys.neoMessageSpeedFactor),
+            neoMessageLines: (defaults.array(forKey: Keys.neoMessageLines) as? [String]) ?? defaultNeoMessageLines,
             numberSceneEnabled: defaults.bool(forKey: Keys.numberSceneEnabled),
             twinkleEnabled: defaults.bool(forKey: Keys.twinkleEnabled),
             diffuseEnabled: defaults.bool(forKey: Keys.diffuseEnabled),
@@ -143,6 +162,7 @@ struct MatrixScreenSaverOptions: Equatable {
         let options = sanitized()
         defaults.set(options.neoMessageSceneEnabled, forKey: Keys.neoMessageSceneEnabled)
         defaults.set(options.neoMessageSpeedFactor, forKey: Keys.neoMessageSpeedFactor)
+        defaults.set(options.neoMessageLines, forKey: Keys.neoMessageLines)
         defaults.set(options.numberSceneEnabled, forKey: Keys.numberSceneEnabled)
         defaults.set(options.twinkleEnabled, forKey: Keys.twinkleEnabled)
         defaults.set(options.diffuseEnabled, forKey: Keys.diffuseEnabled)
@@ -156,7 +176,9 @@ struct MatrixScreenSaverOptions: Equatable {
     }
 }
 
-final class MatrixScreenSaverOptionsSheetController: NSObject, NSTextFieldDelegate, NSWindowDelegate {
+final class MatrixScreenSaverOptionsSheetController: NSObject,
+    NSTextFieldDelegate, NSWindowDelegate,
+    NSTableViewDataSource, NSTableViewDelegate {
     private enum ValidationError: LocalizedError {
         case characterWidth
         case characterHeight
@@ -190,6 +212,18 @@ final class MatrixScreenSaverOptionsSheetController: NSObject, NSTextFieldDelega
     private let rootStack = NSStackView()
     private let neoMessageSceneCheckbox = NSButton(checkboxWithTitle: "Neo message scene", target: nil, action: nil)
     private let neoMessageSpeedFactorField = NSTextField(string: "")
+    private let linesTableView = NSTableView()
+    private let linesScrollView = NSScrollView()
+    private var editorLines: [String] = []
+    private var linesScrollHeightConstraint: NSLayoutConstraint?
+    private var linesEditorAddButton = NSButton(title: "+", target: nil, action: nil)
+    private static let lineRowHeight: CGFloat = 24
+    private static let dragPboardType = NSPasteboard.PasteboardType("matrixss.lineRow")
+    private static let handleColumnID = NSUserInterfaceItemIdentifier("handle")
+    private static let textColumnID   = NSUserInterfaceItemIdentifier("lineText")
+    private static let removeColumnID = NSUserInterfaceItemIdentifier("remove")
+    private var pendingLines: [String] = MatrixScreenSaverOptions.defaultNeoMessageLines
+    private var linesEditorWindow: NSWindow?
     private let numberSceneCheckbox = NSButton(checkboxWithTitle: "Number scene", target: nil, action: nil)
     private let twinkleCheckbox = NSButton(checkboxWithTitle: "Twinkle", target: nil, action: nil)
     private let diffuseCheckbox = NSButton(checkboxWithTitle: "Diffuse", target: nil, action: nil)
@@ -218,6 +252,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject, NSTextFieldDelega
     func prepare(using options: MatrixScreenSaverOptions) {
         neoMessageSceneCheckbox.state = options.neoMessageSceneEnabled ? .on : .off
         neoMessageSpeedFactorField.stringValue = Self.format(options.neoMessageSpeedFactor)
+        pendingLines = options.neoMessageLines
         numberSceneCheckbox.state = options.numberSceneEnabled ? .on : .off
         twinkleCheckbox.state = options.twinkleEnabled ? .on : .off
         diffuseCheckbox.state = options.diffuseEnabled ? .on : .off
@@ -257,6 +292,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject, NSTextFieldDelega
 
     /// Restores the controls to the default option values.
     @objc private func resetToDefaults(_ sender: Any?) {
+        pendingLines = MatrixScreenSaverOptions.defaultNeoMessageLines
         prepare(using: MatrixScreenSaverOptions())
     }
 
@@ -306,6 +342,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject, NSTextFieldDelega
         toggleStack.addArrangedSubview(diffuseSection)
         rootStack.addArrangedSubview(toggleStack)
         rootStack.addArrangedSubview(makeNumericSection(title: "Neo message speed", field: neoMessageSpeedFactorField, description: MatrixScreenSaverOptions.neoMessageSpeedFactorDescription))
+        rootStack.addArrangedSubview(makeNeoMessageLinesButtonRow())
         rootStack.addArrangedSubview(makeCharacterSizeSection())
         rootStack.addArrangedSubview(makeNumericSection(title: "Rain density", field: rainDensityField, description: MatrixScreenSaverOptions.rainDensityDescription))
         rootStack.addArrangedSubview(makeNumericSection(title: "Frame rate", field: frameRateField, description: MatrixScreenSaverOptions.frameRateDescription))
@@ -381,6 +418,331 @@ final class MatrixScreenSaverOptionsSheetController: NSObject, NSTextFieldDelega
         ])
 
         sizeWindowToFitContent()
+    }
+
+    /// Builds the simple "Neo message lines [Edit…]" row shown in the main sheet.
+    private func makeNeoMessageLinesButtonRow() -> NSView {
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 4
+        stack.setHuggingPriority(.required, for: .vertical)
+
+        let row = NSStackView()
+        row.orientation = .horizontal
+        row.spacing = 12
+        row.alignment = .centerY
+
+        let label = NSTextField(labelWithString: "Neo message lines")
+        label.font = .systemFont(ofSize: 13, weight: .semibold)
+        label.setContentHuggingPriority(.required, for: .horizontal)
+
+        let editButton = NSButton(title: "Edit…", target: self, action: #selector(editLines(_:)))
+        editButton.setContentHuggingPriority(.required, for: .horizontal)
+
+        row.addArrangedSubview(label)
+        row.addArrangedSubview(editButton)
+
+        stack.addArrangedSubview(row)
+        stack.addArrangedSubview(makeDescriptionLabel(MatrixScreenSaverOptions.neoMessageLinesDescription))
+        return stack
+    }
+
+    /// Builds the secondary Neo message lines editor window (presented as a sheet).
+    private func buildLinesEditorWindow() -> NSWindow {
+        let editorWindow = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 1, height: 1),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        editorWindow.title = "Neo Message Lines"
+        editorWindow.isReleasedWhenClosed = false
+
+        // --- table setup ---
+        let handleCol = NSTableColumn(identifier: Self.handleColumnID)
+        handleCol.title = ""
+        handleCol.width = 18
+        handleCol.minWidth = 18
+        handleCol.maxWidth = 18
+        handleCol.resizingMask = []
+
+        let textCol = NSTableColumn(identifier: Self.textColumnID)
+        textCol.title = "Line"
+        textCol.resizingMask = .autoresizingMask
+        textCol.minWidth = 200
+
+        let removeCol = NSTableColumn(identifier: Self.removeColumnID)
+        removeCol.title = ""
+        removeCol.width = 28
+        removeCol.minWidth = 28
+        removeCol.maxWidth = 28
+        removeCol.resizingMask = []
+
+        linesTableView.addTableColumn(handleCol)
+        linesTableView.addTableColumn(textCol)
+        linesTableView.addTableColumn(removeCol)
+        linesTableView.headerView = nil
+        linesTableView.rowHeight = Self.lineRowHeight
+        linesTableView.intercellSpacing = NSSize(width: 4, height: 2)
+        linesTableView.usesAlternatingRowBackgroundColors = false
+        linesTableView.allowsMultipleSelection = false
+        linesTableView.allowsEmptySelection = true
+        linesTableView.dataSource = self
+        linesTableView.delegate = self
+        linesTableView.registerForDraggedTypes([Self.dragPboardType])
+        linesTableView.draggingDestinationFeedbackStyle = .gap
+
+        linesScrollView.documentView = linesTableView
+        linesScrollView.hasVerticalScroller = false
+        linesScrollView.hasHorizontalScroller = false
+        linesScrollView.autohidesScrollers = true
+        linesScrollView.borderType = .lineBorder
+        linesScrollView.translatesAutoresizingMaskIntoConstraints = false
+
+        // --- buttons ---
+        linesEditorAddButton = NSButton(title: "+", target: self, action: #selector(addLine(_:)))
+        linesEditorAddButton.bezelStyle = .rounded
+
+        let resetLinesButton = NSButton(title: "Reset lines", target: self, action: #selector(resetLines(_:)))
+        let cancelLinesButton = NSButton(title: "Cancel", target: self, action: #selector(cancelLines(_:)))
+        let okLinesButton = NSButton(title: "OK", target: self, action: #selector(applyLines(_:)))
+        okLinesButton.keyEquivalent = "\r"
+        cancelLinesButton.keyEquivalent = "\u{1b}"
+
+        let dialogButtons = NSStackView(views: [cancelLinesButton, okLinesButton])
+        dialogButtons.orientation = .horizontal
+        dialogButtons.spacing = 8
+
+        let footer = NSStackView()
+        footer.orientation = .horizontal
+        footer.spacing = 8
+        footer.alignment = .centerY
+        let footerSpacer = NSView()
+        footerSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        footerSpacer.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        footer.addArrangedSubview(resetLinesButton)
+        footer.addArrangedSubview(footerSpacer)
+        footer.addArrangedSubview(dialogButtons)
+
+        let editorStack = NSStackView()
+        editorStack.orientation = .vertical
+        editorStack.alignment = .leading
+        editorStack.spacing = 12
+        editorStack.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
+        editorStack.translatesAutoresizingMaskIntoConstraints = false
+
+        editorStack.addArrangedSubview(linesScrollView)
+        editorStack.addArrangedSubview(linesEditorAddButton)
+        editorStack.addArrangedSubview(makeDescriptionLabel(MatrixScreenSaverOptions.neoMessageLinesDescription))
+        editorStack.addArrangedSubview(footer)
+
+        linesScrollView.widthAnchor.constraint(equalTo: editorStack.widthAnchor,
+            constant: -(editorStack.edgeInsets.left + editorStack.edgeInsets.right)).isActive = true
+        footer.widthAnchor.constraint(equalTo: editorStack.widthAnchor,
+            constant: -(editorStack.edgeInsets.left + editorStack.edgeInsets.right)).isActive = true
+
+        let contentView = NSView()
+        contentView.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(editorStack)
+        editorWindow.contentView = contentView
+
+        NSLayoutConstraint.activate([
+            editorStack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            editorStack.topAnchor.constraint(equalTo: contentView.topAnchor),
+            editorStack.trailingAnchor.constraint(lessThanOrEqualTo: contentView.trailingAnchor),
+            editorStack.bottomAnchor.constraint(lessThanOrEqualTo: contentView.bottomAnchor),
+        ])
+
+        return editorWindow
+    }
+
+    /// Opens the lines editor as a sheet over the main options window.
+    @objc private func editLines(_ sender: Any?) {
+        let editor = linesEditorWindow ?? buildLinesEditorWindow()
+        linesEditorWindow = editor
+        editorLines = pendingLines
+        linesTableView.reloadData()
+        refreshLinesSection()
+        window.beginSheet(editor)
+    }
+
+    /// Commits the editor lines and closes the editor sheet.
+    @objc private func applyLines(_ sender: Any?) {
+        flushEditorLines()
+        pendingLines = editorLines
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .map { String($0.prefix(MatrixScreenSaverOptions.maxNeoMessageLineLength)) }
+        if pendingLines.isEmpty { pendingLines = MatrixScreenSaverOptions.defaultNeoMessageLines }
+        window.endSheet(linesEditorWindow ?? window)
+    }
+
+    /// Discards editor changes and closes the editor sheet.
+    @objc private func cancelLines(_ sender: Any?) {
+        window.endSheet(linesEditorWindow ?? window)
+    }
+
+    /// Syncs visible text-field values back into `editorLines` before a reload.
+    private func flushEditorLines() {
+        for row in 0..<linesTableView.numberOfRows {
+            guard let cell = linesTableView.view(atColumn: 1, row: row, makeIfNecessary: false)
+                    as? NSTableCellView,
+                  let field = cell.textField else { continue }
+            editorLines[row] = field.stringValue
+        }
+    }
+
+    /// Adds a new empty line to the editor table.
+    @objc private func addLine(_ sender: Any?) {
+        guard editorLines.count < MatrixScreenSaverOptions.maxNeoMessageLineCount else { return }
+        flushEditorLines()
+        editorLines.append("")
+        linesTableView.reloadData()
+        refreshLinesSection()
+        let newRow = editorLines.count - 1
+        linesTableView.scrollRowToVisible(newRow)
+        // Begin editing the new cell immediately
+        linesTableView.editColumn(1, row: newRow, with: nil, select: true)
+    }
+
+    /// Removes the row whose "−" button was tapped.
+    @objc private func removeLine(_ sender: NSButton) {
+        let row = linesTableView.row(for: sender)
+        guard row >= 0, editorLines.count > MatrixScreenSaverOptions.minNeoMessageLineCount else { return }
+        flushEditorLines()
+        editorLines.remove(at: row)
+        linesTableView.reloadData()
+        refreshLinesSection()
+    }
+
+    /// Resets the editor table to the four default Neo message lines.
+    @objc private func resetLines(_ sender: Any?) {
+        editorLines = MatrixScreenSaverOptions.defaultNeoMessageLines
+        linesTableView.reloadData()
+        refreshLinesSection()
+    }
+
+    /// Updates button states and resizes the editor window to fit current row count.
+    private func refreshLinesSection() {
+        let count = editorLines.count
+        linesEditorAddButton.isEnabled = count < MatrixScreenSaverOptions.maxNeoMessageLineCount
+        // Resize scroll view height to show all rows without a scrollbar
+        let tableHeight = CGFloat(count) * (Self.lineRowHeight + linesTableView.intercellSpacing.height)
+        if let constraint = linesScrollHeightConstraint {
+            constraint.constant = tableHeight
+        } else {
+            let c = linesScrollView.heightAnchor.constraint(equalToConstant: tableHeight)
+            c.isActive = true
+            linesScrollHeightConstraint = c
+        }
+        guard let editor = linesEditorWindow, let contentView = editor.contentView else { return }
+        contentView.layoutSubtreeIfNeeded()
+        if let editorStack = contentView.subviews.first as? NSStackView {
+            let fittingSize = editorStack.fittingSize
+            let contentSize = NSSize(
+                width: ceil(fittingSize.width + editorStack.edgeInsets.right),
+                height: ceil(fittingSize.height)
+            )
+            editor.setContentSize(contentSize)
+            editor.contentMinSize = contentSize
+        }
+    }
+
+    // MARK: – NSTableViewDataSource
+
+    func numberOfRows(in tableView: NSTableView) -> Int { editorLines.count }
+
+    func tableView(_ tableView: NSTableView,
+                   pasteboardWriterForRow row: Int) -> (any NSPasteboardWriting)? {
+        let item = NSPasteboardItem()
+        item.setString("\(row)", forType: Self.dragPboardType)
+        return item
+    }
+
+    func tableView(_ tableView: NSTableView,
+                   validateDrop info: any NSDraggingInfo,
+                   proposedRow row: Int,
+                   proposedDropOperation dropOperation: NSTableView.DropOperation) -> NSDragOperation {
+        return dropOperation == .above ? .move : []
+    }
+
+    func tableView(_ tableView: NSTableView,
+                   acceptDrop info: any NSDraggingInfo,
+                   row: Int,
+                   dropOperation: NSTableView.DropOperation) -> Bool {
+        guard let srcStr = info.draggingPasteboard.string(forType: Self.dragPboardType),
+              let srcRow = Int(srcStr) else { return false }
+        flushEditorLines()
+        let item = editorLines.remove(at: srcRow)
+        let dest = srcRow < row ? row - 1 : row
+        editorLines.insert(item, at: dest)
+        tableView.reloadData()
+        return true
+    }
+
+    // MARK: – NSTableViewDelegate
+
+    func tableView(_ tableView: NSTableView,
+                   viewFor tableColumn: NSTableColumn?,
+                   row: Int) -> NSView? {
+        guard let col = tableColumn else { return nil }
+
+        switch col.identifier {
+        case Self.handleColumnID:
+            let cellView = NSTableCellView()
+            let label = NSTextField(labelWithString: "⠿")
+            label.font = .systemFont(ofSize: 14)
+            label.textColor = .tertiaryLabelColor
+            label.alignment = .center
+            label.translatesAutoresizingMaskIntoConstraints = false
+            cellView.addSubview(label)
+            NSLayoutConstraint.activate([
+                label.centerXAnchor.constraint(equalTo: cellView.centerXAnchor),
+                label.centerYAnchor.constraint(equalTo: cellView.centerYAnchor),
+            ])
+            return cellView
+
+        case Self.textColumnID:
+            let identifier = NSUserInterfaceItemIdentifier("lineTextCell")
+            let cellView: NSTableCellView
+            if let reused = tableView.makeView(withIdentifier: identifier, owner: self)
+                    as? NSTableCellView {
+                cellView = reused
+            } else {
+                cellView = NSTableCellView()
+                cellView.identifier = identifier
+                let field = NSTextField(string: "")
+                field.isEditable = true
+                field.isBordered = false
+                field.drawsBackground = false
+                field.font = .systemFont(ofSize: 13)
+                field.translatesAutoresizingMaskIntoConstraints = false
+                cellView.addSubview(field)
+                cellView.textField = field
+                NSLayoutConstraint.activate([
+                    field.leadingAnchor.constraint(equalTo: cellView.leadingAnchor),
+                    field.trailingAnchor.constraint(equalTo: cellView.trailingAnchor),
+                    field.centerYAnchor.constraint(equalTo: cellView.centerYAnchor),
+                ])
+            }
+            cellView.textField?.stringValue = editorLines[row]
+            return cellView
+
+        case Self.removeColumnID:
+            let btn = NSButton(title: "−", target: self, action: #selector(removeLine(_:)))
+            btn.bezelStyle = .rounded
+            btn.font = .systemFont(ofSize: 13)
+            btn.isEnabled = editorLines.count > MatrixScreenSaverOptions.minNeoMessageLineCount
+            return btn
+
+        default:
+            return nil
+        }
+    }
+
+    func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
+        Self.lineRowHeight
     }
 
     /// Builds a checkbox row with its explanatory description.
@@ -542,9 +904,12 @@ final class MatrixScreenSaverOptionsSheetController: NSObject, NSTextFieldDelega
             throw ValidationError.errorRate
         }
 
+        let neoMessageLines = pendingLines.isEmpty ? MatrixScreenSaverOptions.defaultNeoMessageLines : pendingLines
+
         return MatrixScreenSaverOptions(
             neoMessageSceneEnabled: neoMessageSceneCheckbox.state == .on,
             neoMessageSpeedFactor: neoMessageSpeedFactor,
+            neoMessageLines: neoMessageLines,
             numberSceneEnabled: numberSceneCheckbox.state == .on,
             twinkleEnabled: twinkleCheckbox.state == .on,
             diffuseEnabled: diffuseCheckbox.state == .on,
