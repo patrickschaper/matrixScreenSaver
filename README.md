@@ -29,13 +29,18 @@ The saver exposes a native **Options…** sheet. The values are stored with `Scr
 
 | Option | Description | Default |
 | --- | --- | --- |
+| Neo message scene | Show the Neo message intro before the main scene. | On |
+| Neo message speed | Multiplier for the Neo message typing and pause speed. A positive number. | 1.0 |
+| Neo message lines | Lines typed during the Neo message intro. Between 1 and 10 lines, up to 256 characters each. | The 4 classic lines |
 | Number scene | Show the startup number scene before continuous rain. | On |
 | Twinkle | Turn on/off the twinkling effect. | On |
 | Diffuse | Turn on/off the glow effect. | On |
-| Character size | Set the character cell width and height in pixels.<br>Example pairs: 8 x 15, 9 x 17, 10 x 19, 11 x 21, 12 x 23, and 13 x 24. | 9 x 17 |
+| Scan lines intensity | Intensity of the horizontal CRT scan line overlay. 0 = off, 100 = fully opaque. | 35 |
+| Character size | Set the character cell width and height in pixels.<br>Example pairs: 8 x 15, 9 x 17, 10 x 19, 11 x 21, 12 x 23, and 13 x 24. | 11 x 21 |
 | Rain density | Set the factor for the density of rain drops. A positive number. | 1.0 |
 | Frame rate | Set the frame rate per second. A positive number less than or equal to 1000. | 25 |
 | Error rate | Set the factor for the rate of character changes. A non-negative number. | 1.0 |
+| Characters | Restrict rain glyphs to a custom set (e.g. ATGC). Leave empty for the default. | *(empty)* |
 
 ## Development
 
@@ -44,7 +49,7 @@ The saver exposes a native **Options…** sheet. The values are stored with `Scr
 - Native Swift/AppKit screen saver bundle
 - Edge-to-edge full-screen saver output, with terminal-style chrome kept in the preview host
 - In-process renderer for `rain-forever` with an optional upstream `number` intro
-- Native **Options…** sheet for Number scene, Twinkle, Diffuse, Character size, Rain density, Frame rate, and Error rate
+- Native **Options…** sheet for Neo message scene, Neo message speed, Neo message lines, Number scene, Twinkle, Diffuse, Scan lines intensity, Character size, Rain density, Frame rate, Error rate, and Characters
 - Preview app for fast iteration without reinstalling
 
 ### Repository layout
