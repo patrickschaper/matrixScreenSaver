@@ -45,7 +45,7 @@ struct MatrixScreenSaverOptions: Equatable {
     static let rainDensityDescription = "Set the factor for the density of rain drops. A positive number. The default is 1.0."
     static let frameRateDescription = "Set the frame rate per second. A positive number less than or equal to 1000. The default is 25."
     static let errorRateDescription = "Set the factor for the rate of character changes. A non-negative number. The default is 1.0."
-    static let charactersDescription = "Restrict the rain to these characters. Leave empty for the full default set.\nExample: ATGC"
+    static let charactersDescription = "Restrict rain glyphs to a custom set (e.g. ATGC). Leave empty for the default."
 
     var neoMessageSceneEnabled = defaultNeoMessageSceneEnabled
     var neoMessageSpeedFactor = defaultNeoMessageSpeedFactor
