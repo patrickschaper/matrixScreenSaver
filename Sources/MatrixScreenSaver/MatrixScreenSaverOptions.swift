@@ -309,6 +309,13 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         closeSheet(with: .cancel)
     }
 
+    /// Opens the repository URL in the default browser.
+    @objc private func openRepository(_ sender: Any?) {
+        if let url = URL(string: "https://github.com/patrickschaper/matrixScreenSaver") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
     /// Restores the controls to the default option values.
     @objc private func resetToDefaults(_ sender: Any?) {
         pendingLines = MatrixScreenSaverOptions.defaultNeoMessageLines
@@ -339,6 +346,27 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         rootStack.spacing = 16
         rootStack.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
         rootStack.translatesAutoresizingMaskIntoConstraints = false
+
+        // Header row: title + About link
+        let headerRow = NSStackView()
+        headerRow.orientation = .horizontal
+        headerRow.alignment = .firstBaseline
+        headerRow.spacing = 8
+
+        let titleLabel = NSTextField(labelWithString: "macOS Matrix Screen Saver")
+        titleLabel.font = .systemFont(ofSize: 15, weight: .semibold)
+        titleLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
+
+        let aboutButton = NSButton(title: "About", target: self, action: #selector(openRepository(_:)))
+        aboutButton.bezelStyle = .inline
+        aboutButton.isBordered = false
+        aboutButton.contentTintColor = .linkColor
+        aboutButton.font = .systemFont(ofSize: 13)
+        aboutButton.setContentHuggingPriority(.required, for: .horizontal)
+
+        headerRow.addArrangedSubview(titleLabel)
+        headerRow.addArrangedSubview(aboutButton)
+        rootStack.addArrangedSubview(headerRow)
 
         let neoMessageSceneSection = makeCheckboxSection(
             checkbox: neoMessageSceneCheckbox,
