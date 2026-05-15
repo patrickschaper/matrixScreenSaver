@@ -11,6 +11,7 @@ final class NativeMatrixRenderer {
         var frameRate = 25.0
         var errorRate = 1.0
         var characters = ""
+        var neoMessageLines: [String] = NeoMessageScene.defaultLines
 
         /// Clamps runtime configuration values to the supported renderer ranges.
         func sanitized() -> Configuration {
@@ -23,7 +24,8 @@ final class NativeMatrixRenderer {
                 rainDensity: max(rainDensity, MatrixScreenSaverOptions.minimumRainDensity),
                 frameRate: min(max(frameRate, MatrixScreenSaverOptions.minimumFrameRate), MatrixScreenSaverOptions.maximumFrameRate),
                 errorRate: max(errorRate, MatrixScreenSaverOptions.minimumErrorRate),
-                characters: characters
+                characters: characters,
+                neoMessageLines: neoMessageLines.isEmpty ? NeoMessageScene.defaultLines : neoMessageLines
             )
         }
     }
@@ -386,7 +388,8 @@ final class NativeMatrixRenderer {
             columns > 0 &&
             rows > 0 &&
             (previousConfiguration.neoMessageSceneEnabled != sanitizedConfiguration.neoMessageSceneEnabled ||
-             previousConfiguration.numberSceneEnabled != sanitizedConfiguration.numberSceneEnabled)
+             previousConfiguration.numberSceneEnabled != sanitizedConfiguration.numberSceneEnabled ||
+             previousConfiguration.neoMessageLines != sanitizedConfiguration.neoMessageLines)
 
         if shouldResetSceneSequence || (!running && columns > 0 && rows > 0) {
             resetLayers()
@@ -799,7 +802,7 @@ final class NativeMatrixRenderer {
 
         if configuration.neoMessageSceneEnabled {
             activeScene = .neoMessage
-            neoScene.reset(startTime: sceneStartTime, seed: sceneSeed &+ 1)
+            neoScene.reset(startTime: sceneStartTime, seed: sceneSeed &+ 1, lines: configuration.neoMessageLines)
             for i in renderCells.indices { renderCells[i] = Self.blankRenderCell }
             for i in visibleCountByRow.indices { visibleCountByRow[i] = 0 }
             markAllRowsDirty()

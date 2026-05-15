@@ -16,7 +16,7 @@ struct NeoMessageScene {
         case done
     }
 
-    static let lines: [String] = [
+    static let defaultLines: [String] = [
         "Wake up, Neo...",
         "The Matrix has you.",
         "Follow the white rabbit.",
@@ -40,19 +40,21 @@ struct NeoMessageScene {
     private(set) var cursorVisible: Bool = true
     private var startTime: TimeInterval = 0
     private var schedule: [LineSchedule] = []
+    private var lines: [String] = Self.defaultLines
 
     /// Total scene duration in seconds at 1× speed (time when last pause ends).
     /// The number scene anchors its start after this duration.
     private(set) var scheduledDuration: TimeInterval = 60.0
 
-    mutating func reset(startTime: TimeInterval, seed: UInt64) {
+    mutating func reset(startTime: TimeInterval, seed: UInt64, lines: [String] = Self.defaultLines) {
         self.startTime = startTime
+        self.lines = lines.isEmpty ? Self.defaultLines : lines
         var rng = Xorshift64(seed: seed)
         schedule = []
 
         var t: TimeInterval = 0
-        for (index, line) in Self.lines.enumerated() {
-            let isLast = index == Self.lines.count - 1
+        for (index, line) in self.lines.enumerated() {
+            let isLast = index == self.lines.count - 1
             let chars = NativeMatrixRenderer.naturalTypingTimings(
                 for: line,
                 baseInterval: 1.0 / Self.charsPerSecond,
@@ -139,7 +141,7 @@ struct NeoMessageScene {
             return NeoMessageRenderState(currentLine: nil, visibleCharCount: 0, cursorVisible: false)
         case .typing, .pauseAfterLine:
             return NeoMessageRenderState(
-                currentLine: Self.lines[lineIndex],
+                currentLine: lines[lineIndex],
                 visibleCharCount: charIndex,
                 cursorVisible: cursorVisible
             )
