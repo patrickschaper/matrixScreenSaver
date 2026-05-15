@@ -15,6 +15,7 @@ struct MatrixScreenSaverOptions: Equatable {
         static let frameRate = "FrameRate"
         static let errorRate = "ErrorRate"
         static let characters = "Characters"
+        static let scanLinesIntensity = "ScanLinesIntensity"
     }
 
     static let defaultNeoMessageSceneEnabled = true
@@ -29,6 +30,7 @@ struct MatrixScreenSaverOptions: Equatable {
     static let defaultFrameRate = 25.0
     static let defaultErrorRate = 1.0
     static let defaultCharacters = ""
+    static let defaultScanLinesIntensity = 0.35
 
     static let minimumRainDensity = 0.0001
     static let minimumFrameRate = 0.0001
@@ -52,6 +54,7 @@ struct MatrixScreenSaverOptions: Equatable {
     static let frameRateDescription = "Set the frame rate per second. A positive number less than or equal to 1000. The default is 25."
     static let errorRateDescription = "Set the factor for the rate of character changes. A non-negative number. The default is 1.0."
     static let charactersDescription = "Restrict rain glyphs to a custom set (e.g. ATGC). Leave empty for the default."
+    static let scanLinesDescription = "Intensity of the horizontal CRT scan line overlay (0 = off, 100 = fully opaque). Default is 35%."
 
     var neoMessageSceneEnabled = defaultNeoMessageSceneEnabled
     var neoMessageSpeedFactor = defaultNeoMessageSpeedFactor
@@ -65,6 +68,7 @@ struct MatrixScreenSaverOptions: Equatable {
     var frameRate = defaultFrameRate
     var errorRate = defaultErrorRate
     var characters = defaultCharacters
+    var scanLinesIntensity = defaultScanLinesIntensity
 
     /// Converts persisted options into the renderer configuration type.
     func rendererConfiguration() -> NativeMatrixRenderer.Configuration {
@@ -117,7 +121,8 @@ struct MatrixScreenSaverOptions: Equatable {
                     }
                     .map { String($0) }
                     .joined()
-            }()
+            }(),
+            scanLinesIntensity: max(0, min(1, scanLinesIntensity))
         )
     }
 
@@ -136,6 +141,7 @@ struct MatrixScreenSaverOptions: Equatable {
             Keys.frameRate: defaultFrameRate,
             Keys.errorRate: defaultErrorRate,
             Keys.characters: defaultCharacters,
+            Keys.scanLinesIntensity: defaultScanLinesIntensity,
         ])
     }
 
@@ -153,7 +159,8 @@ struct MatrixScreenSaverOptions: Equatable {
             rainDensity: defaults.double(forKey: Keys.rainDensity),
             frameRate: defaults.double(forKey: Keys.frameRate),
             errorRate: defaults.double(forKey: Keys.errorRate),
-            characters: defaults.string(forKey: Keys.characters) ?? defaultCharacters
+            characters: defaults.string(forKey: Keys.characters) ?? defaultCharacters,
+            scanLinesIntensity: defaults.double(forKey: Keys.scanLinesIntensity)
         ).sanitized()
     }
 
@@ -172,6 +179,7 @@ struct MatrixScreenSaverOptions: Equatable {
         defaults.set(options.frameRate, forKey: Keys.frameRate)
         defaults.set(options.errorRate, forKey: Keys.errorRate)
         defaults.set(options.characters, forKey: Keys.characters)
+        defaults.set(options.scanLinesIntensity, forKey: Keys.scanLinesIntensity)
         defaults.synchronize()
     }
 }
@@ -227,6 +235,15 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
     private let numberSceneCheckbox = NSButton(checkboxWithTitle: "Number scene", target: nil, action: nil)
     private let twinkleCheckbox = NSButton(checkboxWithTitle: "Twinkle", target: nil, action: nil)
     private let diffuseCheckbox = NSButton(checkboxWithTitle: "Diffuse", target: nil, action: nil)
+    private let scanLinesSlider: NSSlider = {
+        let s = NSSlider(value: MatrixScreenSaverOptions.defaultScanLinesIntensity * 100,
+                         minValue: 0, maxValue: 100,
+                         target: nil, action: nil)
+        s.numberOfTickMarks = 0
+        s.allowsTickMarkValuesOnly = false
+        return s
+    }()
+    private let scanLinesValueLabel = NSTextField(labelWithString: "35%")
     private let characterWidthField = NSTextField(string: "")
     private let characterHeightField = NSTextField(string: "")
     private let rainDensityField = NSTextField(string: "")
@@ -256,6 +273,8 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         numberSceneCheckbox.state = options.numberSceneEnabled ? .on : .off
         twinkleCheckbox.state = options.twinkleEnabled ? .on : .off
         diffuseCheckbox.state = options.diffuseEnabled ? .on : .off
+        scanLinesSlider.doubleValue = options.scanLinesIntensity * 100
+        scanLinesValueLabel.stringValue = "\(Int(options.scanLinesIntensity * 100))%"
         characterWidthField.stringValue = Self.format(options.characterWidth)
         characterHeightField.stringValue = Self.format(options.characterHeight)
         rainDensityField.stringValue = Self.format(options.rainDensity)
@@ -331,6 +350,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         )
         let twinkleSection = makeCheckboxSection(checkbox: twinkleCheckbox, description: MatrixScreenSaverOptions.twinkleDescription)
         let diffuseSection = makeCheckboxSection(checkbox: diffuseCheckbox, description: MatrixScreenSaverOptions.diffuseDescription)
+        let scanLinesSection = makeScanLinesSection()
         let toggleStack = NSStackView()
         toggleStack.orientation = .vertical
         toggleStack.alignment = .leading
@@ -340,6 +360,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         toggleStack.addArrangedSubview(numberSceneSection)
         toggleStack.addArrangedSubview(twinkleSection)
         toggleStack.addArrangedSubview(diffuseSection)
+        toggleStack.addArrangedSubview(scanLinesSection)
         rootStack.addArrangedSubview(toggleStack)
         rootStack.addArrangedSubview(makeNumericSection(title: "Neo message speed", field: neoMessageSpeedFactorField, description: MatrixScreenSaverOptions.neoMessageSpeedFactorDescription))
         rootStack.addArrangedSubview(makeNeoMessageLinesButtonRow())
@@ -745,6 +766,45 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         Self.lineRowHeight
     }
 
+    /// Builds the scan lines slider row with a live percentage label.
+    private func makeScanLinesSection() -> NSView {
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 4
+        stack.setHuggingPriority(.required, for: .vertical)
+
+        let row = NSStackView()
+        row.orientation = .horizontal
+        row.spacing = 8
+        row.alignment = .centerY
+
+        let label = NSTextField(labelWithString: "Scan lines")
+        label.font = .systemFont(ofSize: 13, weight: .semibold)
+        label.setContentHuggingPriority(.required, for: .horizontal)
+
+        scanLinesSlider.target = self
+        scanLinesSlider.action = #selector(scanLinesSliderChanged(_:))
+        scanLinesSlider.translatesAutoresizingMaskIntoConstraints = false
+        scanLinesSlider.widthAnchor.constraint(equalToConstant: 120).isActive = true
+
+        scanLinesValueLabel.font = .monospacedDigitSystemFont(ofSize: 12, weight: .regular)
+        scanLinesValueLabel.textColor = .secondaryLabelColor
+        scanLinesValueLabel.setContentHuggingPriority(.required, for: .horizontal)
+
+        row.addArrangedSubview(label)
+        row.addArrangedSubview(scanLinesSlider)
+        row.addArrangedSubview(scanLinesValueLabel)
+
+        stack.addArrangedSubview(row)
+        stack.addArrangedSubview(makeDescriptionLabel(MatrixScreenSaverOptions.scanLinesDescription))
+        return stack
+    }
+
+    @objc private func scanLinesSliderChanged(_ sender: NSSlider) {
+        scanLinesValueLabel.stringValue = "\(Int(sender.doubleValue.rounded()))%"
+    }
+
     /// Builds a checkbox row with its explanatory description.
     private func makeCheckboxSection(checkbox: NSButton, description: String) -> NSView {
         let stack = NSStackView()
@@ -918,7 +978,8 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
             rainDensity: rainDensity,
             frameRate: frameRate,
             errorRate: errorRate,
-            characters: charactersField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            characters: charactersField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines),
+            scanLinesIntensity: scanLinesSlider.doubleValue / 100
         ).sanitized()
     }
 
