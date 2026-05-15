@@ -87,7 +87,19 @@ struct MatrixScreenSaverOptions: Equatable {
             rainDensity: max(rainDensity, Self.minimumRainDensity),
             frameRate: min(max(frameRate, Self.minimumFrameRate), Self.maximumFrameRate),
             errorRate: max(errorRate, Self.minimumErrorRate),
-            characters: characters
+            characters: {
+                var seen = Set<UnicodeScalar>()
+                return characters
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .unicodeScalars
+                    .filter { s in
+                        !CharacterSet.whitespacesAndNewlines.contains(s) &&
+                        !CharacterSet.controlCharacters.contains(s) &&
+                        seen.insert(s).inserted
+                    }
+                    .map { String($0) }
+                    .joined()
+            }()
         )
     }
 
@@ -668,7 +680,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject, NSTextFieldDelega
 
     private static let textFieldWidth: CGFloat = {
         let font = NSFont.systemFont(ofSize: NSFont.systemFontSize)
-        let textWidth = ceil(("0000000000" as NSString).size(withAttributes: [.font: font]).width)
+        let textWidth = ceil(("MMMMMMMMMMMMMMMMMMMMMMMM" as NSString).size(withAttributes: [.font: font]).width)
         return textWidth + 20
     }()
 
