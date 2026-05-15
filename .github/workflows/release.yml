@@ -118,6 +118,19 @@ jobs:
           rm -rf build
           ./build.sh
 
+      - name: Update CHANGELOG
+        id: changelog
+        uses: TriPSs/conventional-changelog-action@v6
+        with:
+          github-token: ${{ github.token }}
+          version-file: ./VERSION
+          version-path: ""
+          git-push: false
+          skip-commit: true
+          skip-tag: true
+          release-count: 0
+          output-file: CHANGELOG.md
+
       - name: Create or reuse release branch
         shell: bash
         run: |
@@ -143,8 +156,8 @@ jobs:
 
           git switch -c "${branch}"
           printf '%s\n' "${version}" > VERSION
-          git add VERSION
-          git commit -m "chore(release): ${version}" -m "- bump VERSION to ${version}"
+          git add VERSION CHANGELOG.md
+          git commit -m "chore(release): ${version}" -m "- bump VERSION to ${version}" -m "- update CHANGELOG.md"
           git push --set-upstream origin "${branch}"
 
       - name: Open or reuse release pull request
