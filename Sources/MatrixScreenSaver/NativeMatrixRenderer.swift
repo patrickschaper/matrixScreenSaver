@@ -10,6 +10,8 @@ final class NativeMatrixRenderer {
         var rainDensity = 1.0
         var frameRate = 25.0
         var errorRate = 1.0
+        var characters = ""
+        var neoMessageLines: [String] = NeoMessageScene.defaultLines
 
         /// Clamps runtime configuration values to the supported renderer ranges.
         func sanitized() -> Configuration {
@@ -21,7 +23,9 @@ final class NativeMatrixRenderer {
                 diffuseEnabled: diffuseEnabled,
                 rainDensity: max(rainDensity, MatrixScreenSaverOptions.minimumRainDensity),
                 frameRate: min(max(frameRate, MatrixScreenSaverOptions.minimumFrameRate), MatrixScreenSaverOptions.maximumFrameRate),
-                errorRate: max(errorRate, MatrixScreenSaverOptions.minimumErrorRate)
+                errorRate: max(errorRate, MatrixScreenSaverOptions.minimumErrorRate),
+                characters: characters,
+                neoMessageLines: neoMessageLines.isEmpty ? NeoMessageScene.defaultLines : neoMessageLines
             )
         }
     }
@@ -186,13 +190,13 @@ final class NativeMatrixRenderer {
     private static let rainDuration: TimeInterval = 90.0   // how long rain runs before restarting
     private static let numberIntroRainFrames = 160
     private static let numberIntroBlackoutInterval: TimeInterval = 1.0
-    private static let numberIntroBlackoutFraction = 0.10
+    private static let numberIntroBlackoutRounds = 10
     private static let numberIntroMargin = 2
     private static let maxBufferedSimulationSteps = 2.0
     private static let maxSimulationStepsPerTick = 2
     private static let disableBoldFlag: UInt32 = 0x1
     private static let blankRenderCell = RenderCell()
-    private static let glyphPool: [UnicodeScalar] = {
+    private static let defaultGlyphPool: [UnicodeScalar] = {
         var glyphs = Array("0123456789".unicodeScalars)
         glyphs.append(contentsOf: (0..<46).compactMap { UnicodeScalar(0xFF70 + $0) })
         glyphs.append(contentsOf: "<>*+.:=_|".unicodeScalars)
@@ -204,8 +208,23 @@ final class NativeMatrixRenderer {
     }()
     private static let palette = makePalette()
 
-    static var supportedScalars: [UnicodeScalar] {
-        glyphPool
+    /// Returns the glyph pool for the given characters string, deduplicating and falling back to the default pool when empty.
+    private static func resolveGlyphPool(characters: String) -> [UnicodeScalar] {
+        let trimmed = characters.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return defaultGlyphPool
+        }
+        var seen = Set<UnicodeScalar>()
+        var pool = [UnicodeScalar]()
+        for scalar in trimmed.unicodeScalars {
+            guard !scalar.properties.isDiacritic,
+                  !CharacterSet.whitespacesAndNewlines.contains(scalar),
+                  !CharacterSet.controlCharacters.contains(scalar) else { continue }
+            if seen.insert(scalar).inserted {
+                pool.append(scalar)
+            }
+        }
+        return pool.isEmpty ? defaultGlyphPool : pool
     }
 
     /// The content margin (in cells) used for the text row and columns in number/neo scenes.
@@ -216,6 +235,14 @@ final class NativeMatrixRenderer {
     private(set) var levelColors = NativeMatrixRenderer.palette
 
     private var configuration = Configuration()
+    private var activeGlyphPool: [UnicodeScalar] = NativeMatrixRenderer.defaultGlyphPool
+
+    var supportedScalars: [UnicodeScalar] {
+        let defaultSet = Set(Self.defaultGlyphPool)
+        let extra = activeGlyphPool.filter { !defaultSet.contains($0) }
+        return extra.isEmpty ? Self.defaultGlyphPool : Self.defaultGlyphPool + extra
+    }
+
     private var neoScene = NeoMessageScene()
     private var layers = [Layer(), Layer(), Layer()]
     private var renderCells: [RenderCell] = []
@@ -355,11 +382,14 @@ final class NativeMatrixRenderer {
         lastUpdateTime = Date.timeIntervalSinceReferenceDate
         pendingSimulationSteps = 0.0
 
+        activeGlyphPool = Self.resolveGlyphPool(characters: sanitizedConfiguration.characters)
+
         let shouldResetSceneSequence =
             columns > 0 &&
             rows > 0 &&
             (previousConfiguration.neoMessageSceneEnabled != sanitizedConfiguration.neoMessageSceneEnabled ||
-             previousConfiguration.numberSceneEnabled != sanitizedConfiguration.numberSceneEnabled)
+             previousConfiguration.numberSceneEnabled != sanitizedConfiguration.numberSceneEnabled ||
+             previousConfiguration.neoMessageLines != sanitizedConfiguration.neoMessageLines)
 
         if shouldResetSceneSequence || (!running && columns > 0 && rows > 0) {
             resetLayers()
@@ -463,12 +493,17 @@ final class NativeMatrixRenderer {
         let colStart = margin
         let colEnd = max(margin + 1, columns - margin)
         let contentColumns = colEnd - colStart
-        let blackoutCount = max(1, Int((Double(contentColumns) * Self.numberIntroBlackoutFraction).rounded()))
+        // Divide columns into exactly numberIntroBlackoutRounds groups so all
+        // screens — regardless of width — finish the blackout in the same time.
+        let numRounds = Self.numberIntroBlackoutRounds
+        let columnsPerRound = contentColumns > 0
+            ? max(1, Int(ceil(Double(contentColumns) / Double(numRounds))))
+            : 1
         var available = Array(colStart..<colEnd)
         var blackoutRounds: [[Int]] = []
-        while !available.isEmpty {
-            let count = min(blackoutCount, available.count)
-            let chosen = Array(available.shuffled(using: &numberSceneRNG).prefix(count))
+        for _ in 0..<numRounds {
+            let count = min(columnsPerRound, available.count)
+            let chosen = count > 0 ? Array(available.shuffled(using: &numberSceneRNG).prefix(count)) : []
             blackoutRounds.append(chosen)
             let chosenSet = Set(chosen)
             available.removeAll { chosenSet.contains($0) }
@@ -542,7 +577,8 @@ final class NativeMatrixRenderer {
         let count = numberIntroSchedule.charTimings.prefix(while: { $0 <= elapsed }).count
         numberIntroTypedCount = count
         if count >= totalChars {
-            setRow0(text: numberIntroSchedule.typingText, typedCount: totalChars, showCursor: false)
+            numberIntroCursorVisible = true
+            setRow0(text: numberIntroSchedule.typingText, typedCount: totalChars, showCursor: true)
             numberIntroPhase = .pauseAfterFirst
             numberIntroPhaseStart = numberIntroAnchor + numberIntroSchedule.typingEnd
             return
@@ -553,7 +589,16 @@ final class NativeMatrixRenderer {
     }
 
     private func stepPauseAfterFirst(t: TimeInterval) {
-        if t - numberIntroPhaseStart >= numberIntroSchedule.pause1Duration {
+        let elapsed = t - numberIntroPhaseStart
+        let halfPeriod = Int(elapsed / Self.numberIntroCursorBlinkPeriod)
+        let visible = halfPeriod % 2 == 0
+        if visible != numberIntroCursorVisible {
+            numberIntroCursorVisible = visible
+            setRow0(text: numberIntroSchedule.typingText,
+                    typedCount: numberIntroSchedule.charTimings.count,
+                    showCursor: visible)
+        }
+        if elapsed >= numberIntroSchedule.pause1Duration {
             numberIntroPhase = .secondLine
         }
     }
@@ -683,7 +728,7 @@ final class NativeMatrixRenderer {
         }
         visibleCountByRow[m] = (colStart..<colEnd).filter { numberIntroBlackedColumns.contains($0) }.count
         numberIntroBlackoutCount += 1
-        if numberIntroBlackedColumns.count >= colEnd - colStart {
+        if numberIntroBlackoutCount >= numberIntroSchedule.blackoutRounds.count {
             activeScene = .rainForever
             rainStartTime = Date.timeIntervalSinceReferenceDate
         }
@@ -750,12 +795,12 @@ final class NativeMatrixRenderer {
 
         // Quantise to a 5-second boundary so all displays activating within the
         // same window share an identical startTime and seed → perfect sync.
-        // Tolerates up to 4.9 s of inter-display activation skew; late starters
-        // fast-forward to the current scene position in a single frame.
+        // Tolerates up to 9.9 s of inter-display activation skew. sceneStartTime
+        // is always the *next* 10-second boundary, so every display waits for it
+        // and no display fast-forwards past the start of the Neo scene.
         let nowTime = Date.timeIntervalSinceReferenceDate
-        let syncWindow: TimeInterval = 5.0
-        // Add 3 s initial blank delay so the screen goes dark before the first scene.
-        sceneStartTime = floor(nowTime / syncWindow) * syncWindow + 3.0
+        let syncWindow: TimeInterval = 10.0
+        sceneStartTime = floor(nowTime / syncWindow) * syncWindow + syncWindow
         sceneSeed = UInt64(bitPattern: Int64(sceneStartTime))
         rainRNG = Xorshift64(seed: sceneSeed &+ 3)
 
@@ -772,7 +817,7 @@ final class NativeMatrixRenderer {
 
         if configuration.neoMessageSceneEnabled {
             activeScene = .neoMessage
-            neoScene.reset(startTime: sceneStartTime, seed: sceneSeed &+ 1)
+            neoScene.reset(startTime: sceneStartTime, seed: sceneSeed &+ 1, lines: configuration.neoMessageLines)
             for i in renderCells.indices { renderCells[i] = Self.blankRenderCell }
             for i in visibleCountByRow.indices { visibleCountByRow[i] = 0 }
             markAllRowsDirty()
@@ -944,7 +989,7 @@ final class NativeMatrixRenderer {
 
     /// Returns a random glyph from the supported rain character pool.
     private func randomGlyph() -> UnicodeScalar {
-        Self.glyphPool.randomElement(using: &rainRNG) ?? UnicodeScalar("0")
+        activeGlyphPool.randomElement(using: &rainRNG) ?? UnicodeScalar("0")
     }
 
     /// Returns a random ASCII numeral for the startup number scene.

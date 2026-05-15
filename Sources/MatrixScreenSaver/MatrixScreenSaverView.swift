@@ -541,6 +541,24 @@ final class MatrixScreenSaverView: ScreenSaverView {
         }
 
         NSGraphicsContext.restoreGraphicsState()
+
+        if saverOptions.scanLinesIntensity > 0 {
+            drawScanLines()
+        }
+    }
+
+    /// Overlays 1 px dark horizontal stripes every 2 px for a CRT scanline effect.
+    private func drawScanLines() {
+        let rect = showsWindowChrome ? terminalRect : bounds
+        guard let ctx = NSGraphicsContext.current?.cgContext else { return }
+        ctx.saveGState()
+        ctx.setFillColor(CGColor(gray: 0, alpha: saverOptions.scanLinesIntensity))
+        var y = rect.minY + 1
+        while y < rect.maxY {
+            ctx.fill(CGRect(x: rect.minX, y: floor(y), width: rect.width, height: 1))
+            y += 2
+        }
+        ctx.restoreGState()
     }
 
     /// Repaints dirty terminal rows into the cached frame buffer and presents it.
@@ -659,13 +677,14 @@ final class MatrixScreenSaverView: ScreenSaverView {
         font: NSFont
     ) -> [[UnicodeScalar: CGImage]] {
         var caches: [[UnicodeScalar: CGImage]] = Array(repeating: [:], count: palette.count)
+        let scalars = nativeRenderer.supportedScalars
         for level in palette.indices {
             let attributes: [NSAttributedString.Key: Any] = [
                 .font: font,
                 .foregroundColor: color(for: palette[level]),
             ]
-            caches[level].reserveCapacity(NativeMatrixRenderer.supportedScalars.count)
-            for scalar in NativeMatrixRenderer.supportedScalars {
+            caches[level].reserveCapacity(scalars.count)
+            for scalar in scalars {
                 guard let image = makeNativeGlyphImage(for: scalar, attributes: attributes) else {
                     continue
                 }

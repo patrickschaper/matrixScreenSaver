@@ -36,6 +36,8 @@ The saver exposes a native **Options…** sheet. The values are stored with `Scr
 | Rain density | Set the factor for the density of rain drops. A positive number. | 1.0 |
 | Frame rate | Set the frame rate per second. A positive number less than or equal to 1000. | 25 |
 | Error rate | Set the factor for the rate of character changes. A non-negative number. | 1.0 |
+| Characters | Restrict rain glyphs to a custom set (e.g. ATGC). Leave empty for the default. | *(empty)* |
+| Neo message lines | Lines typed during the Neo message intro. Between 1 and 10 lines, up to 256 characters each. | The 4 classic lines |
 
 ## Development
 
@@ -44,7 +46,7 @@ The saver exposes a native **Options…** sheet. The values are stored with `Scr
 - Native Swift/AppKit screen saver bundle
 - Edge-to-edge full-screen saver output, with terminal-style chrome kept in the preview host
 - In-process renderer for `rain-forever` with an optional upstream `number` intro
-- Native **Options…** sheet for Number scene, Twinkle, Diffuse, Character size, Rain density, Frame rate, and Error rate
+- Native **Options…** sheet for Number scene, Twinkle, Diffuse, Character size, Rain density, Frame rate, Error rate, and Characters
 - Preview app for fast iteration without reinstalling
 
 ### Repository layout

@@ -118,6 +118,20 @@ jobs:
           rm -rf build
           ./build.sh
 
+      - name: Update CHANGELOG
+        id: changelog
+        uses: TriPSs/conventional-changelog-action@v6
+        with:
+          github-token: ${{ github.token }}
+          version-file: ./VERSION
+          version-path: ""
+          tag-prefix: ""
+          git-push: false
+          skip-commit: true
+          skip-tag: true
+          release-count: 0
+          output-file: CHANGELOG.md
+
       - name: Create or reuse release branch
         shell: bash
         run: |
@@ -143,8 +157,8 @@ jobs:
 
           git switch -c "${branch}"
           printf '%s\n' "${version}" > VERSION
-          git add VERSION
-          git commit -m "chore(release): ${version}" -m "- bump VERSION to ${version}"
+          git add VERSION CHANGELOG.md
+          git commit -m "chore(release): ${version}" -m "- bump VERSION to ${version}" -m "- update CHANGELOG.md"
           git push --set-upstream origin "${branch}"
 
       - name: Open or reuse release pull request
@@ -251,6 +265,26 @@ jobs:
 
           ditto -c -k --sequesterRsrc "${{ steps.stage.outputs.dir }}" "${{ steps.version.outputs.archive }}"
 
+      - name: Extract release notes
+        if: steps.release.outputs.exists != 'true'
+        id: notes
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version="${{ steps.version.outputs.value }}"
+          notes_file="${RUNNER_TEMP}/release-notes.md"
+
+          # Extract the section for this version from CHANGELOG.md (between first and second ## heading)
+          awk "/^## \[${version}\]/{found=1; next} found && /^## /{exit} found{print}" CHANGELOG.md > "${notes_file}"
+
+          # Fall back to empty notes if nothing was extracted
+          if [[ ! -s "${notes_file}" ]]; then
+            printf '' > "${notes_file}"
+          fi
+
+          echo "file=${notes_file}" >> "$GITHUB_OUTPUT"
+
       - name: Create GitHub release
         if: steps.release.outputs.exists != 'true'
         env:
@@ -260,4 +294,4 @@ jobs:
           set -euo pipefail
 
           version="${{ steps.version.outputs.value }}"
-          gh release create "${version}" "${{ steps.version.outputs.archive }}" --title "${version}" --notes "" --target "${GITHUB_SHA}"
+          gh release create "${version}" "${{ steps.version.outputs.archive }}" --title "${version}" --notes-file "${{ steps.notes.outputs.file }}" --target "${GITHUB_SHA}"
