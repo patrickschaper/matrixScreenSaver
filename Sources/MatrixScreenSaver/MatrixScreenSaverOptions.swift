@@ -347,26 +347,31 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         rootStack.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
         rootStack.translatesAutoresizingMaskIntoConstraints = false
 
-        // Header row: title + About link
-        let headerRow = NSStackView()
-        headerRow.orientation = .horizontal
-        headerRow.alignment = .firstBaseline
-        headerRow.spacing = 8
+        // Header row: title left, About link right
+        let headerContainer = NSView()
+        headerContainer.translatesAutoresizingMaskIntoConstraints = false
 
         let titleLabel = NSTextField(labelWithString: "macOS Matrix Screen Saver")
         titleLabel.font = .systemFont(ofSize: 15, weight: .semibold)
-        titleLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
 
         let aboutButton = NSButton(title: "About", target: self, action: #selector(openRepository(_:)))
         aboutButton.bezelStyle = .inline
         aboutButton.isBordered = false
         aboutButton.contentTintColor = .linkColor
         aboutButton.font = .systemFont(ofSize: 13)
-        aboutButton.setContentHuggingPriority(.required, for: .horizontal)
+        aboutButton.translatesAutoresizingMaskIntoConstraints = false
 
-        headerRow.addArrangedSubview(titleLabel)
-        headerRow.addArrangedSubview(aboutButton)
-        rootStack.addArrangedSubview(headerRow)
+        headerContainer.addSubview(titleLabel)
+        headerContainer.addSubview(aboutButton)
+        NSLayoutConstraint.activate([
+            titleLabel.leadingAnchor.constraint(equalTo: headerContainer.leadingAnchor),
+            titleLabel.centerYAnchor.constraint(equalTo: headerContainer.centerYAnchor),
+            aboutButton.trailingAnchor.constraint(equalTo: headerContainer.trailingAnchor),
+            aboutButton.firstBaselineAnchor.constraint(equalTo: titleLabel.firstBaselineAnchor),
+            headerContainer.heightAnchor.constraint(equalTo: titleLabel.heightAnchor),
+        ])
+        rootStack.addArrangedSubview(headerContainer)
 
         let neoMessageSceneSection = makeCheckboxSection(
             checkbox: neoMessageSceneCheckbox,
