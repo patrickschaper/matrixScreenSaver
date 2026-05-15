@@ -125,6 +125,7 @@ jobs:
           github-token: ${{ github.token }}
           version-file: ./VERSION
           version-path: ""
+          tag-prefix: ""
           git-push: false
           skip-commit: true
           skip-tag: true
