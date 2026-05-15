@@ -659,13 +659,14 @@ final class MatrixScreenSaverView: ScreenSaverView {
         font: NSFont
     ) -> [[UnicodeScalar: CGImage]] {
         var caches: [[UnicodeScalar: CGImage]] = Array(repeating: [:], count: palette.count)
+        let scalars = nativeRenderer.supportedScalars
         for level in palette.indices {
             let attributes: [NSAttributedString.Key: Any] = [
                 .font: font,
                 .foregroundColor: color(for: palette[level]),
             ]
-            caches[level].reserveCapacity(NativeMatrixRenderer.supportedScalars.count)
-            for scalar in NativeMatrixRenderer.supportedScalars {
+            caches[level].reserveCapacity(scalars.count)
+            for scalar in scalars {
                 guard let image = makeNativeGlyphImage(for: scalar, attributes: attributes) else {
                     continue
                 }
