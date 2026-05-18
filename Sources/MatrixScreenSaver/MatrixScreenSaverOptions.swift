@@ -16,6 +16,7 @@ struct MatrixScreenSaverOptions: Equatable {
         static let errorRate = "ErrorRate"
         static let characters = "Characters"
         static let scanLinesIntensity = "ScanLinesIntensity"
+        static let scanLinesVertical = "ScanLinesVertical"
     }
 
     static let defaultNeoMessageSceneEnabled = true
@@ -30,7 +31,8 @@ struct MatrixScreenSaverOptions: Equatable {
     static let defaultFrameRate = 25.0
     static let defaultErrorRate = 1.0
     static let defaultCharacters = ""
-    static let defaultScanLinesIntensity = 0.35
+    static let defaultScanLinesIntensity = 0.25
+    static let defaultScanLinesVertical = true
 
     static let minimumRainDensity = 0.0001
     static let minimumFrameRate = 0.0001
@@ -54,7 +56,7 @@ struct MatrixScreenSaverOptions: Equatable {
     static let frameRateDescription = "Set the frame rate per second. A positive number less than or equal to 1000. The default is 25."
     static let errorRateDescription = "Set the factor for the rate of character changes. A non-negative number. The default is 1.0."
     static let charactersDescription = "Restrict rain glyphs to a custom set (e.g. ATGC). Leave empty for the default."
-    static let scanLinesDescription = "Intensity of the horizontal CRT scan line overlay (0 = off, 100 = fully opaque). Default is 35%."
+    static let scanLinesDescription = "Intensity of the CRT scan line overlay (0 = off, 100 = fully opaque). Default is 25%."
 
     var neoMessageSceneEnabled = defaultNeoMessageSceneEnabled
     var neoMessageSpeedFactor = defaultNeoMessageSpeedFactor
@@ -69,6 +71,7 @@ struct MatrixScreenSaverOptions: Equatable {
     var errorRate = defaultErrorRate
     var characters = defaultCharacters
     var scanLinesIntensity = defaultScanLinesIntensity
+    var scanLinesVertical = defaultScanLinesVertical
 
     /// Converts persisted options into the renderer configuration type.
     func rendererConfiguration() -> NativeMatrixRenderer.Configuration {
@@ -122,7 +125,8 @@ struct MatrixScreenSaverOptions: Equatable {
                     .map { String($0) }
                     .joined()
             }(),
-            scanLinesIntensity: max(0, min(1, scanLinesIntensity))
+            scanLinesIntensity: max(0, min(1, scanLinesIntensity)),
+            scanLinesVertical: scanLinesVertical
         )
     }
 
@@ -142,6 +146,7 @@ struct MatrixScreenSaverOptions: Equatable {
             Keys.errorRate: defaultErrorRate,
             Keys.characters: defaultCharacters,
             Keys.scanLinesIntensity: defaultScanLinesIntensity,
+            Keys.scanLinesVertical: defaultScanLinesVertical,
         ])
     }
 
@@ -160,7 +165,8 @@ struct MatrixScreenSaverOptions: Equatable {
             frameRate: defaults.double(forKey: Keys.frameRate),
             errorRate: defaults.double(forKey: Keys.errorRate),
             characters: defaults.string(forKey: Keys.characters) ?? defaultCharacters,
-            scanLinesIntensity: defaults.double(forKey: Keys.scanLinesIntensity)
+            scanLinesIntensity: defaults.double(forKey: Keys.scanLinesIntensity),
+            scanLinesVertical: defaults.bool(forKey: Keys.scanLinesVertical)
         ).sanitized()
     }
 
@@ -180,6 +186,7 @@ struct MatrixScreenSaverOptions: Equatable {
         defaults.set(options.errorRate, forKey: Keys.errorRate)
         defaults.set(options.characters, forKey: Keys.characters)
         defaults.set(options.scanLinesIntensity, forKey: Keys.scanLinesIntensity)
+        defaults.set(options.scanLinesVertical, forKey: Keys.scanLinesVertical)
         defaults.synchronize()
     }
 }
@@ -243,7 +250,13 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         s.allowsTickMarkValuesOnly = false
         return s
     }()
-    private let scanLinesValueLabel = NSTextField(labelWithString: "35%")
+    private let scanLinesValueLabel = NSTextField(labelWithString: "25%")
+    private let scanLinesDirectionPopup: NSPopUpButton = {
+        let popup = NSPopUpButton(frame: .zero, pullsDown: false)
+        popup.addItems(withTitles: ["Vertical", "Horizontal"])
+        popup.setContentHuggingPriority(.required, for: .horizontal)
+        return popup
+    }()
     private let characterWidthField = NSTextField(string: "")
     private let characterHeightField = NSTextField(string: "")
     private let rainDensityField = NSTextField(string: "")
@@ -275,6 +288,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         diffuseCheckbox.state = options.diffuseEnabled ? .on : .off
         scanLinesSlider.doubleValue = options.scanLinesIntensity * 100
         scanLinesValueLabel.stringValue = "\(Int(options.scanLinesIntensity * 100))%"
+        scanLinesDirectionPopup.selectItem(at: options.scanLinesVertical ? 0 : 1)
         characterWidthField.stringValue = Self.format(options.characterWidth)
         characterHeightField.stringValue = Self.format(options.characterHeight)
         rainDensityField.stringValue = Self.format(options.rainDensity)
@@ -828,6 +842,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         row.addArrangedSubview(label)
         row.addArrangedSubview(scanLinesSlider)
         row.addArrangedSubview(scanLinesValueLabel)
+        row.addArrangedSubview(scanLinesDirectionPopup)
 
         stack.addArrangedSubview(row)
         stack.addArrangedSubview(makeDescriptionLabel(MatrixScreenSaverOptions.scanLinesDescription))
@@ -1012,7 +1027,8 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
             frameRate: frameRate,
             errorRate: errorRate,
             characters: charactersField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines),
-            scanLinesIntensity: scanLinesSlider.doubleValue / 100
+            scanLinesIntensity: scanLinesSlider.doubleValue / 100,
+            scanLinesVertical: scanLinesDirectionPopup.indexOfSelectedItem == 0
         ).sanitized()
     }
 
