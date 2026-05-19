@@ -234,6 +234,10 @@ final class NativeMatrixRenderer {
     private(set) var rows = 0
     private(set) var levelColors = NativeMatrixRenderer.palette
 
+    /// XORed into sceneSeed in beginSceneSequence so each physical display
+    /// gets an independent animation while preserving per-display determinism.
+    var seedOffset: UInt64 = 0
+
     private var configuration = Configuration()
     private var activeGlyphPool: [UnicodeScalar] = NativeMatrixRenderer.defaultGlyphPool
 
@@ -801,7 +805,7 @@ final class NativeMatrixRenderer {
         let nowTime = Date.timeIntervalSinceReferenceDate
         let syncWindow: TimeInterval = 10.0
         sceneStartTime = floor(nowTime / syncWindow) * syncWindow + syncWindow
-        sceneSeed = UInt64(bitPattern: Int64(sceneStartTime))
+        sceneSeed = UInt64(bitPattern: Int64(sceneStartTime)) ^ seedOffset
         rainRNG = Xorshift64(seed: sceneSeed &+ 3)
 
         guard columns > 0, rows > 0 else {
