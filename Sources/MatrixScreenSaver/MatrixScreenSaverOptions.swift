@@ -79,7 +79,7 @@ struct MatrixScreenSaverOptions: Equatable {
     var scanLinesVertical = defaultScanLinesVertical
 
     /// Converts persisted options into the renderer configuration type.
-    func rendererConfiguration() -> NativeMatrixRenderer.Configuration {
+    func rendererConfiguration(isPreview: Bool = false) -> NativeMatrixRenderer.Configuration {
         NativeMatrixRenderer.Configuration(
             neoMessageSceneEnabled: neoMessageSceneEnabled,
             neoMessageSpeedFactor: neoMessageSpeedFactor,
@@ -90,7 +90,8 @@ struct MatrixScreenSaverOptions: Equatable {
             frameRate: frameRate,
             errorRate: errorRate,
             characters: characters,
-            neoMessageLines: neoMessageLines
+            neoMessageLines: neoMessageLines,
+            skipSyncDelay: isPreview
         )
     }
 
