@@ -12,6 +12,10 @@ final class NativeMatrixRenderer {
         var errorRate = 1.0
         var characters = ""
         var neoMessageLines: [String] = NeoMessageScene.defaultLines
+        /// When true the 10-second multi-screen sync delay is skipped so scenes
+        /// start within one second of launch. Set for preview contexts where
+        /// cross-display alignment is unnecessary.
+        var skipSyncDelay = false
 
         /// Clamps runtime configuration values to the supported renderer ranges.
         func sanitized() -> Configuration {
@@ -25,7 +29,8 @@ final class NativeMatrixRenderer {
                 frameRate: min(max(frameRate, MatrixScreenSaverOptions.minimumFrameRate), MatrixScreenSaverOptions.maximumFrameRate),
                 errorRate: max(errorRate, MatrixScreenSaverOptions.minimumErrorRate),
                 characters: characters,
-                neoMessageLines: neoMessageLines.isEmpty ? NeoMessageScene.defaultLines : neoMessageLines
+                neoMessageLines: neoMessageLines.isEmpty ? NeoMessageScene.defaultLines : neoMessageLines,
+                skipSyncDelay: skipSyncDelay
             )
         }
     }
@@ -793,14 +798,17 @@ final class NativeMatrixRenderer {
         now = 100
         frameIndex = 0
 
-        // Quantise to a 5-second boundary so all displays activating within the
-        // same window share an identical startTime and seed → perfect sync.
-        // Tolerates up to 9.9 s of inter-display activation skew. sceneStartTime
-        // is always the *next* 10-second boundary, so every display waits for it
-        // and no display fast-forwards past the start of the Neo scene.
+        // In preview contexts (System Settings thumbnail, preview host) skip the
+        // multi-screen sync delay so scenes begin within one second of launch.
+        // In the screensaver engine the 10-second boundary ensures all displays
+        // sharing the same activation window use an identical startTime and seed.
         let nowTime = Date.timeIntervalSinceReferenceDate
-        let syncWindow: TimeInterval = 10.0
-        sceneStartTime = floor(nowTime / syncWindow) * syncWindow + syncWindow
+        if configuration.skipSyncDelay {
+            sceneStartTime = nowTime + 1.0
+        } else {
+            let syncWindow: TimeInterval = 10.0
+            sceneStartTime = floor(nowTime / syncWindow) * syncWindow + syncWindow
+        }
         sceneSeed = UInt64(bitPattern: Int64(sceneStartTime))
         rainRNG = Xorshift64(seed: sceneSeed &+ 3)
 

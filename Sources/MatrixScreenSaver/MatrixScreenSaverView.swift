@@ -66,6 +66,14 @@ final class MatrixScreenSaverView: ScreenSaverView {
     private let debugIdentifier = String(UUID().uuidString.prefix(8))
     private var showsWindowChrome: Bool { isPreview }
 
+    /// Multi-screen sync is only needed when running inside ScreenSaverEngine
+    /// in full-screen mode. In the preview host or System Settings thumbnail the
+    /// 10-second sync window just delays the first scene unnecessarily.
+    private static let isRunningInScreenSaverEngine: Bool = {
+        let name = ProcessInfo.processInfo.processName
+        return name == "ScreenSaverEngine" || name == "legacyScreenSaver"
+    }()
+
     override var isOpaque: Bool {
         true
     }
@@ -155,7 +163,8 @@ final class MatrixScreenSaverView: ScreenSaverView {
             saverOptions = Self.loadSaverOptions()
         }
         shouldReloadOptionsOnStart = true
-        nativeRenderer.updateConfiguration(saverOptions.rendererConfiguration())
+        let skipSyncDelay = isPreview || !Self.isRunningInScreenSaverEngine
+        nativeRenderer.updateConfiguration(saverOptions.rendererConfiguration(isPreview: skipSyncDelay))
         animationTimeInterval = nativeRenderer.preferredAnimationTimeInterval
         NSLog("MatrixScreenSaver startAnimation bounds=%@", NSStringFromRect(bounds))
         appendDebugLog("[\(debugIdentifier)] startAnimation bounds=\(NSStringFromRect(bounds))")
