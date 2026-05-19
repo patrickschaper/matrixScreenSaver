@@ -66,6 +66,14 @@ final class MatrixScreenSaverView: ScreenSaverView {
     private let debugIdentifier = String(UUID().uuidString.prefix(8))
     private var showsWindowChrome: Bool { isPreview }
 
+    /// Multi-screen sync is only needed when running inside ScreenSaverEngine
+    /// in full-screen mode. In the preview host or System Settings thumbnail the
+    /// 10-second sync window just delays the first scene unnecessarily.
+    private static let isRunningInScreenSaverEngine: Bool = {
+        let name = ProcessInfo.processInfo.processName
+        return name == "ScreenSaverEngine" || name == "legacyScreenSaver"
+    }()
+
     override var isOpaque: Bool {
         true
     }
@@ -155,7 +163,8 @@ final class MatrixScreenSaverView: ScreenSaverView {
             saverOptions = Self.loadSaverOptions()
         }
         shouldReloadOptionsOnStart = true
-        nativeRenderer.updateConfiguration(saverOptions.rendererConfiguration())
+        let skipSyncDelay = isPreview || !Self.isRunningInScreenSaverEngine
+        nativeRenderer.updateConfiguration(saverOptions.rendererConfiguration(isPreview: skipSyncDelay))
         animationTimeInterval = nativeRenderer.preferredAnimationTimeInterval
         NSLog("MatrixScreenSaver startAnimation bounds=%@", NSStringFromRect(bounds))
         appendDebugLog("[\(debugIdentifier)] startAnimation bounds=\(NSStringFromRect(bounds))")
@@ -547,16 +556,24 @@ final class MatrixScreenSaverView: ScreenSaverView {
         }
     }
 
-    /// Overlays 1 px dark horizontal stripes every 2 px for a CRT scanline effect.
+    /// Overlays 1 px dark stripes every 2 px for a CRT scanline effect.
     private func drawScanLines() {
         let rect = showsWindowChrome ? terminalRect : bounds
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
         ctx.saveGState()
         ctx.setFillColor(CGColor(gray: 0, alpha: saverOptions.scanLinesIntensity))
-        var y = rect.minY + 1
-        while y < rect.maxY {
-            ctx.fill(CGRect(x: rect.minX, y: floor(y), width: rect.width, height: 1))
-            y += 2
+        if saverOptions.scanLinesVertical {
+            var x = rect.minX + 1
+            while x < rect.maxX {
+                ctx.fill(CGRect(x: floor(x), y: rect.minY, width: 1, height: rect.height))
+                x += 2
+            }
+        } else {
+            var y = rect.minY + 1
+            while y < rect.maxY {
+                ctx.fill(CGRect(x: rect.minX, y: floor(y), width: rect.width, height: 1))
+                y += 2
+            }
         }
         ctx.restoreGState()
     }

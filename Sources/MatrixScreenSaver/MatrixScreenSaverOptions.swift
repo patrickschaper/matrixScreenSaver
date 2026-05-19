@@ -16,6 +16,7 @@ struct MatrixScreenSaverOptions: Equatable {
         static let errorRate = "ErrorRate"
         static let characters = "Characters"
         static let scanLinesIntensity = "ScanLinesIntensity"
+        static let scanLinesVertical = "ScanLinesVertical"
     }
 
     static let defaultNeoMessageSceneEnabled = true
@@ -30,7 +31,8 @@ struct MatrixScreenSaverOptions: Equatable {
     static let defaultFrameRate = 25.0
     static let defaultErrorRate = 1.0
     static let defaultCharacters = ""
-    static let defaultScanLinesIntensity = 0.35
+    static let defaultScanLinesIntensity = 0.25
+    static let defaultScanLinesVertical = true
 
     static let minimumRainDensity = 0.0001
     static let minimumFrameRate = 0.0001
@@ -49,12 +51,17 @@ struct MatrixScreenSaverOptions: Equatable {
     static let numberSceneDescription = "Show the startup number scene before continuous rain. Turned on by default."
     static let diffuseDescription = "Turn on/off the glow effect. Turned on by default."
     static let twinkleDescription = "Turn on/off the twinkling effect. Turned on by default."
-    static let characterSizeDescription = "Set the character cell width and height in pixels. The default is 9x17.\nExample pairs: 8x15, 9x17, 10x19, 11x21, 12x23, and 13x24."
+    static let characterSizeDescription = "Character cell size in pixels. The default is 11×21."
+
+    static let characterSizePairs: [(width: Int, height: Int)] = [
+        (4, 8), (5, 9), (6, 11), (7, 13), (8, 15), (9, 17), (10, 19), (11, 21), (12, 23), (13, 24), (14, 26), (15, 28), (16, 30), (17, 32), (18, 34)
+    ]
+    static let defaultCharacterSizeIndex = 7
     static let rainDensityDescription = "Set the factor for the density of rain drops. A positive number. The default is 1.0."
     static let frameRateDescription = "Set the frame rate per second. A positive number less than or equal to 1000. The default is 25."
     static let errorRateDescription = "Set the factor for the rate of character changes. A non-negative number. The default is 1.0."
     static let charactersDescription = "Restrict rain glyphs to a custom set (e.g. ATGC). Leave empty for the default."
-    static let scanLinesDescription = "Intensity of the horizontal CRT scan line overlay (0 = off, 100 = fully opaque). Default is 35%."
+    static let scanLinesDescription = "Intensity of the CRT scan line overlay (0 = off, 100 = fully opaque). Default is 25%."
 
     var neoMessageSceneEnabled = defaultNeoMessageSceneEnabled
     var neoMessageSpeedFactor = defaultNeoMessageSpeedFactor
@@ -69,9 +76,10 @@ struct MatrixScreenSaverOptions: Equatable {
     var errorRate = defaultErrorRate
     var characters = defaultCharacters
     var scanLinesIntensity = defaultScanLinesIntensity
+    var scanLinesVertical = defaultScanLinesVertical
 
     /// Converts persisted options into the renderer configuration type.
-    func rendererConfiguration() -> NativeMatrixRenderer.Configuration {
+    func rendererConfiguration(isPreview: Bool = false) -> NativeMatrixRenderer.Configuration {
         NativeMatrixRenderer.Configuration(
             neoMessageSceneEnabled: neoMessageSceneEnabled,
             neoMessageSpeedFactor: neoMessageSpeedFactor,
@@ -82,7 +90,8 @@ struct MatrixScreenSaverOptions: Equatable {
             frameRate: frameRate,
             errorRate: errorRate,
             characters: characters,
-            neoMessageLines: neoMessageLines
+            neoMessageLines: neoMessageLines,
+            skipSyncDelay: isPreview
         )
     }
 
@@ -122,7 +131,8 @@ struct MatrixScreenSaverOptions: Equatable {
                     .map { String($0) }
                     .joined()
             }(),
-            scanLinesIntensity: max(0, min(1, scanLinesIntensity))
+            scanLinesIntensity: max(0, min(1, scanLinesIntensity)),
+            scanLinesVertical: scanLinesVertical
         )
     }
 
@@ -142,6 +152,7 @@ struct MatrixScreenSaverOptions: Equatable {
             Keys.errorRate: defaultErrorRate,
             Keys.characters: defaultCharacters,
             Keys.scanLinesIntensity: defaultScanLinesIntensity,
+            Keys.scanLinesVertical: defaultScanLinesVertical,
         ])
     }
 
@@ -160,7 +171,8 @@ struct MatrixScreenSaverOptions: Equatable {
             frameRate: defaults.double(forKey: Keys.frameRate),
             errorRate: defaults.double(forKey: Keys.errorRate),
             characters: defaults.string(forKey: Keys.characters) ?? defaultCharacters,
-            scanLinesIntensity: defaults.double(forKey: Keys.scanLinesIntensity)
+            scanLinesIntensity: defaults.double(forKey: Keys.scanLinesIntensity),
+            scanLinesVertical: defaults.bool(forKey: Keys.scanLinesVertical)
         ).sanitized()
     }
 
@@ -180,6 +192,7 @@ struct MatrixScreenSaverOptions: Equatable {
         defaults.set(options.errorRate, forKey: Keys.errorRate)
         defaults.set(options.characters, forKey: Keys.characters)
         defaults.set(options.scanLinesIntensity, forKey: Keys.scanLinesIntensity)
+        defaults.set(options.scanLinesVertical, forKey: Keys.scanLinesVertical)
         defaults.synchronize()
     }
 }
@@ -188,8 +201,6 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
     NSTextFieldDelegate, NSWindowDelegate,
     NSTableViewDataSource, NSTableViewDelegate {
     private enum ValidationError: LocalizedError {
-        case characterWidth
-        case characterHeight
         case neoMessageSpeedFactor
         case rainDensity
         case frameRate
@@ -197,10 +208,6 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
 
         var errorDescription: String? {
             switch self {
-            case .characterWidth:
-                return "Character width must be a positive whole number."
-            case .characterHeight:
-                return "Character height must be a positive whole number."
             case .neoMessageSpeedFactor:
                 return "Neo message speed must be a positive number."
             case .rainDensity:
@@ -243,9 +250,26 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         s.allowsTickMarkValuesOnly = false
         return s
     }()
-    private let scanLinesValueLabel = NSTextField(labelWithString: "35%")
-    private let characterWidthField = NSTextField(string: "")
-    private let characterHeightField = NSTextField(string: "")
+    private let scanLinesValueLabel = NSTextField(labelWithString: "25%")
+    private let scanLinesDirectionPopup: NSPopUpButton = {
+        let popup = NSPopUpButton(frame: .zero, pullsDown: false)
+        popup.addItems(withTitles: ["Vertical", "Horizontal"])
+        popup.setContentHuggingPriority(.required, for: .horizontal)
+        return popup
+    }()
+    private let characterSizeSlider: NSSlider = {
+        let pairs = MatrixScreenSaverOptions.characterSizePairs
+        let s = NSSlider(value: Double(MatrixScreenSaverOptions.defaultCharacterSizeIndex),
+                         minValue: 0, maxValue: Double(pairs.count - 1),
+                         target: nil, action: nil)
+        s.numberOfTickMarks = pairs.count
+        s.allowsTickMarkValuesOnly = true
+        return s
+    }()
+    private let characterSizeValueLabel: NSTextField = {
+        let pair = MatrixScreenSaverOptions.characterSizePairs[MatrixScreenSaverOptions.defaultCharacterSizeIndex]
+        return NSTextField(labelWithString: "\(pair.width)×\(pair.height)")
+    }()
     private let rainDensityField = NSTextField(string: "")
     private let frameRateField = NSTextField(string: "")
     private let errorRateField = NSTextField(string: "")
@@ -275,8 +299,13 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         diffuseCheckbox.state = options.diffuseEnabled ? .on : .off
         scanLinesSlider.doubleValue = options.scanLinesIntensity * 100
         scanLinesValueLabel.stringValue = "\(Int(options.scanLinesIntensity * 100))%"
-        characterWidthField.stringValue = Self.format(options.characterWidth)
-        characterHeightField.stringValue = Self.format(options.characterHeight)
+        scanLinesDirectionPopup.selectItem(at: options.scanLinesVertical ? 0 : 1)
+        let sizeIndex = MatrixScreenSaverOptions.characterSizePairs.firstIndex(where: {
+            $0.width == options.characterWidth && $0.height == options.characterHeight
+        }) ?? MatrixScreenSaverOptions.defaultCharacterSizeIndex
+        characterSizeSlider.doubleValue = Double(sizeIndex)
+        let pair = MatrixScreenSaverOptions.characterSizePairs[sizeIndex]
+        characterSizeValueLabel.stringValue = "\(pair.width)×\(pair.height)"
         rainDensityField.stringValue = Self.format(options.rainDensity)
         frameRateField.stringValue = Self.format(options.frameRate)
         errorRateField.stringValue = Self.format(options.errorRate)
@@ -328,14 +357,12 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         window.isReleasedWhenClosed = false
         window.delegate = self
 
-        characterWidthField.formatter = Self.integerFormatter
-        characterHeightField.formatter = Self.integerFormatter
+        characterSizeSlider.target = self
+        characterSizeSlider.action = #selector(characterSizeSliderChanged(_:))
         neoMessageSpeedFactorField.formatter = Self.numberFormatter
         rainDensityField.formatter = Self.numberFormatter
         frameRateField.formatter = Self.numberFormatter
         errorRateField.formatter = Self.numberFormatter
-        characterWidthField.delegate = self
-        characterHeightField.delegate = self
         neoMessageSpeedFactorField.delegate = self
         rainDensityField.delegate = self
         frameRateField.delegate = self
@@ -828,6 +855,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         row.addArrangedSubview(label)
         row.addArrangedSubview(scanLinesSlider)
         row.addArrangedSubview(scanLinesValueLabel)
+        row.addArrangedSubview(scanLinesDirectionPopup)
 
         stack.addArrangedSubview(row)
         stack.addArrangedSubview(makeDescriptionLabel(MatrixScreenSaverOptions.scanLinesDescription))
@@ -912,7 +940,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         return stack
     }
 
-    /// Builds the side-by-side character width and height controls.
+    /// Builds the character size slider with a live size label.
     private func makeCharacterSizeSection() -> NSView {
         let stack = NSStackView()
         stack.orientation = .vertical
@@ -922,42 +950,33 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
 
         let row = NSStackView()
         row.orientation = .horizontal
-        row.spacing = 12
+        row.spacing = 8
         row.alignment = .centerY
 
         let titleLabel = NSTextField(labelWithString: "Character size")
         titleLabel.font = .systemFont(ofSize: 13, weight: .semibold)
         titleLabel.setContentHuggingPriority(.required, for: .horizontal)
 
-        let spacer = NSView()
-        spacer.translatesAutoresizingMaskIntoConstraints = false
-        spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        spacer.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        characterSizeSlider.translatesAutoresizingMaskIntoConstraints = false
+        characterSizeSlider.widthAnchor.constraint(equalToConstant: 120).isActive = true
 
-        let widthLabel = NSTextField(labelWithString: "Width")
-        widthLabel.setContentHuggingPriority(.required, for: .horizontal)
-        characterWidthField.alignment = .left
-        characterWidthField.controlSize = .regular
-        characterWidthField.translatesAutoresizingMaskIntoConstraints = false
-        characterWidthField.widthAnchor.constraint(equalToConstant: Self.threeDigitFieldWidth).isActive = true
-
-        let heightLabel = NSTextField(labelWithString: "Height")
-        heightLabel.setContentHuggingPriority(.required, for: .horizontal)
-        characterHeightField.alignment = .left
-        characterHeightField.controlSize = .regular
-        characterHeightField.translatesAutoresizingMaskIntoConstraints = false
-        characterHeightField.widthAnchor.constraint(equalToConstant: Self.threeDigitFieldWidth).isActive = true
+        characterSizeValueLabel.font = .monospacedDigitSystemFont(ofSize: 12, weight: .regular)
+        characterSizeValueLabel.textColor = .secondaryLabelColor
+        characterSizeValueLabel.setContentHuggingPriority(.required, for: .horizontal)
 
         row.addArrangedSubview(titleLabel)
-        row.addArrangedSubview(spacer)
-        row.addArrangedSubview(widthLabel)
-        row.addArrangedSubview(characterWidthField)
-        row.addArrangedSubview(heightLabel)
-        row.addArrangedSubview(characterHeightField)
+        row.addArrangedSubview(characterSizeSlider)
+        row.addArrangedSubview(characterSizeValueLabel)
 
         stack.addArrangedSubview(row)
         stack.addArrangedSubview(makeDescriptionLabel(MatrixScreenSaverOptions.characterSizeDescription))
         return stack
+    }
+
+    @objc private func characterSizeSliderChanged(_ sender: NSSlider) {
+        let index = Int(sender.doubleValue.rounded())
+        let pair = MatrixScreenSaverOptions.characterSizePairs[index]
+        characterSizeValueLabel.stringValue = "\(pair.width)×\(pair.height)"
     }
 
     /// Creates the smaller descriptive text used under each option row.
@@ -971,19 +990,13 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
 
     /// Validates all control values and returns a sanitized options snapshot.
     private func validatedOptions() throws -> MatrixScreenSaverOptions {
-        let characterWidth = try parseInteger(from: characterWidthField, error: .characterWidth)
-        let characterHeight = try parseInteger(from: characterHeightField, error: .characterHeight)
+        let sizeIndex = Int(characterSizeSlider.doubleValue.rounded())
+        let sizePair = MatrixScreenSaverOptions.characterSizePairs[sizeIndex]
         let neoMessageSpeedFactor = try parseDouble(from: neoMessageSpeedFactorField, error: .neoMessageSpeedFactor)
         let rainDensity = try parseDouble(from: rainDensityField, error: .rainDensity)
         let frameRate = try parseDouble(from: frameRateField, error: .frameRate)
         let errorRate = try parseDouble(from: errorRateField, error: .errorRate)
 
-        guard characterWidth > 0 else {
-            throw ValidationError.characterWidth
-        }
-        guard characterHeight > 0 else {
-            throw ValidationError.characterHeight
-        }
         guard neoMessageSpeedFactor > 0 else {
             throw ValidationError.neoMessageSpeedFactor
         }
@@ -1006,13 +1019,14 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
             numberSceneEnabled: numberSceneCheckbox.state == .on,
             twinkleEnabled: twinkleCheckbox.state == .on,
             diffuseEnabled: diffuseCheckbox.state == .on,
-            characterWidth: characterWidth,
-            characterHeight: characterHeight,
+            characterWidth: sizePair.width,
+            characterHeight: sizePair.height,
             rainDensity: rainDensity,
             frameRate: frameRate,
             errorRate: errorRate,
             characters: charactersField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines),
-            scanLinesIntensity: scanLinesSlider.doubleValue / 100
+            scanLinesIntensity: scanLinesSlider.doubleValue / 100,
+            scanLinesVertical: scanLinesDirectionPopup.indexOfSelectedItem == 0
         ).sanitized()
     }
 
@@ -1039,12 +1053,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
 
     /// Normalizes edited text before AppKit ends text field editing.
     func control(_ control: NSControl, textShouldEndEditing fieldEditor: NSText) -> Bool {
-        let normalized: String
-        if control === characterWidthField || control === characterHeightField {
-            normalized = Self.normalizedIntegerText(fieldEditor.string)
-        } else {
-            normalized = Self.normalizedDecimalText(fieldEditor.string)
-        }
+        let normalized = Self.normalizedDecimalText(fieldEditor.string)
         fieldEditor.string = normalized
         if let textField = control as? NSTextField {
             textField.stringValue = normalized

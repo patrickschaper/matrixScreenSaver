@@ -120,17 +120,50 @@ jobs:
 
       - name: Update CHANGELOG
         id: changelog
-        uses: TriPSs/conventional-changelog-action@v6
-        with:
-          github-token: ${{ github.token }}
-          version-file: ./VERSION
-          version-path: ""
-          tag-prefix: ""
-          git-push: false
-          skip-commit: true
-          skip-tag: true
-          release-count: 0
-          output-file: CHANGELOG.md
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version="${{ steps.version.outputs.next }}"
+          prev_tag="${{ steps.version.outputs.current }}"
+          # Resolve to a real git tag (tags have no v-prefix in this repo)
+          if ! git rev-parse "${prev_tag}" >/dev/null 2>&1; then
+            prev_tag="$(git describe --tags --abbrev=0 2>/dev/null || echo "")"
+          fi
+          today="$(date -u +%Y-%m-%d)"
+
+          # Collect conventional commits since the previous tag
+          features=""
+          fixes=""
+          while IFS= read -r line; do
+            msg="${line#* }"
+            if [[ "${msg}" == feat:* || "${msg}" == feat\(*\):* ]]; then
+              entry="- ${msg#feat: }"
+              entry="${entry#feat(*): }"
+              features="${features}${entry}"$'\n'
+            elif [[ "${msg}" == fix:* || "${msg}" == fix\(*\):* ]]; then
+              entry="- ${msg#fix: }"
+              entry="${entry#fix(*): }"
+              fixes="${fixes}${entry}"$'\n'
+            fi
+          done < <(git log "${prev_tag}..HEAD" --oneline --no-merges 2>/dev/null || git log --oneline --no-merges)
+
+          # Build the new changelog section
+          new_section="## [${version}] - ${today}"$'\n'
+          if [[ -n "${features}" ]]; then
+            new_section+=$'\n### Features\n\n'"${features}"
+          fi
+          if [[ -n "${fixes}" ]]; then
+            new_section+=$'\n### Bug Fixes\n\n'"${fixes}"
+          fi
+
+          # Prepend the new section after the header lines
+          tmp="$(mktemp)"
+          awk -v section="${new_section}" '
+            /^## \[/ && !inserted { print section; print ""; inserted=1 }
+            { print }
+          ' CHANGELOG.md > "${tmp}"
+          mv "${tmp}" CHANGELOG.md
 
       - name: Create or reuse release branch
         shell: bash
