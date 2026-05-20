@@ -25,8 +25,8 @@ struct MatrixScreenSaverOptions: Equatable {
     static let defaultNumberSceneEnabled = true
     static let defaultTwinkleEnabled = true
     static let defaultDiffuseEnabled = true
-    static let defaultCharacterWidth = 11
-    static let defaultCharacterHeight = 21
+    static let defaultCharacterWidth = 16
+    static let defaultCharacterHeight = 30
     static let defaultRainDensity = 1.0
     static let defaultFrameRate = 25.0
     static let defaultErrorRate = 1.0
@@ -34,11 +34,11 @@ struct MatrixScreenSaverOptions: Equatable {
     static let defaultScanLinesIntensity = 0.25
     static let defaultScanLinesVertical = true
 
-    static let minimumRainDensity = 0.0001
-    static let minimumFrameRate = 0.0001
-    static let maximumFrameRate = 1000.0
-    static let minimumErrorRate = 0.0
-    static let minimumNeoMessageSpeedFactor = 0.0001
+    static let minimumRainDensity = MatrixRendererLimits.minimumRainDensity
+    static let minimumFrameRate = MatrixRendererLimits.minimumFrameRate
+    static let maximumFrameRate = MatrixRendererLimits.maximumFrameRate
+    static let minimumErrorRate = MatrixRendererLimits.minimumErrorRate
+    static let minimumNeoMessageSpeedFactor = MatrixRendererLimits.minimumNeoMessageSpeedFactor
     static let minimumCharacterWidth = 1
     static let minimumCharacterHeight = 1
     static let minNeoMessageLineCount = 1
@@ -51,12 +51,12 @@ struct MatrixScreenSaverOptions: Equatable {
     static let numberSceneDescription = "Show the startup number scene before continuous rain. Turned on by default."
     static let diffuseDescription = "Turn on/off the glow effect. Turned on by default."
     static let twinkleDescription = "Turn on/off the twinkling effect. Turned on by default."
-    static let characterSizeDescription = "Character cell size in pixels. The default is 11×21."
+    static let characterSizeDescription = "Character cell size in pixels. The default is 16×30."
 
     static let characterSizePairs: [(width: Int, height: Int)] = [
-        (4, 8), (5, 9), (6, 11), (7, 13), (8, 15), (9, 17), (10, 19), (11, 21), (12, 23), (13, 24), (14, 26), (15, 28), (16, 30), (17, 32), (18, 34)
+        (8, 15), (9, 17), (10, 19), (11, 21), (12, 23), (13, 24), (14, 26), (15, 28), (16, 30), (17, 32), (18, 34), (19, 36), (20, 38), (21, 40), (22, 42), (23, 44), (24, 46)
     ]
-    static let defaultCharacterSizeIndex = 7
+    static let defaultCharacterSizeIndex = 8
     static let rainDensityDescription = "Set the factor for the density of rain drops. A positive number. The default is 1.0."
     static let frameRateDescription = "Set the frame rate per second. A positive number less than or equal to 1000. The default is 25."
     static let errorRateDescription = "Set the factor for the rate of character changes. A non-negative number. The default is 1.0."

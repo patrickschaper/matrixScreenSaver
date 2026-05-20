@@ -21,13 +21,13 @@ final class NativeMatrixRenderer {
         func sanitized() -> Configuration {
             Configuration(
                 neoMessageSceneEnabled: neoMessageSceneEnabled,
-                neoMessageSpeedFactor: max(neoMessageSpeedFactor, MatrixScreenSaverOptions.minimumNeoMessageSpeedFactor),
+                neoMessageSpeedFactor: max(neoMessageSpeedFactor, MatrixRendererLimits.minimumNeoMessageSpeedFactor),
                 numberSceneEnabled: numberSceneEnabled,
                 twinkleEnabled: twinkleEnabled,
                 diffuseEnabled: diffuseEnabled,
-                rainDensity: max(rainDensity, MatrixScreenSaverOptions.minimumRainDensity),
-                frameRate: min(max(frameRate, MatrixScreenSaverOptions.minimumFrameRate), MatrixScreenSaverOptions.maximumFrameRate),
-                errorRate: max(errorRate, MatrixScreenSaverOptions.minimumErrorRate),
+                rainDensity: max(rainDensity, MatrixRendererLimits.minimumRainDensity),
+                frameRate: min(max(frameRate, MatrixRendererLimits.minimumFrameRate), MatrixRendererLimits.maximumFrameRate),
+                errorRate: max(errorRate, MatrixRendererLimits.minimumErrorRate),
                 characters: characters,
                 neoMessageLines: neoMessageLines.isEmpty ? NeoMessageScene.defaultLines : neoMessageLines,
                 skipSyncDelay: skipSyncDelay
@@ -239,6 +239,10 @@ final class NativeMatrixRenderer {
     private(set) var rows = 0
     private(set) var levelColors = NativeMatrixRenderer.palette
 
+    /// XORed into sceneSeed in beginSceneSequence so each physical display
+    /// gets an independent animation while preserving per-display determinism.
+    var seedOffset: UInt64 = 0
+
     private var configuration = Configuration()
     private var activeGlyphPool: [UnicodeScalar] = NativeMatrixRenderer.defaultGlyphPool
 
@@ -340,7 +344,7 @@ final class NativeMatrixRenderer {
     }
 
     var preferredAnimationTimeInterval: TimeInterval {
-        1.0 / max(configuration.frameRate, MatrixScreenSaverOptions.minimumFrameRate)
+        1.0 / max(configuration.frameRate, MatrixRendererLimits.minimumFrameRate)
     }
 
     /// Starts the renderer state for a new saver session.
@@ -809,7 +813,7 @@ final class NativeMatrixRenderer {
             let syncWindow: TimeInterval = 10.0
             sceneStartTime = floor(nowTime / syncWindow) * syncWindow + syncWindow
         }
-        sceneSeed = UInt64(bitPattern: Int64(sceneStartTime))
+        sceneSeed = UInt64(bitPattern: Int64(sceneStartTime)) ^ seedOffset
         rainRNG = Xorshift64(seed: sceneSeed &+ 3)
 
         guard columns > 0, rows > 0 else {
@@ -847,7 +851,7 @@ final class NativeMatrixRenderer {
     }
 
     private var spawnModulo: Int {
-        let density = max(configuration.rainDensity, MatrixScreenSaverOptions.minimumRainDensity)
+        let density = max(configuration.rainDensity, MatrixRendererLimits.minimumRainDensity)
         let baseSpawnModulo = (150.0 / density) / Double(max(columns, 1))
         return max(1, Int(ceil(baseSpawnModulo * frameRateScale)))
     }
