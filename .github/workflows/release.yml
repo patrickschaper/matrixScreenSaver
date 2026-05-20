@@ -216,6 +216,8 @@ jobs:
           pr_url="$(gh pr list --head "${branch}" --base main --state open --json url --jq '.[0].url')"
           if [[ -z "${pr_url}" || "${pr_url}" == "null" ]]; then
             pr_url="$(gh pr create --base main --head "${branch}" --title "chore(release): ${version}" --body "${pr_body}")"
+          else
+            gh pr edit "${pr_url}" --body "${pr_body}"
           fi
 
           echo "url=${pr_url}" >> "$GITHUB_OUTPUT"
