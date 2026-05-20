@@ -1,0 +1,25 @@
+name: Tests
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches:
+      - development
+      - 'feat/**'
+      - 'fix/**'
+  pull_request:
+    branches:
+      - development
+      - main
+
+jobs:
+  test:
+    name: Run tests
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run tests
+        run: ./tests.sh

@@ -34,11 +34,11 @@ struct MatrixScreenSaverOptions: Equatable {
     static let defaultScanLinesIntensity = 0.25
     static let defaultScanLinesVertical = true
 
-    static let minimumRainDensity = 0.0001
-    static let minimumFrameRate = 0.0001
-    static let maximumFrameRate = 1000.0
-    static let minimumErrorRate = 0.0
-    static let minimumNeoMessageSpeedFactor = 0.0001
+    static let minimumRainDensity = MatrixRendererLimits.minimumRainDensity
+    static let minimumFrameRate = MatrixRendererLimits.minimumFrameRate
+    static let maximumFrameRate = MatrixRendererLimits.maximumFrameRate
+    static let minimumErrorRate = MatrixRendererLimits.minimumErrorRate
+    static let minimumNeoMessageSpeedFactor = MatrixRendererLimits.minimumNeoMessageSpeedFactor
     static let minimumCharacterWidth = 1
     static let minimumCharacterHeight = 1
     static let minNeoMessageLineCount = 1
