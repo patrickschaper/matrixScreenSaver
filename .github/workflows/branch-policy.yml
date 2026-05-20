@@ -1,0 +1,27 @@
+name: Branch policy
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  check-source-branch:
+    name: Check source branch
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require development or release branch
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          source="${{ github.head_ref }}"
+          echo "Source branch: ${source}"
+
+          if [[ "${source}" == "development" || "${source}" == release/v* ]]; then
+            echo "Branch '${source}' is allowed to merge into main."
+          else
+            echo "Branch '${source}' is not allowed to merge into main." >&2
+            echo "Only 'development' and 'release/v*' branches may open PRs targeting main." >&2
+            exit 1
+          fi

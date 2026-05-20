@@ -176,7 +176,7 @@ jobs:
           branch_exists="${{ steps.refs.outputs.branch_exists }}"
 
           if [[ "${branch_exists}" == "true" ]]; then
-            git restore --source=HEAD --staged --worktree VERSION
+            git restore --source=HEAD --staged --worktree VERSION CHANGELOG.md
             git fetch origin "${branch}"
             git switch -C "${branch}" "origin/${branch}"
 
