@@ -159,10 +159,11 @@ jobs:
 
           # Prepend the new section after the header lines
           tmp="$(mktemp)"
-          awk -v section="${new_section}" '
-            /^## \[/ && !inserted { print section; print ""; inserted=1 }
-            { print }
-          ' CHANGELOG.md > "${tmp}"
+          {
+            awk '/^## \[/ { exit } { print }' CHANGELOG.md
+            printf '\n%s\n' "${new_section}"
+            awk 'found || /^## \[/ { found=1; print }' CHANGELOG.md
+          } > "${tmp}"
           mv "${tmp}" CHANGELOG.md
 
       - name: Create or reuse release branch
