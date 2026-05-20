@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+
+## [0.0.11] - 2026-05-20
+
+### Features
+
+- replace character size fields with slider (#39)
+- vertical scanlines with direction option (#38)
+- add header and About link to options sheet (#31)
+- CRT scanlines effect (#29)
+- add editable Neo message lines option
+- populate GitHub release notes from CHANGELOG.md
+- add CHANGELOG and auto-update on release
+- add custom character set option
+
+### Bug Fixes
+
+- restore CHANGELOG.md when reusing release branch
+- avoid awk multiline var in release changelog step
+- skip multi-screen sync delay in preview mode
+- generate CHANGELOG from git log in release workflow (#35)
+- right-align About link in options sheet header (#33)
+- right-align About link in options sheet header (#32)
+- sync number scene blackout and screen activation across displays
+- set tag-prefix to empty string in changelog action
+- address remaining and falsely-resolved Copilot review findings
+- address Copilot review findings on custom character set
+- shorten custom characters description to one-liner
+
 ## [0.0.9] - 2026-05-13
 
 ### Features
