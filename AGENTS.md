@@ -58,6 +58,8 @@ This repository is hosted on GitHub. When relevant, assume GitHub-native feature
 - Do not commit directly to `main`.
 - Use a feature branch for changes.
 - Use conventional branch names, for example: `feat/...`, `fix/...`, `docs/...`, `refactor/...`
+- Merge feature branches into `development` first, then merge `development` into `main`.
+- Merges to `main` must only come from `development` or `release/*` branches.
 - Merge to `main` only through a pull request.
 - Require approval before merging.
 
@@ -70,3 +72,9 @@ feat: add character size options
 - persist values in defaults
 - apply size to cell layout
 ```
+
+## Releases
+
+- Trigger releases by running the **Release** GitHub Actions workflow (`workflow_dispatch`) — never manually.
+- The workflow bumps the version, updates `CHANGELOG.md`, and opens a `release/*` PR targeting `main`.
+- Merging that `release/*` PR into `main` triggers the publish job, which creates the actual GitHub release.
