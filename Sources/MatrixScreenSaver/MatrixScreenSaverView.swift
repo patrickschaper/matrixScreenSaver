@@ -78,6 +78,15 @@ final class MatrixScreenSaverView: ScreenSaverView {
         true
     }
 
+    /// A stable seed derived from this screen's CGDirectDisplayID.
+    /// Different physical displays return different values, giving each
+    /// NativeMatrixRenderer instance an independent animation sequence.
+    private var displaySeed: UInt64 {
+        let id = window?.screen?.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")]
+            as? UInt32 ?? 0
+        return UInt64(id)
+    }
+
     override var hasConfigureSheet: Bool {
         true
     }
@@ -170,6 +179,7 @@ final class MatrixScreenSaverView: ScreenSaverView {
         appendDebugLog("[\(debugIdentifier)] startAnimation bounds=\(NSStringFromRect(bounds))")
         updateScreenSaverLifecycleObservation()
         updateLayout()
+        nativeRenderer.seedOffset = displaySeed
         nativeRenderer.start()
     }
 

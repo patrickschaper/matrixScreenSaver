@@ -84,6 +84,14 @@ build/MatrixScreenSaver.saver
 
 `build.sh` reads the current version from `./VERSION` and writes it into the saver bundle metadata.
 
+### Test
+
+```bash
+./tests.sh
+```
+
+Compiles and runs the test suite using `swiftc`. No Xcode required — Command Line Tools are sufficient.
+
 ### Preview without installing
 
 ```bash
