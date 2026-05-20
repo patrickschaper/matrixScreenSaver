@@ -205,8 +205,12 @@ jobs:
 
           version="${{ steps.version.outputs.next }}"
           branch="${{ steps.version.outputs.branch }}"
+
+          # Extract the changelog section for this version to include in the PR body
+          changelog_section="$(awk "/^## \[${version}\]/{found=1; next} found && /^## /{exit} found{print}" CHANGELOG.md)"
+
           pr_body="$(
-            printf '## Summary\n- bump VERSION to %s\n- prepare the %s release\n\n## Validation\n- `./build.sh`\n' "${version}" "${version}"
+            printf '## What'\''s changing\n\n%s\n\n## Validation\n- `./build.sh`\n' "${changelog_section}"
           )"
 
           pr_url="$(gh pr list --head "${branch}" --base main --state open --json url --jq '.[0].url')"
