@@ -20,6 +20,40 @@ This repository is hosted on GitHub. When relevant, assume GitHub-native feature
 - Local preview host in `Tools/PreviewHost.swift`
 - Shell scripts for build/install/preview: `build.sh`, `install.sh`, `preview.sh`
 
+## Code documentation
+
+Use Swift doc comments (`///`) for all public and internal declarations — types, properties, methods, and parameters. Follow the standard Swift/Xcode documentation style:
+
+```swift
+/// A single falling column of Matrix characters.
+///
+/// Each column tracks its own position, speed, and glyph sequence
+/// so the renderer can update it independently each frame.
+class MatrixColumn {
+
+    /// The horizontal position of the column in grid units.
+    let x: Int
+
+    /// Initializes a new column at the given grid position.
+    ///
+    /// - Parameters:
+    ///   - x: Horizontal grid index for this column.
+    ///   - speed: Fall speed in cells per frame.
+    init(x: Int, speed: Int) { … }
+
+    /// Advances the column by one frame, updating character positions.
+    ///
+    /// - Returns: `true` if the column is still visible, `false` if it has scrolled off screen.
+    func tick() -> Bool { … }
+}
+```
+
+- Use `///` (triple-slash) for doc comments; `//` for inline clarifications only.
+- Include a `- Parameters:` block whenever a function takes non-obvious arguments.
+- Include `- Returns:` and `- Throws:` blocks where applicable.
+- Use `// MARK: -` to separate logical sections within a file.
+- Do not comment self-evident code; focus comments on *why*, not *what*.
+
 ## Implementation notes
 
 - Keep the renderer native; do not reintroduce an external terminal or runtime wrapper.
