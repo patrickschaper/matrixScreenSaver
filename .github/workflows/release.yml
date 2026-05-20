@@ -137,14 +137,16 @@ jobs:
           fixes=""
           while IFS= read -r line; do
             msg="${line#* }"
-            if [[ "${msg}" == feat:* || "${msg}" == feat\(*\):* ]]; then
-              entry="- ${msg#feat: }"
-              entry="${entry#feat(*): }"
-              features="${features}${entry}"$'\n'
-            elif [[ "${msg}" == fix:* || "${msg}" == fix\(*\):* ]]; then
-              entry="- ${msg#fix: }"
-              entry="${entry#fix(*): }"
-              fixes="${fixes}${entry}"$'\n'
+            if [[ "${msg}" == feat:* ]]; then
+              features="${features}- ${msg#feat: }"$'\n'
+            elif [[ "${msg}" == feat\(*\):* ]]; then
+              rest="${msg#feat(}"
+              features="${features}- ${rest#*): }"$'\n'
+            elif [[ "${msg}" == fix:* ]]; then
+              fixes="${fixes}- ${msg#fix: }"$'\n'
+            elif [[ "${msg}" == fix\(*\):* ]]; then
+              rest="${msg#fix(}"
+              fixes="${fixes}- ${rest#*): }"$'\n'
             fi
           done < <(git log "${prev_tag}..HEAD" --oneline --no-merges 2>/dev/null || git log --oneline --no-merges)
 
@@ -203,13 +205,19 @@ jobs:
 
           version="${{ steps.version.outputs.next }}"
           branch="${{ steps.version.outputs.branch }}"
+
+          # Extract the changelog section for this version to include in the PR body
+          changelog_section="$(awk "/^## \[${version}\]/{found=1; next} found && /^## /{exit} found{print}" CHANGELOG.md)"
+
           pr_body="$(
-            printf '## Summary\n- bump VERSION to %s\n- prepare the %s release\n\n## Validation\n- `./build.sh`\n' "${version}" "${version}"
+            printf '## What'\''s changing\n\n%s\n\n## Validation\n- `./build.sh`\n' "${changelog_section}"
           )"
 
           pr_url="$(gh pr list --head "${branch}" --base main --state open --json url --jq '.[0].url')"
           if [[ -z "${pr_url}" || "${pr_url}" == "null" ]]; then
             pr_url="$(gh pr create --base main --head "${branch}" --title "chore(release): ${version}" --body "${pr_body}")"
+          else
+            gh pr edit "${pr_url}" --body "${pr_body}"
           fi
 
           echo "url=${pr_url}" >> "$GITHUB_OUTPUT"
