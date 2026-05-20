@@ -137,14 +137,16 @@ jobs:
           fixes=""
           while IFS= read -r line; do
             msg="${line#* }"
-            if [[ "${msg}" == feat:* || "${msg}" == feat\(*\):* ]]; then
-              entry="- ${msg#feat: }"
-              entry="${entry#feat(*): }"
-              features="${features}${entry}"$'\n'
-            elif [[ "${msg}" == fix:* || "${msg}" == fix\(*\):* ]]; then
-              entry="- ${msg#fix: }"
-              entry="${entry#fix(*): }"
-              fixes="${fixes}${entry}"$'\n'
+            if [[ "${msg}" == feat:* ]]; then
+              features="${features}- ${msg#feat: }"$'\n'
+            elif [[ "${msg}" == feat\(*\):* ]]; then
+              rest="${msg#feat(}"
+              features="${features}- ${rest#*): }"$'\n'
+            elif [[ "${msg}" == fix:* ]]; then
+              fixes="${fixes}- ${msg#fix: }"$'\n'
+            elif [[ "${msg}" == fix\(*\):* ]]; then
+              rest="${msg#fix(}"
+              fixes="${fixes}- ${rest#*): }"$'\n'
             fi
           done < <(git log "${prev_tag}..HEAD" --oneline --no-merges 2>/dev/null || git log --oneline --no-merges)
 
