@@ -155,6 +155,7 @@ class MatrixColumn {
 - Push (`git push`)
 - Create a pull request (`gh pr create`)
 - Merge a pull request (`gh pr merge`)
+- Enable auto-merge on a pull request (`gh pr merge --auto`)
 - Trigger or re-run GitHub Actions workflows
 
 ## Pushing

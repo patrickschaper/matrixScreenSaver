@@ -71,7 +71,13 @@ jobs:
         run: |
           set -euo pipefail
 
-          current_version="$(tr -d '[:space:]' < VERSION)"
+          # Use the latest git tag as the source of truth so the bump is
+          # always based on the actual last release, even if the VERSION file
+          # is stale (e.g. a back-merge PR was never merged).
+          current_version="$(git describe --tags --abbrev=0 2>/dev/null | tr -d '[:space:]')"
+          if [[ -z "${current_version}" ]]; then
+            current_version="$(tr -d '[:space:]' < VERSION)"
+          fi
           next_version="$(npx --yes semver@7.6.3 "${current_version}" -i "${{ inputs.bump }}")"
           release_branch="release/v${next_version}"
 
@@ -348,4 +354,5 @@ jobs:
           if [[ -z "${pr_url}" || "${pr_url}" == "null" ]]; then
             pr_url="$(gh pr create --base development --head main --title "chore: sync main into development after ${version}" --body "Automated back-merge of \`main\` into \`development\` following the ${version} release.")"
           fi
+          gh pr merge "${pr_url}" --auto --merge
           echo "Back-merge PR: ${pr_url}" >> "$GITHUB_STEP_SUMMARY"
