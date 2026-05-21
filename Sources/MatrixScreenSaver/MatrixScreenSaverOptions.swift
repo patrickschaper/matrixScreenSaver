@@ -45,23 +45,23 @@ struct MatrixScreenSaverOptions: Equatable {
     static let maxNeoMessageLineCount = 10
     static let maxNeoMessageLineLength = 256
 
-    static let neoMessageSceneDescription = "Show the Neo message intro before the main scene. Turned on by default."
-    static let neoMessageSpeedFactorDescription = "Multiplier for the Neo message typing and pause speed. A positive number. The default is 1.0."
-    static let neoMessageLinesDescription = "Lines typed during the Neo message intro. Between 1 and 10 lines, up to 256 characters each."
-    static let numberSceneDescription = "Show the startup number scene before continuous rain. Turned on by default."
-    static let diffuseDescription = "Turn on/off the glow effect. Turned on by default."
-    static let twinkleDescription = "Turn on/off the twinkling effect. Turned on by default."
-    static let characterSizeDescription = "Character cell size in pixels. The default is 16×30."
+    static let neoMessageSceneDescription = "Show the Neo message intro. On by default."
+    static let neoMessageSpeedFactorDescription = "Speed multiplier for Neo message typing. Default: 1.0."
+    static let neoMessageLinesDescription = "Lines typed during the Neo message intro (1–10, max 256 chars)."
+    static let numberSceneDescription = "Show the startup number scene. On by default."
+    static let diffuseDescription = "On by default."
+    static let twinkleDescription = "On by default."
+    static let characterSizeDescription = "Character cell size in pixels. Default: 16×30."
 
     static let characterSizePairs: [(width: Int, height: Int)] = [
         (8, 15), (9, 17), (10, 19), (11, 21), (12, 23), (13, 24), (14, 26), (15, 28), (16, 30), (17, 32), (18, 34), (19, 36), (20, 38), (21, 40), (22, 42), (23, 44), (24, 46)
     ]
     static let defaultCharacterSizeIndex = 8
-    static let rainDensityDescription = "Set the factor for the density of rain drops. A positive number. The default is 1.0."
-    static let frameRateDescription = "Set the frame rate per second. A positive number less than or equal to 1000. The default is 25."
-    static let errorRateDescription = "Set the factor for the rate of character changes. A non-negative number. The default is 1.0."
-    static let charactersDescription = "Restrict rain glyphs to a custom set (e.g. ATGC). Leave empty for the default."
-    static let scanLinesDescription = "Intensity of the CRT scan line overlay (0 = off, 100 = fully opaque). Default is 25%."
+    static let rainDensityDescription = "Rain density multiplier. Default: 1.0."
+    static let frameRateDescription = "Target frame rate in fps, 1–1000. Default: 25."
+    static let errorRateDescription = "Character change rate factor. Default: 1.0."
+    static let charactersDescription = "Custom glyph set (e.g. ATGC). Empty = default."
+    static let scanLinesDescription = "CRT scan line intensity (0–100%). Default: 25%."
 
     var neoMessageSceneEnabled = defaultNeoMessageSceneEnabled
     var neoMessageSpeedFactor = defaultNeoMessageSpeedFactor
@@ -225,7 +225,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
 
     private let window: NSWindow
     private let rootStack = NSStackView()
-    private let neoMessageSceneCheckbox = NSButton(checkboxWithTitle: "Neo message scene", target: nil, action: nil)
+    private let neoMessageSceneCheckbox = NSButton(checkboxWithTitle: "Activate", target: nil, action: nil)
     private let neoMessageSpeedFactorField = NSTextField(string: "")
     private let linesTableView = NSTableView()
     private let linesScrollView = NSScrollView()
@@ -239,9 +239,9 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
     private static let removeColumnID = NSUserInterfaceItemIdentifier("remove")
     private var pendingLines: [String] = MatrixScreenSaverOptions.defaultNeoMessageLines
     private var linesEditorWindow: NSWindow?
-    private let numberSceneCheckbox = NSButton(checkboxWithTitle: "Number scene", target: nil, action: nil)
-    private let twinkleCheckbox = NSButton(checkboxWithTitle: "Twinkle", target: nil, action: nil)
-    private let diffuseCheckbox = NSButton(checkboxWithTitle: "Diffuse", target: nil, action: nil)
+    private let numberSceneCheckbox = NSButton(checkboxWithTitle: "Activate", target: nil, action: nil)
+    private let twinkleCheckbox = NSButton(checkboxWithTitle: "Twinkling effect", target: nil, action: nil)
+    private let diffuseCheckbox = NSButton(checkboxWithTitle: "Glow effect", target: nil, action: nil)
     private let scanLinesSlider: NSSlider = {
         let s = NSSlider(value: MatrixScreenSaverOptions.defaultScanLinesIntensity * 100,
                          minValue: 0, maxValue: 100,
@@ -400,35 +400,35 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         ])
         rootStack.addArrangedSubview(headerContainer)
 
-        let neoMessageSceneSection = makeCheckboxSection(
-            checkbox: neoMessageSceneCheckbox,
-            description: MatrixScreenSaverOptions.neoMessageSceneDescription
-        )
-        let numberSceneSection = makeCheckboxSection(
-            checkbox: numberSceneCheckbox,
-            description: MatrixScreenSaverOptions.numberSceneDescription
-        )
-        let twinkleSection = makeCheckboxSection(checkbox: twinkleCheckbox, description: MatrixScreenSaverOptions.twinkleDescription)
-        let diffuseSection = makeCheckboxSection(checkbox: diffuseCheckbox, description: MatrixScreenSaverOptions.diffuseDescription)
-        let scanLinesSection = makeScanLinesSection()
-        let toggleStack = NSStackView()
-        toggleStack.orientation = .vertical
-        toggleStack.alignment = .leading
-        toggleStack.spacing = 16
-        toggleStack.setHuggingPriority(.required, for: .vertical)
-        toggleStack.addArrangedSubview(neoMessageSceneSection)
-        toggleStack.addArrangedSubview(numberSceneSection)
-        toggleStack.addArrangedSubview(twinkleSection)
-        toggleStack.addArrangedSubview(diffuseSection)
-        toggleStack.addArrangedSubview(scanLinesSection)
-        rootStack.addArrangedSubview(toggleStack)
-        rootStack.addArrangedSubview(makeNumericSection(title: "Neo message speed", field: neoMessageSpeedFactorField, description: MatrixScreenSaverOptions.neoMessageSpeedFactorDescription))
-        rootStack.addArrangedSubview(makeNeoMessageLinesButtonRow())
-        rootStack.addArrangedSubview(makeCharacterSizeSection())
-        rootStack.addArrangedSubview(makeNumericSection(title: "Rain density", field: rainDensityField, description: MatrixScreenSaverOptions.rainDensityDescription))
-        rootStack.addArrangedSubview(makeNumericSection(title: "Frame rate", field: frameRateField, description: MatrixScreenSaverOptions.frameRateDescription))
-        rootStack.addArrangedSubview(makeNumericSection(title: "Error rate", field: errorRateField, description: MatrixScreenSaverOptions.errorRateDescription))
-        rootStack.addArrangedSubview(makeTextSection(title: "Characters", field: charactersField, description: MatrixScreenSaverOptions.charactersDescription))
+        let generalGroup = makeGroupBox(title: "General", views: [
+            makeCharacterSizeSection(),
+            makeScanLinesSection(),
+            makeNumericSection(title: "Typing speed", field: neoMessageSpeedFactorField, description: MatrixScreenSaverOptions.neoMessageSpeedFactorDescription),
+            makeNumericSection(title: "Frame rate", field: frameRateField, description: MatrixScreenSaverOptions.frameRateDescription),
+        ])
+        let neoGroup = makeGroupBox(title: "Neo message scene", views: [
+            makeCheckboxSection(checkbox: neoMessageSceneCheckbox, description: MatrixScreenSaverOptions.neoMessageSceneDescription),
+            makeNeoMessageLinesButtonRow(),
+        ])
+        let numberGroup = makeGroupBox(title: "Number scene", views: [
+            makeCheckboxSection(checkbox: numberSceneCheckbox, description: MatrixScreenSaverOptions.numberSceneDescription),
+        ])
+        let rainGroup = makeGroupBox(title: "Rain scene", views: [
+            makeCheckboxSection(checkbox: twinkleCheckbox, description: MatrixScreenSaverOptions.twinkleDescription),
+            makeCheckboxSection(checkbox: diffuseCheckbox, description: MatrixScreenSaverOptions.diffuseDescription),
+            makeNumericSection(title: "Density", field: rainDensityField, description: MatrixScreenSaverOptions.rainDensityDescription),
+            makeTextSection(title: "Characters", field: charactersField, description: MatrixScreenSaverOptions.charactersDescription, fieldWidth: Self.textFieldWidth / 2),
+            makeNumericSection(title: "Error rate", field: errorRateField, description: MatrixScreenSaverOptions.errorRateDescription),
+        ])
+        rootStack.addArrangedSubview(generalGroup)
+        rootStack.addArrangedSubview(neoGroup)
+        rootStack.addArrangedSubview(numberGroup)
+        rootStack.addArrangedSubview(rainGroup)
+
+        let groupWidth = -(rootStack.edgeInsets.left + rootStack.edgeInsets.right)
+        for group in [generalGroup, neoGroup, numberGroup, rainGroup] {
+            group.widthAnchor.constraint(equalTo: rootStack.widthAnchor, constant: groupWidth).isActive = true
+        }
 
         let buttons = NSStackView()
         buttons.orientation = .horizontal
@@ -451,11 +451,6 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         footer.distribution = .fill
         footer.translatesAutoresizingMaskIntoConstraints = false
 
-        let leadingPadding = NSView()
-        leadingPadding.translatesAutoresizingMaskIntoConstraints = false
-        leadingPadding.widthAnchor.constraint(equalToConstant: rootStack.edgeInsets.left).isActive = true
-        leadingPadding.setContentHuggingPriority(.required, for: .horizontal)
-
         let spacerLeft = NSView()
         spacerLeft.translatesAutoresizingMaskIntoConstraints = false
         spacerLeft.setContentHuggingPriority(.defaultLow, for: .horizontal)
@@ -473,18 +468,16 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         spacerRight.setContentHuggingPriority(.defaultLow, for: .horizontal)
         spacerRight.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        footer.addArrangedSubview(leadingPadding)
         footer.addArrangedSubview(resetButton)
         footer.addArrangedSubview(spacerLeft)
         footer.addArrangedSubview(versionLabel)
         footer.addArrangedSubview(spacerRight)
         footer.addArrangedSubview(buttons)
-        footer.setCustomSpacing(0, after: leadingPadding)
 
         rootStack.addArrangedSubview(footer)
         buttons.setHuggingPriority(.required, for: .horizontal)
         resetButton.setContentHuggingPriority(.required, for: .horizontal)
-        footer.widthAnchor.constraint(equalTo: rootStack.widthAnchor).isActive = true
+        footer.widthAnchor.constraint(equalTo: rootStack.widthAnchor, constant: groupWidth).isActive = true
 
         let contentView = NSView()
         contentView.translatesAutoresizingMaskIntoConstraints = false
@@ -514,7 +507,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         row.spacing = 12
         row.alignment = .centerY
 
-        let label = NSTextField(labelWithString: "Neo message lines")
+        let label = NSTextField(labelWithString: "Lines")
         label.font = .systemFont(ofSize: 13, weight: .semibold)
         label.setContentHuggingPriority(.required, for: .horizontal)
 
@@ -911,7 +904,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
     }
 
     /// Builds a labeled text input row with its description.
-    private func makeTextSection(title: String, field: NSTextField, description: String) -> NSView {
+    private func makeTextSection(title: String, field: NSTextField, description: String, fieldWidth: CGFloat? = nil) -> NSView {
         let stack = NSStackView()
         stack.orientation = .vertical
         stack.alignment = .leading
@@ -930,7 +923,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         field.alignment = .left
         field.controlSize = .regular
         field.translatesAutoresizingMaskIntoConstraints = false
-        field.widthAnchor.constraint(equalToConstant: Self.textFieldWidth).isActive = true
+        field.widthAnchor.constraint(equalToConstant: fieldWidth ?? Self.textFieldWidth).isActive = true
 
         row.addArrangedSubview(label)
         row.addArrangedSubview(field)
@@ -979,9 +972,34 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         characterSizeValueLabel.stringValue = "\(pair.width)×\(pair.height)"
     }
 
+    /// Builds a titled group box containing a vertical stack of option sections.
+    private func makeGroupBox(title: String, views: [NSView]) -> NSBox {
+        let box = NSBox()
+        box.title = title
+        box.contentViewMargins = NSSize(width: 8, height: 8)
+
+        let stack = NSStackView(views: views)
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 12
+        stack.setHuggingPriority(.required, for: .vertical)
+        stack.translatesAutoresizingMaskIntoConstraints = false
+
+        guard let contentView = box.contentView else { return box }
+        contentView.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            stack.topAnchor.constraint(equalTo: contentView.topAnchor),
+            stack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
+        ])
+
+        return box
+    }
+
     /// Creates the smaller descriptive text used under each option row.
     private func makeDescriptionLabel(_ description: String) -> NSTextField {
-        let label = NSTextField(wrappingLabelWithString: description)
+        let label = NSTextField(labelWithString: description)
         label.font = .systemFont(ofSize: 11)
         label.textColor = .secondaryLabelColor
         label.alignment = .left
@@ -1128,7 +1146,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         contentView.layoutSubtreeIfNeeded()
         let fittingSize = rootStack.fittingSize
         let contentSize = NSSize(
-            width: ceil(fittingSize.width + rootStack.edgeInsets.right),
+            width: ceil(fittingSize.width),
             height: ceil(fittingSize.height)
         )
         window.setContentSize(contentSize)
