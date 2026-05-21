@@ -86,8 +86,6 @@ jobs:
             exit 1
           fi
 
-          printf '%s\n' "${next_version}" > VERSION
-
           echo "current=${current_version}" >> "$GITHUB_OUTPUT"
           echo "next=${next_version}" >> "$GITHUB_OUTPUT"
           echo "branch=${release_branch}" >> "$GITHUB_OUTPUT"
@@ -117,7 +115,42 @@ jobs:
             echo "branch_exists=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Create or reuse release branch
+        id: branch
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version="${{ steps.version.outputs.next }}"
+          branch="${{ steps.version.outputs.branch }}"
+          branch_exists="${{ steps.refs.outputs.branch_exists }}"
+
+          if [[ "${branch_exists}" == "true" ]]; then
+            git fetch origin "${branch}"
+            git switch -C "${branch}" "origin/${branch}"
+
+            branch_version="$(tr -d '[:space:]' < VERSION)"
+            if [[ "${branch_version}" != "${version}" ]]; then
+              echo "Existing ${branch} has VERSION ${branch_version}, expected ${version}." >&2
+              exit 1
+            fi
+
+            echo "created=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Branch from development so the release includes all new changes
+          git fetch origin development
+          git switch -c "${branch}" origin/development
+
+          # Merge main to incorporate any commits not on development
+          # (e.g. previous release chore commits)
+          git merge origin/main --no-edit
+
+          echo "created=true" >> "$GITHUB_OUTPUT"
+
       - name: Validate build
+        if: steps.branch.outputs.created == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -125,6 +158,7 @@ jobs:
           ./build.sh
 
       - name: Update CHANGELOG
+        if: steps.branch.outputs.created == 'true'
         id: changelog
         shell: bash
         run: |
@@ -138,7 +172,9 @@ jobs:
           fi
           today="$(date -u +%Y-%m-%d)"
 
-          # Collect conventional commits since the previous tag
+          # Collect conventional commits since the previous tag.
+          # --first-parent follows only the mainline (one entry per merged PR,
+          # no duplicates from feature branch commits).
           features=""
           fixes=""
           while IFS= read -r line; do
@@ -154,7 +190,7 @@ jobs:
               rest="${msg#fix(}"
               fixes="${fixes}- ${rest#*): }"$'\n'
             fi
-          done < <(git log "${prev_tag}..HEAD" --oneline --no-merges 2>/dev/null || git log --oneline --no-merges)
+          done < <(git log "${prev_tag}..HEAD" --oneline --first-parent 2>/dev/null || git log --oneline --first-parent)
 
           # Build the new changelog section
           new_section="## [${version}] - ${today}"$'\n'
@@ -174,30 +210,15 @@ jobs:
           } > "${tmp}"
           mv "${tmp}" CHANGELOG.md
 
-      - name: Create or reuse release branch
+      - name: Commit and push release changes
+        if: steps.branch.outputs.created == 'true'
         shell: bash
         run: |
           set -euo pipefail
 
           version="${{ steps.version.outputs.next }}"
           branch="${{ steps.version.outputs.branch }}"
-          branch_exists="${{ steps.refs.outputs.branch_exists }}"
 
-          if [[ "${branch_exists}" == "true" ]]; then
-            git restore --source=HEAD --staged --worktree VERSION CHANGELOG.md
-            git fetch origin "${branch}"
-            git switch -C "${branch}" "origin/${branch}"
-
-            branch_version="$(tr -d '[:space:]' < VERSION)"
-            if [[ "${branch_version}" != "${version}" ]]; then
-              echo "Existing ${branch} has VERSION ${branch_version}, expected ${version}." >&2
-              exit 1
-            fi
-
-            exit 0
-          fi
-
-          git switch -c "${branch}"
           printf '%s\n' "${version}" > VERSION
           git add VERSION CHANGELOG.md
           git commit -m "chore(release): ${version}" -m "- bump VERSION to ${version}" -m "- update CHANGELOG.md"
