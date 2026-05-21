@@ -348,4 +348,5 @@ jobs:
           if [[ -z "${pr_url}" || "${pr_url}" == "null" ]]; then
             pr_url="$(gh pr create --base development --head main --title "chore: sync main into development after ${version}" --body "Automated back-merge of \`main\` into \`development\` following the ${version} release.")"
           fi
+          gh pr merge "${pr_url}" --auto --merge
           echo "Back-merge PR: ${pr_url}" >> "$GITHUB_STEP_SUMMARY"
