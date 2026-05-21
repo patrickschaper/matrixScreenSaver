@@ -91,13 +91,11 @@ jobs:
           echo "branch=${release_branch}" >> "$GITHUB_OUTPUT"
 
       - name: Inspect release refs
-        id: refs
         shell: bash
         run: |
           set -euo pipefail
 
           version="${{ steps.version.outputs.next }}"
-          branch="${{ steps.version.outputs.branch }}"
 
           if git ls-remote --exit-code --tags origin "refs/tags/${version}" >/dev/null 2>&1; then
             echo "Tag ${version} already exists." >&2
@@ -109,37 +107,15 @@ jobs:
             exit 1
           fi
 
-          if git ls-remote --exit-code --heads origin "${branch}" >/dev/null 2>&1; then
-            echo "branch_exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "branch_exists=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Create or reuse release branch
-        id: branch
+      - name: Create release branch
         shell: bash
         run: |
           set -euo pipefail
 
-          version="${{ steps.version.outputs.next }}"
           branch="${{ steps.version.outputs.branch }}"
-          branch_exists="${{ steps.refs.outputs.branch_exists }}"
 
-          if [[ "${branch_exists}" == "true" ]]; then
-            git fetch origin "${branch}"
-            git switch -C "${branch}" "origin/${branch}"
-
-            branch_version="$(tr -d '[:space:]' < VERSION)"
-            if [[ "${branch_version}" != "${version}" ]]; then
-              echo "Existing ${branch} has VERSION ${branch_version}, expected ${version}." >&2
-              exit 1
-            fi
-
-            echo "created=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          # Branch from development so the release includes all new changes
+          # Always (re)create from development so the release includes all
+          # new changes — even on a rerun where the branch already exists.
           git fetch origin development
           git switch -c "${branch}" origin/development
 
@@ -147,10 +123,7 @@ jobs:
           # (e.g. previous release chore commits)
           git merge origin/main --no-edit
 
-          echo "created=true" >> "$GITHUB_OUTPUT"
-
       - name: Validate build
-        if: steps.branch.outputs.created == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -158,7 +131,6 @@ jobs:
           ./build.sh
 
       - name: Update CHANGELOG
-        if: steps.branch.outputs.created == 'true'
         id: changelog
         shell: bash
         run: |
@@ -211,7 +183,6 @@ jobs:
           mv "${tmp}" CHANGELOG.md
 
       - name: Commit and push release changes
-        if: steps.branch.outputs.created == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -222,7 +193,7 @@ jobs:
           printf '%s\n' "${version}" > VERSION
           git add VERSION CHANGELOG.md
           git commit -m "chore(release): ${version}" -m "- bump VERSION to ${version}" -m "- update CHANGELOG.md"
-          git push --set-upstream origin "${branch}"
+          git push --force-with-lease --set-upstream origin "${branch}"
 
       - name: Open or reuse release pull request
         id: pr
