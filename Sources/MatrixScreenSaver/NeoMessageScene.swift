@@ -23,7 +23,7 @@ struct NeoMessageScene {
         "Knock, knock, Neo.",
     ]
 
-    static let charsPerSecond: Double = 28.0
+    static let charsPerSecond: Double = 40.0
     static let cursorBlinkInterval: TimeInterval = 0.5
 
     private struct LineSchedule {
@@ -42,22 +42,24 @@ struct NeoMessageScene {
     private var schedule: [LineSchedule] = []
     private var lines: [String] = Self.defaultLines
 
-    /// Total scene duration in seconds at 1× speed (time when last pause ends).
+    /// Actual wall-clock duration of the scene in seconds (time when last pause ends).
+    /// Shorter when `speedFactor > 1` because the typing intervals are pre-scaled.
     /// The number scene anchors its start after this duration.
     private(set) var scheduledDuration: TimeInterval = 60.0
 
-    mutating func reset(startTime: TimeInterval, seed: UInt64, lines: [String] = Self.defaultLines) {
+    mutating func reset(startTime: TimeInterval, seed: UInt64, lines: [String] = Self.defaultLines, speedFactor: Double = 1.0) {
         self.startTime = startTime
         self.lines = lines.isEmpty ? Self.defaultLines : lines
         var rng = Xorshift64(seed: seed)
         schedule = []
 
+        let typingInterval = 1.0 / Self.charsPerSecond / max(speedFactor, 1e-6)
         var t: TimeInterval = 0
         for (index, line) in self.lines.enumerated() {
             let isLast = index == self.lines.count - 1
             let chars = NativeMatrixRenderer.naturalTypingTimings(
                 for: line,
-                baseInterval: 1.0 / Self.charsPerSecond,
+                baseInterval: typingInterval,
                 rng: &rng
             )
             let lineStart = t
@@ -86,10 +88,10 @@ struct NeoMessageScene {
         cursorVisible = true
     }
 
-    mutating func advance(now: TimeInterval, speedFactor: Double = 1.0) {
+    mutating func advance(now: TimeInterval) {
         guard !schedule.isEmpty else { return }
 
-        let sceneTime = (now - startTime) * speedFactor
+        let sceneTime = now - startTime
         cursorVisible = Int(sceneTime / Self.cursorBlinkInterval) % 2 == 0
         updateState(sceneTime: sceneTime)
     }

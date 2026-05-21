@@ -191,7 +191,7 @@ final class NativeMatrixRenderer {
     private static let baseErrorRateModulo = 20.0
     private static let numberIntroCursorBlinkPeriod: TimeInterval = 0.5   // matches NeoMessageScene
     private static let numberIntroCursorBlinkCount = 2                    // 4 half-periods × 0.5 s ≈ 2 s
-    private static let numberIntroTypingInterval: TimeInterval = 0.036
+    private static let numberIntroTypingInterval: TimeInterval = 1.0 / 40.0
     private static let rainDuration: TimeInterval = 90.0   // how long rain runs before restarting
     private static let numberIntroRainFrames = 160
     private static let numberIntroBlackoutInterval: TimeInterval = 1.0
@@ -283,10 +283,6 @@ final class NativeMatrixRenderer {
     }
 
     private var numberIntroPhase: NumberIntroPhase = .cursorBlink
-    private var numberIntroPhaseStart: TimeInterval = 0
-    private var numberIntroTypingText = ""
-    private var numberIntroTypedCount = 0
-    private var numberIntroCharTimings: [TimeInterval] = []
     private var numberIntroCursorVisible = false
     private var numberIntroRainFrame = 0
     private var sceneStartTime: TimeInterval = 0   // 5-second-quantised anchor — shared across displays
@@ -470,10 +466,10 @@ final class NativeMatrixRenderer {
     private func initNumberIntroScene() {
         numberSceneRNG = Xorshift64(seed: sceneSeed &+ 2)
 
-        // Anchor: sceneStartTime + however long the Neo scene takes at 1× speed.
+        // Anchor: sceneStartTime + however long the Neo scene takes at the configured speed.
         // All displays use the same sceneStartTime and same seed → same anchor.
         let neoWallDuration: TimeInterval = configuration.neoMessageSceneEnabled
-            ? neoScene.scheduledDuration / configuration.neoMessageSpeedFactor
+            ? neoScene.scheduledDuration
             : 0
         numberIntroAnchor = sceneStartTime + neoWallDuration
 
@@ -488,7 +484,7 @@ final class NativeMatrixRenderer {
         let typingText = "Call trans opt: received. \(dateString) \(timeString) REC:Log>"
 
         let charTimings = Self.naturalTypingTimings(for: typingText,
-                                                    baseInterval: Self.numberIntroTypingInterval,
+                                                    baseInterval: Self.numberIntroTypingInterval / max(configuration.neoMessageSpeedFactor, 1e-6),
                                                     rng: &numberSceneRNG)
         let typingEnd = cursorBlinkEnd + (charTimings.last ?? 0)
 
@@ -531,14 +527,10 @@ final class NativeMatrixRenderer {
         )
 
         numberIntroPhase = .cursorBlink
-        numberIntroPhaseStart = numberIntroAnchor
         numberIntroCursorVisible = true
         numberIntroRainFrame = 0
         numberIntroBlackoutCount = 0
         numberIntroBlackedColumns = []
-        numberIntroTypedCount = 0
-        numberIntroTypingText = typingText
-        numberIntroCharTimings = charTimings
 
         for i in renderCells.indices { renderCells[i] = Self.blankRenderCell }
         for i in visibleCountByRow.indices { visibleCountByRow[i] = 0 }
@@ -551,25 +543,24 @@ final class NativeMatrixRenderer {
             guard activeScene == .numberIntro else { break }
             let previousPhase = numberIntroPhase
             let t = Date.timeIntervalSinceReferenceDate
+            let sceneTime = t - numberIntroAnchor
             switch numberIntroPhase {
-            case .cursorBlink:      stepCursorBlink(t: t)
-            case .typingFirstLine:  stepTypingFirstLine(t: t)
-            case .pauseAfterFirst:  stepPauseAfterFirst(t: t)
-            case .secondLine:       commitSecondLine(t: t)
-            case .pauseAfterSecond: stepPauseAfterSecond(t: t)
-            case .rain:             stepNumberRain(t: t)
+            case .cursorBlink:      stepCursorBlink(sceneTime: sceneTime)
+            case .typingFirstLine:  stepTypingFirstLine(sceneTime: sceneTime)
+            case .pauseAfterFirst:  stepPauseAfterFirst(sceneTime: sceneTime)
+            case .secondLine:       commitSecondLine()
+            case .pauseAfterSecond: stepPauseAfterSecond(sceneTime: sceneTime)
+            case .rain:             stepNumberRain(sceneTime: sceneTime)
             }
             if numberIntroPhase == previousPhase { break }
         }
         markAllRowsDirty()
     }
 
-    private func stepCursorBlink(t: TimeInterval) {
-        let elapsed = t - numberIntroPhaseStart
-        let halfPeriod = Int(elapsed / Self.numberIntroCursorBlinkPeriod)
+    private func stepCursorBlink(sceneTime: TimeInterval) {
+        let halfPeriod = Int(sceneTime / Self.numberIntroCursorBlinkPeriod)
         if halfPeriod >= Self.numberIntroCursorBlinkCount * 2 {
             numberIntroPhase = .typingFirstLine
-            numberIntroPhaseStart = numberIntroAnchor + numberIntroSchedule.cursorBlinkEnd
             setRow0(text: "", typedCount: 0, showCursor: false)
             return
         }
@@ -580,26 +571,24 @@ final class NativeMatrixRenderer {
         }
     }
 
-    private func stepTypingFirstLine(t: TimeInterval) {
+    private func stepTypingFirstLine(sceneTime: TimeInterval) {
         let totalChars = numberIntroSchedule.charTimings.count
-        let elapsed = t - numberIntroPhaseStart
-        let count = numberIntroSchedule.charTimings.prefix(while: { $0 <= elapsed }).count
-        numberIntroTypedCount = count
+        let typingElapsed = sceneTime - numberIntroSchedule.cursorBlinkEnd
+        let count = numberIntroSchedule.charTimings.prefix(while: { $0 <= typingElapsed }).count
         if count >= totalChars {
             numberIntroCursorVisible = true
             setRow0(text: numberIntroSchedule.typingText, typedCount: totalChars, showCursor: true)
             numberIntroPhase = .pauseAfterFirst
-            numberIntroPhaseStart = numberIntroAnchor + numberIntroSchedule.typingEnd
             return
         }
-        let halfPeriod = Int(elapsed / Self.numberIntroCursorBlinkPeriod)
+        let halfPeriod = Int(typingElapsed / Self.numberIntroCursorBlinkPeriod)
         setRow0(text: numberIntroSchedule.typingText, typedCount: count,
                 showCursor: halfPeriod % 2 == 0)
     }
 
-    private func stepPauseAfterFirst(t: TimeInterval) {
-        let elapsed = t - numberIntroPhaseStart
-        let halfPeriod = Int(elapsed / Self.numberIntroCursorBlinkPeriod)
+    private func stepPauseAfterFirst(sceneTime: TimeInterval) {
+        let pauseElapsed = sceneTime - numberIntroSchedule.typingEnd
+        let halfPeriod = Int(pauseElapsed / Self.numberIntroCursorBlinkPeriod)
         let visible = halfPeriod % 2 == 0
         if visible != numberIntroCursorVisible {
             numberIntroCursorVisible = visible
@@ -607,31 +596,31 @@ final class NativeMatrixRenderer {
                     typedCount: numberIntroSchedule.charTimings.count,
                     showCursor: visible)
         }
-        if elapsed >= numberIntroSchedule.pause1Duration {
+        if pauseElapsed >= numberIntroSchedule.pause1Duration {
             numberIntroPhase = .secondLine
         }
     }
 
-    private func commitSecondLine(t: TimeInterval) {
+    private func commitSecondLine() {
         let text = "Trace program: running"
         setRow0(text: text, typedCount: text.unicodeScalars.count, showCursor: false)
         numberIntroPhase = .pauseAfterSecond
-        numberIntroPhaseStart = numberIntroAnchor + numberIntroSchedule.pause1End
     }
 
-    private func stepPauseAfterSecond(t: TimeInterval) {
-        if t - numberIntroPhaseStart >= numberIntroSchedule.pause2Duration {
+    private func stepPauseAfterSecond(sceneTime: TimeInterval) {
+        let pauseElapsed = sceneTime - numberIntroSchedule.pause1End
+        if pauseElapsed >= numberIntroSchedule.pause2Duration {
             fillNumberRain()
             numberIntroPhase = .rain
             numberIntroRainFrame = 0
         }
     }
 
-    private func stepNumberRain(t: TimeInterval) {
+    private func stepNumberRain(sceneTime: TimeInterval) {
         while activeScene == .numberIntro {
-            let expectedTime = numberIntroAnchor + numberIntroSchedule.rainStart
+            let expectedSceneTime = numberIntroSchedule.rainStart
                 + Double(numberIntroBlackoutCount) * Self.numberIntroBlackoutInterval
-            if t >= expectedTime {
+            if sceneTime >= expectedSceneTime {
                 blackoutColumns()
             } else {
                 break
@@ -774,7 +763,7 @@ final class NativeMatrixRenderer {
 
     /// Advances the Neo message intro scene by one simulation step.
     private func stepNeoMessageFrame() {
-        neoScene.advance(now: Date.timeIntervalSinceReferenceDate, speedFactor: configuration.neoMessageSpeedFactor)
+        neoScene.advance(now: Date.timeIntervalSinceReferenceDate)
         let state = neoScene.renderState
         // Never write the cursor to the frame buffer — the view draws it directly
         // via neoSceneCursor so it is guaranteed to appear in every phase.
@@ -829,7 +818,7 @@ final class NativeMatrixRenderer {
 
         if configuration.neoMessageSceneEnabled {
             activeScene = .neoMessage
-            neoScene.reset(startTime: sceneStartTime, seed: sceneSeed &+ 1, lines: configuration.neoMessageLines)
+            neoScene.reset(startTime: sceneStartTime, seed: sceneSeed &+ 1, lines: configuration.neoMessageLines, speedFactor: configuration.neoMessageSpeedFactor)
             for i in renderCells.indices { renderCells[i] = Self.blankRenderCell }
             for i in visibleCountByRow.indices { visibleCountByRow[i] = 0 }
             markAllRowsDirty()

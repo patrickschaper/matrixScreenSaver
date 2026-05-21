@@ -46,7 +46,7 @@ struct MatrixScreenSaverOptions: Equatable {
     static let maxNeoMessageLineLength = 256
 
     static let neoMessageSceneDescription = "Show the Neo message intro. On by default."
-    static let neoMessageSpeedFactorDescription = "Speed multiplier for Neo message typing. Default: 1.0."
+    static let neoMessageSpeedFactorDescription = "Speed multiplier for intro scene typing (Neo message and number scene). Default: 1.0."
     static let neoMessageLinesDescription = "Lines typed during the Neo message intro (1–10, max 256 chars)."
     static let numberSceneDescription = "Show the startup number scene. On by default."
     static let diffuseDescription = "On by default."
