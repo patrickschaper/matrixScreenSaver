@@ -1160,6 +1160,10 @@ final class NativeMatrixRenderer {
     }
 
     /// Builds the green palette used for foreground and diffuse rendering levels.
+    ///
+    /// The xterm-256 color cube has no green values between 0 and 95, so two
+    /// extra dark steps (≈32 and ≈63) are inserted directly after black to
+    /// bridge that gap and provide a smoother fade trail at the dim end.
     private static func makePalette() -> [TerminalColor] {
         let base = index2color(47)
 
@@ -1204,6 +1208,11 @@ final class NativeMatrixRenderer {
             indices.append(grayStart - 1)
         }
 
-        return indices.map(index2color)
+        var result = indices.map(index2color)
+        // Insert two darker steps between black (index 0) and the first xterm
+        // dim green (≈95), dividing the gap into thirds for a gradual fade-in.
+        result.insert(TerminalColor(red: 0, green: 63, blue: 0), at: 1)
+        result.insert(TerminalColor(red: 0, green: 32, blue: 0), at: 1)
+        return result
     }
 }
