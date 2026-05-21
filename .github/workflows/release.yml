@@ -43,13 +43,13 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Ensure release runs from main
+      - name: Ensure release runs from main or development
         shell: bash
         run: |
           set -euo pipefail
 
-          if [[ "${GITHUB_REF}" != "refs/heads/main" ]]; then
-            echo "Run this workflow from main." >&2
+          if [[ "${GITHUB_REF}" != "refs/heads/main" && "${GITHUB_REF}" != "refs/heads/development" ]]; then
+            echo "Run this workflow from main or development." >&2
             exit 1
           fi
 
