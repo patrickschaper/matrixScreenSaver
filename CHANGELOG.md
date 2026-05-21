@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Features
 
 - Add per-display seed offset for independent multi-monitor animations
+- update character size range and default
 
 ## [0.1.0] - 2026-05-20
 
