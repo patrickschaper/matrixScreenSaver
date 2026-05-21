@@ -19,7 +19,7 @@ This is a macOS screen saver based on the iconic rain of characters and symbols 
    ```
 
 4. In the opened Wallpaper settings, switch to **Screen Saver** and select **MatrixScreenSaver**.
-5. Enjoy and donate<br>
+5. Enjoy and donate — so I can invest in a developer license for signing the screen saver and make it installable with a double-click (Thanks Apple 😐)<br>
    <a href="https://www.buymeacoffee.com/yesman82"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" width="150"></a><br>
    <img src="docs/bmc_qr.png" alt="Buy Me a Coffee QR code" width="150">
 
