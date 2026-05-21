@@ -337,3 +337,15 @@ jobs:
 
           version="${{ steps.version.outputs.value }}"
           gh release create "${version}" "${{ steps.version.outputs.archive }}" --title "${version}" --notes-file "${{ steps.notes.outputs.file }}" --target "${GITHUB_SHA}"
+
+      - name: Back-merge main into development
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version="${{ steps.version.outputs.value }}"
+          pr_url="$(gh pr list --head main --base development --state open --json url --jq '.[0].url')"
+          if [[ -z "${pr_url}" || "${pr_url}" == "null" ]]; then
+            pr_url="$(gh pr create --base development --head main --title "chore: sync main into development after ${version}" --body "Automated back-merge of \`main\` into \`development\` following the ${version} release.")"
+          fi
+          echo "Back-merge PR: ${pr_url}" >> "$GITHUB_STEP_SUMMARY"
