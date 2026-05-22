@@ -239,9 +239,16 @@ final class NativeMatrixRenderer {
     private(set) var rows = 0
     private(set) var levelColors = NativeMatrixRenderer.palette
 
-    /// XORed into sceneSeed in beginSceneSequence so each physical display
-    /// gets an independent animation while preserving per-display determinism.
+    /// XORed into the rain RNG seed so each physical display gets independent
+    /// rain animation while the scripted scenes (neo message, number intro)
+    /// remain identical across displays.
     var seedOffset: UInt64 = 0
+
+    /// When set, ``beginSceneSequence()`` uses this value instead of computing
+    /// a start time from the current wall clock. The ``ScreenSyncCoordinator``
+    /// sets this so every display begins its scene sequence at the exact same
+    /// moment.
+    var overrideSceneStartTime: TimeInterval?
 
     private var configuration = Configuration()
     private var activeGlyphPool: [UnicodeScalar] = NativeMatrixRenderer.defaultGlyphPool
@@ -791,19 +798,21 @@ final class NativeMatrixRenderer {
         now = 100
         frameIndex = 0
 
-        // In preview contexts (System Settings thumbnail, preview host) skip the
-        // multi-screen sync delay so scenes begin within one second of launch.
-        // In the screensaver engine the 10-second boundary ensures all displays
-        // sharing the same activation window use an identical startTime and seed.
+        // When the ScreenSyncCoordinator provides a shared start time use it
+        // directly so every display begins at the exact same moment. Otherwise
+        // fall back to the legacy heuristics: skip the delay in preview contexts,
+        // or quantise to a 10-second window in ScreenSaverEngine.
         let nowTime = Date.timeIntervalSinceReferenceDate
-        if configuration.skipSyncDelay {
+        if let override = overrideSceneStartTime {
+            sceneStartTime = override
+        } else if configuration.skipSyncDelay {
             sceneStartTime = nowTime + 1.0
         } else {
             let syncWindow: TimeInterval = 10.0
             sceneStartTime = floor(nowTime / syncWindow) * syncWindow + syncWindow
         }
-        sceneSeed = UInt64(bitPattern: Int64(sceneStartTime)) ^ seedOffset
-        rainRNG = Xorshift64(seed: sceneSeed &+ 3)
+        sceneSeed = UInt64(bitPattern: Int64(sceneStartTime))
+        rainRNG = Xorshift64(seed: sceneSeed &+ 3 &+ seedOffset)
 
         guard columns > 0, rows > 0 else {
             if configuration.neoMessageSceneEnabled {

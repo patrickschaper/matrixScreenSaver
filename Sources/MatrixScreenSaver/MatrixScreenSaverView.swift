@@ -40,6 +40,10 @@ final class MatrixScreenSaverView: ScreenSaverView {
     private var firstHiddenFrameTime: TimeInterval = 0
     private static let hiddenFrameToleranceSeconds: TimeInterval = 5.0
 
+    /// When `true`, the renderer start is deferred until the
+    /// ``ScreenSyncCoordinator`` resolves a shared scene start time.
+    private var pendingSync = false
+
     private var windowRect = NSRect.zero
     private var titlebarRect = NSRect.zero
     private var terminalRect = NSRect.zero
@@ -180,14 +184,27 @@ final class MatrixScreenSaverView: ScreenSaverView {
         updateScreenSaverLifecycleObservation()
         updateLayout()
         nativeRenderer.seedOffset = displaySeed
-        nativeRenderer.start()
+
+        if !skipSyncDelay {
+            // Register with the coordinator and defer renderer start until
+            // all expected instances are ready (or the timeout elapses).
+            let screenCount = NSScreen.screens.count
+            ScreenSyncCoordinator.shared.register(ObjectIdentifier(self), expectedCount: screenCount)
+            pendingSync = true
+            NSLog("MatrixScreenSaver sync registered (%d/%d)", ScreenSyncCoordinator.shared.registeredCount, screenCount)
+        } else {
+            pendingSync = false
+            nativeRenderer.start()
+        }
     }
 
     /// Stops the renderer and releases temporary rendering resources.
     override func stopAnimation() {
         let wasActive = animationActive
         animationActive = false
+        pendingSync = false
         nativeRenderer.stop()
+        ScreenSyncCoordinator.shared.unregister(ObjectIdentifier(self))
         releaseRenderingResources()
         if wasActive {
             NSLog("MatrixScreenSaver stopAnimation")
@@ -211,6 +228,20 @@ final class MatrixScreenSaverView: ScreenSaverView {
             return
         }
         firstHiddenFrameTime = 0
+
+        // While waiting for multi-screen sync, poll the coordinator each
+        // frame. Once a shared start time is available, apply it and start
+        // the renderer so all displays begin simultaneously.
+        if pendingSync {
+            guard let startTime = ScreenSyncCoordinator.shared.resolvedStartTime() else {
+                return
+            }
+            pendingSync = false
+            nativeRenderer.overrideSceneStartTime = startTime
+            nativeRenderer.start()
+            NSLog("MatrixScreenSaver sync resolved — starting renderer (startTime=%.2f)", startTime)
+        }
+
         super.animateOneFrame()
         if nativeRenderer.advance() {
             needsDisplay = true
@@ -222,6 +253,7 @@ final class MatrixScreenSaverView: ScreenSaverView {
         appendDebugLog("[\(debugIdentifier)] deinit")
         animationActive = false
         nativeRenderer.stop()
+        ScreenSyncCoordinator.shared.unregister(ObjectIdentifier(self))
         releaseRenderingResources()
     }
 
