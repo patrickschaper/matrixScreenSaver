@@ -38,6 +38,7 @@ swiftc \
   "$SOURCE_DIR/NeoMessageScene.swift" \
   "$SOURCE_DIR/MatrixRendererLimits.swift" \
   "$SOURCE_DIR/NativeMatrixRenderer.swift" \
+  "$SOURCE_DIR/ScreenSyncCoordinator.swift" \
   "$SOURCE_DIR/MatrixScreenSaverView.swift"
 
 cp "$INPUT_RESOURCES_DIR/Info.plist" "$CONTENTS_DIR/Info.plist"
