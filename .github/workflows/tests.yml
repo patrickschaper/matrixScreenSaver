@@ -9,7 +9,6 @@ on:
       - development
       - 'feat/**'
       - 'fix/**'
-      - 'release/**'
   pull_request:
     branches:
       - development

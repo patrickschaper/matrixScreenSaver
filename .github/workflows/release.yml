@@ -34,6 +34,8 @@ jobs:
     if: github.event_name == 'workflow_dispatch'
     name: Prepare release PR
     runs-on: macos-15
+    outputs:
+      branch: ${{ steps.version.outputs.branch }}
     env:
       GH_TOKEN: ${{ github.token }}
 
@@ -228,6 +230,41 @@ jobs:
             printf 'Publish is skipped on workflow_dispatch by design.\n'
             printf 'Merge that pull request into main to trigger the publish job.\n'
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # GITHUB_TOKEN pushes don't trigger other workflows, so the required
+  # checks ("Run tests", "Lint commit messages") would stay pending on the
+  # release PR.  These jobs run the same checks inline with matching names
+  # so branch protection on main is satisfied.
+  release-tests:
+    needs: prepare
+    if: github.event_name == 'workflow_dispatch'
+    name: Run tests
+    runs-on: macos-latest
+    steps:
+      - name: Check out release branch
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.prepare.outputs.branch }}
+
+      - name: Run tests
+        run: ./tests.sh
+
+  release-lint:
+    needs: prepare
+    if: github.event_name == 'workflow_dispatch'
+    name: Lint commit messages
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out release branch
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.prepare.outputs.branch }}
+          fetch-depth: 0
+
+      - name: Lint commits
+        uses: wagoid/commitlint-github-action@v6
+        with:
+          configFile: .commitlintrc.json
 
   publish:
     if: github.event_name == 'push'
