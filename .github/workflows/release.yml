@@ -197,7 +197,7 @@ jobs:
           git commit -m "chore(release): ${version}" -m "- bump VERSION to ${version}" -m "- update CHANGELOG.md"
           git push --force-with-lease --set-upstream origin "${branch}"
 
-      - name: Open or reuse release pull request
+      - name: Open release pull request
         id: pr
         shell: bash
         run: |
@@ -213,12 +213,15 @@ jobs:
             printf '## What'\''s changing\n\n%s\n\n## Validation\n- `./build.sh`\n' "${changelog_section}"
           )"
 
-          pr_url="$(gh pr list --head "${branch}" --base main --state open --json url --jq '.[0].url')"
-          if [[ -z "${pr_url}" || "${pr_url}" == "null" ]]; then
-            pr_url="$(gh pr create --base main --head "${branch}" --title "chore(release): ${version}" --body "${pr_body}")"
-          else
-            gh pr edit "${pr_url}" --body "${pr_body}"
+          # Close any existing release PR so the new one starts with a clean
+          # check-suite (reused PRs carry stale required-check expectations
+          # that GITHUB_TOKEN workflows can never satisfy).
+          existing="$(gh pr list --head "${branch}" --base main --state open --json number --jq '.[0].number')"
+          if [[ -n "${existing}" && "${existing}" != "null" ]]; then
+            gh pr close "${existing}" --delete-branch=false --comment "Superseded by a new release run."
           fi
+
+          pr_url="$(gh pr create --base main --head "${branch}" --title "chore(release): ${version}" --body "${pr_body}")"
 
           echo "url=${pr_url}" >> "$GITHUB_OUTPUT"
 
