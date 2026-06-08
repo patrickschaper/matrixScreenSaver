@@ -16,6 +16,7 @@ func ok(_ condition: Bool, _ description: String, file: StaticString = #file, li
 }
 
 xorshift64Tests()
+screenSyncCoordinatorTests()
 nativeMatrixRendererTests()
 
 print("1..\(testCount)")

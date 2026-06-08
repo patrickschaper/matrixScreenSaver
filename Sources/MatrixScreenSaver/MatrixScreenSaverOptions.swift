@@ -12,7 +12,9 @@ struct MatrixScreenSaverOptions: Equatable {
         static let characterWidth = "CharacterWidth"
         static let characterHeight = "CharacterHeight"
         static let rainDensity = "RainDensity"
-        static let frameRate = "FrameRate"
+         static let rainRunForever = "RainRunForever"
+         static let rainDurationSeconds = "RainDurationSeconds"
+         static let frameRate = "FrameRate"
         static let errorRate = "ErrorRate"
         static let characters = "Characters"
         static let scanLinesIntensity = "ScanLinesIntensity"
@@ -27,8 +29,10 @@ struct MatrixScreenSaverOptions: Equatable {
     static let defaultDiffuseEnabled = true
     static let defaultCharacterWidth = 16
     static let defaultCharacterHeight = 30
-    static let defaultRainDensity = 1.0
-    static let defaultFrameRate = 25.0
+     static let defaultRainDensity = 1.0
+     static let defaultRainRunForever = true
+     static let defaultRainDurationSeconds = 300
+     static let defaultFrameRate = 25.0
     static let defaultErrorRate = 1.0
     static let defaultCharacters = ""
     static let defaultScanLinesIntensity = 0.25
@@ -41,9 +45,11 @@ struct MatrixScreenSaverOptions: Equatable {
     static let minimumNeoMessageSpeedFactor = MatrixRendererLimits.minimumNeoMessageSpeedFactor
     static let minimumCharacterWidth = 1
     static let minimumCharacterHeight = 1
-    static let minNeoMessageLineCount = 1
-    static let maxNeoMessageLineCount = 10
-    static let maxNeoMessageLineLength = 256
+     static let minNeoMessageLineCount = 1
+     static let maxNeoMessageLineCount = 10
+     static let maxNeoMessageLineLength = 256
+     static let minimumRainDurationSeconds = 1
+     static let maximumRainDurationSeconds = 9999
 
     static let neoMessageSceneDescription = "Show the Neo message intro. On by default."
     static let neoMessageSpeedFactorDescription = "Speed multiplier for intro scene typing (Neo message and number scene). Default: 1.0."
@@ -57,8 +63,10 @@ struct MatrixScreenSaverOptions: Equatable {
         (8, 15), (9, 17), (10, 19), (11, 21), (12, 23), (13, 24), (14, 26), (15, 28), (16, 30), (17, 32), (18, 34), (19, 36), (20, 38), (21, 40), (22, 42), (23, 44), (24, 46)
     ]
     static let defaultCharacterSizeIndex = 8
-    static let rainDensityDescription = "Rain density multiplier. Default: 1.0."
-    static let frameRateDescription = "Target frame rate in fps, 1–1000. Default: 25."
+     static let rainDensityDescription = "Rain density multiplier. Default: 1.0."
+     static let rainRunForeverDescription = "When enabled (default), rain continuously spawns new falling lines. When disabled, rain stops starting new lines after the specified duration; lines already falling finish and fade out, then the full scene sequence restarts."
+     static let rainDurationSecondsDescription = "How long rain keeps starting new falling lines (1–9999 seconds) before it winds down. Default: 300 (5 minutes)."
+     static let frameRateDescription = "Target frame rate in fps, 1–1000. Default: 25."
     static let errorRateDescription = "Character change rate factor. Default: 1.0."
     static let charactersDescription = "Custom glyph set (e.g. ATGC). Empty = default."
     static let scanLinesDescription = "CRT scan line intensity (0–100%). Default: 25%."
@@ -71,8 +79,10 @@ struct MatrixScreenSaverOptions: Equatable {
     var diffuseEnabled = defaultDiffuseEnabled
     var characterWidth = defaultCharacterWidth
     var characterHeight = defaultCharacterHeight
-    var rainDensity = defaultRainDensity
-    var frameRate = defaultFrameRate
+     var rainDensity = defaultRainDensity
+     var rainRunForever = defaultRainRunForever
+     var rainDurationSeconds = defaultRainDurationSeconds
+     var frameRate = defaultFrameRate
     var errorRate = defaultErrorRate
     var characters = defaultCharacters
     var scanLinesIntensity = defaultScanLinesIntensity
@@ -87,7 +97,9 @@ struct MatrixScreenSaverOptions: Equatable {
             twinkleEnabled: twinkleEnabled,
             diffuseEnabled: diffuseEnabled,
             rainDensity: rainDensity,
-            frameRate: frameRate,
+             rainRunForever: rainRunForever,
+             rainDurationSeconds: rainDurationSeconds,
+             frameRate: frameRate,
             errorRate: errorRate,
             characters: characters,
             neoMessageLines: neoMessageLines,
@@ -114,8 +126,10 @@ struct MatrixScreenSaverOptions: Equatable {
             diffuseEnabled: diffuseEnabled,
             characterWidth: max(characterWidth, Self.minimumCharacterWidth),
             characterHeight: max(characterHeight, Self.minimumCharacterHeight),
-            rainDensity: max(rainDensity, Self.minimumRainDensity),
-            frameRate: min(max(frameRate, Self.minimumFrameRate), Self.maximumFrameRate),
+             rainDensity: max(rainDensity, Self.minimumRainDensity),
+             rainRunForever: rainRunForever,
+             rainDurationSeconds: min(max(rainDurationSeconds, Self.minimumRainDurationSeconds), Self.maximumRainDurationSeconds),
+             frameRate: min(max(frameRate, Self.minimumFrameRate), Self.maximumFrameRate),
             errorRate: max(errorRate, Self.minimumErrorRate),
             characters: {
                 var seen = Set<UnicodeScalar>()
@@ -147,8 +161,10 @@ struct MatrixScreenSaverOptions: Equatable {
             Keys.diffuseEnabled: defaultDiffuseEnabled,
             Keys.characterWidth: defaultCharacterWidth,
             Keys.characterHeight: defaultCharacterHeight,
-            Keys.rainDensity: defaultRainDensity,
-            Keys.frameRate: defaultFrameRate,
+             Keys.rainDensity: defaultRainDensity,
+             Keys.rainRunForever: defaultRainRunForever,
+             Keys.rainDurationSeconds: defaultRainDurationSeconds,
+             Keys.frameRate: defaultFrameRate,
             Keys.errorRate: defaultErrorRate,
             Keys.characters: defaultCharacters,
             Keys.scanLinesIntensity: defaultScanLinesIntensity,
@@ -167,8 +183,10 @@ struct MatrixScreenSaverOptions: Equatable {
             diffuseEnabled: defaults.bool(forKey: Keys.diffuseEnabled),
             characterWidth: defaults.integer(forKey: Keys.characterWidth),
             characterHeight: defaults.integer(forKey: Keys.characterHeight),
-            rainDensity: defaults.double(forKey: Keys.rainDensity),
-            frameRate: defaults.double(forKey: Keys.frameRate),
+             rainDensity: defaults.double(forKey: Keys.rainDensity),
+             rainRunForever: defaults.bool(forKey: Keys.rainRunForever),
+             rainDurationSeconds: defaults.integer(forKey: Keys.rainDurationSeconds),
+             frameRate: defaults.double(forKey: Keys.frameRate),
             errorRate: defaults.double(forKey: Keys.errorRate),
             characters: defaults.string(forKey: Keys.characters) ?? defaultCharacters,
             scanLinesIntensity: defaults.double(forKey: Keys.scanLinesIntensity),
@@ -187,8 +205,10 @@ struct MatrixScreenSaverOptions: Equatable {
         defaults.set(options.diffuseEnabled, forKey: Keys.diffuseEnabled)
         defaults.set(options.characterWidth, forKey: Keys.characterWidth)
         defaults.set(options.characterHeight, forKey: Keys.characterHeight)
-        defaults.set(options.rainDensity, forKey: Keys.rainDensity)
-        defaults.set(options.frameRate, forKey: Keys.frameRate)
+         defaults.set(options.rainDensity, forKey: Keys.rainDensity)
+         defaults.set(options.rainRunForever, forKey: Keys.rainRunForever)
+         defaults.set(options.rainDurationSeconds, forKey: Keys.rainDurationSeconds)
+         defaults.set(options.frameRate, forKey: Keys.frameRate)
         defaults.set(options.errorRate, forKey: Keys.errorRate)
         defaults.set(options.characters, forKey: Keys.characters)
         defaults.set(options.scanLinesIntensity, forKey: Keys.scanLinesIntensity)
@@ -200,25 +220,28 @@ struct MatrixScreenSaverOptions: Equatable {
 final class MatrixScreenSaverOptionsSheetController: NSObject,
     NSTextFieldDelegate, NSWindowDelegate,
     NSTableViewDataSource, NSTableViewDelegate {
-    private enum ValidationError: LocalizedError {
-        case neoMessageSpeedFactor
-        case rainDensity
-        case frameRate
-        case errorRate
+     private enum ValidationError: LocalizedError {
+         case neoMessageSpeedFactor
+          case rainDensity
+           case frameRate
+           case errorRate
+           case rainDurationSeconds
 
-        var errorDescription: String? {
-            switch self {
-            case .neoMessageSpeedFactor:
-                return "Neo message speed must be a positive number."
-            case .rainDensity:
-                return "Rain density must be a positive number."
-            case .frameRate:
-                return "Frame rate must be a positive number less than or equal to 1000."
-            case .errorRate:
-                return "Error rate must be a non-negative number."
-            }
-        }
-    }
+         var errorDescription: String? {
+             switch self {
+             case .neoMessageSpeedFactor:
+                 return "Neo message speed must be a positive number."
+             case .rainDensity:
+                 return "Rain density must be a positive number."
+             case .frameRate:
+                 return "Frame rate must be a positive number less than or equal to 1000."
+             case .errorRate:
+               return "Error rate must be a non-negative number."
+               case .rainDurationSeconds:
+                   return "Rain duration must be a positive integer (1–9999 seconds)."
+             }
+         }
+     }
 
     private weak var owner: MatrixScreenSaverView?
     var onClose: (() -> Void)?
@@ -270,8 +293,10 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         let pair = MatrixScreenSaverOptions.characterSizePairs[MatrixScreenSaverOptions.defaultCharacterSizeIndex]
         return NSTextField(labelWithString: "\(pair.width)×\(pair.height)")
     }()
-    private let rainDensityField = NSTextField(string: "")
-    private let frameRateField = NSTextField(string: "")
+     private let rainDensityField = NSTextField(string: "")
+     private let rainRunForeverCheckbox = NSButton(checkboxWithTitle: "Run forever", target: nil, action: nil)
+     private let rainDurationField = NSTextField(string: "")
+     private let frameRateField = NSTextField(string: "")
     private let errorRateField = NSTextField(string: "")
     private let charactersField = NSTextField(string: "")
     private var didClose = false
@@ -306,7 +331,10 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         characterSizeSlider.doubleValue = Double(sizeIndex)
         let pair = MatrixScreenSaverOptions.characterSizePairs[sizeIndex]
         characterSizeValueLabel.stringValue = "\(pair.width)×\(pair.height)"
-        rainDensityField.stringValue = Self.format(options.rainDensity)
+         rainDensityField.stringValue = Self.format(options.rainDensity)
+         rainRunForeverCheckbox.state = options.rainRunForever ? .on : .off
+         rainDurationField.stringValue = Self.format(options.rainDurationSeconds)
+         rainDurationField.isEnabled = !options.rainRunForever
         frameRateField.stringValue = Self.format(options.frameRate)
         errorRateField.stringValue = Self.format(options.errorRate)
         charactersField.stringValue = options.characters
@@ -357,16 +385,20 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         window.isReleasedWhenClosed = false
         window.delegate = self
 
-        characterSizeSlider.target = self
-        characterSizeSlider.action = #selector(characterSizeSliderChanged(_:))
-        neoMessageSpeedFactorField.formatter = Self.numberFormatter
-        rainDensityField.formatter = Self.numberFormatter
-        frameRateField.formatter = Self.numberFormatter
-        errorRateField.formatter = Self.numberFormatter
-        neoMessageSpeedFactorField.delegate = self
-        rainDensityField.delegate = self
-        frameRateField.delegate = self
-        errorRateField.delegate = self
+         characterSizeSlider.target = self
+         characterSizeSlider.action = #selector(characterSizeSliderChanged(_:))
+         neoMessageSpeedFactorField.formatter = Self.numberFormatter
+         rainDensityField.formatter = Self.numberFormatter
+         rainDurationField.formatter = Self.integerFormatter
+         frameRateField.formatter = Self.numberFormatter
+         errorRateField.formatter = Self.numberFormatter
+         neoMessageSpeedFactorField.delegate = self
+         rainDensityField.delegate = self
+         rainDurationField.delegate = self
+         frameRateField.delegate = self
+         errorRateField.delegate = self
+         rainRunForeverCheckbox.target = self
+         rainRunForeverCheckbox.action = #selector(rainRunForeverCheckboxChanged(_:))
 
         rootStack.orientation = .vertical
         rootStack.alignment = .leading
@@ -413,13 +445,14 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         let numberGroup = makeGroupBox(title: "Number scene", views: [
             makeCheckboxSection(checkbox: numberSceneCheckbox, description: MatrixScreenSaverOptions.numberSceneDescription),
         ])
-        let rainGroup = makeGroupBox(title: "Rain scene", views: [
-            makeCheckboxSection(checkbox: twinkleCheckbox, description: MatrixScreenSaverOptions.twinkleDescription),
-            makeCheckboxSection(checkbox: diffuseCheckbox, description: MatrixScreenSaverOptions.diffuseDescription),
-            makeNumericSection(title: "Density", field: rainDensityField, description: MatrixScreenSaverOptions.rainDensityDescription),
-            makeTextSection(title: "Characters", field: charactersField, description: MatrixScreenSaverOptions.charactersDescription, fieldWidth: Self.textFieldWidth / 2),
-            makeNumericSection(title: "Error rate", field: errorRateField, description: MatrixScreenSaverOptions.errorRateDescription),
-        ])
+         let rainGroup = makeGroupBox(title: "Rain scene", views: [
+             makeCheckboxSection(checkbox: twinkleCheckbox, description: MatrixScreenSaverOptions.twinkleDescription),
+             makeCheckboxSection(checkbox: diffuseCheckbox, description: MatrixScreenSaverOptions.diffuseDescription),
+             makeNumericSection(title: "Density", field: rainDensityField, description: MatrixScreenSaverOptions.rainDensityDescription),
+             makeRainDurationSection(),
+             makeTextSection(title: "Characters", field: charactersField, description: MatrixScreenSaverOptions.charactersDescription, fieldWidth: Self.textFieldWidth / 2),
+             makeNumericSection(title: "Error rate", field: errorRateField, description: MatrixScreenSaverOptions.errorRateDescription),
+         ])
         rootStack.addArrangedSubview(generalGroup)
         rootStack.addArrangedSubview(neoGroup)
         rootStack.addArrangedSubview(numberGroup)
@@ -933,6 +966,45 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         return stack
     }
 
+     /// Builds the rain duration section with "Run forever" checkbox and optional seconds field.
+     private func makeRainDurationSection() -> NSView {
+         let stack = NSStackView()
+         stack.orientation = .vertical
+         stack.alignment = .leading
+         stack.spacing = 4
+         stack.setHuggingPriority(.required, for: .vertical)
+
+         let checkboxRow = NSStackView()
+         checkboxRow.orientation = .horizontal
+         checkboxRow.spacing = 0
+         checkboxRow.alignment = .centerY
+         rainRunForeverCheckbox.setButtonType(.switch)
+         checkboxRow.addArrangedSubview(rainRunForeverCheckbox)
+
+         let secondsRow = NSStackView()
+         secondsRow.orientation = .horizontal
+         secondsRow.spacing = 12
+         secondsRow.alignment = .centerY
+
+         let secondsLabel = NSTextField(labelWithString: "Seconds")
+         secondsLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+         secondsLabel.setContentHuggingPriority(.required, for: .horizontal)
+
+         rainDurationField.alignment = .left
+         rainDurationField.controlSize = .regular
+         rainDurationField.translatesAutoresizingMaskIntoConstraints = false
+         rainDurationField.widthAnchor.constraint(equalToConstant: Self.fourDigitFieldWidth).isActive = true
+
+         secondsRow.addArrangedSubview(secondsLabel)
+         secondsRow.addArrangedSubview(rainDurationField)
+
+         stack.addArrangedSubview(checkboxRow)
+         stack.addArrangedSubview(secondsRow)
+         stack.addArrangedSubview(makeDescriptionLabel(MatrixScreenSaverOptions.rainRunForeverDescription))
+         stack.addArrangedSubview(makeDescriptionLabel(MatrixScreenSaverOptions.rainDurationSecondsDescription))
+         return stack
+    }
+
     /// Builds the character size slider with a live size label.
     private func makeCharacterSizeSection() -> NSView {
         let stack = NSStackView()
@@ -966,11 +1038,16 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         return stack
     }
 
-    @objc private func characterSizeSliderChanged(_ sender: NSSlider) {
-        let index = Int(sender.doubleValue.rounded())
-        let pair = MatrixScreenSaverOptions.characterSizePairs[index]
-        characterSizeValueLabel.stringValue = "\(pair.width)×\(pair.height)"
-    }
+     @objc private func characterSizeSliderChanged(_ sender: NSSlider) {
+         let index = Int(sender.doubleValue.rounded())
+         let pair = MatrixScreenSaverOptions.characterSizePairs[index]
+         characterSizeValueLabel.stringValue = "\(pair.width)×\(pair.height)"
+     }
+
+     @objc private func rainRunForeverCheckboxChanged(_ sender: NSButton) {
+         let isRunningForever = sender.state == .on
+         rainDurationField.isEnabled = !isRunningForever
+     }
 
     /// Builds a titled group box containing a vertical stack of option sections.
     private func makeGroupBox(title: String, views: [NSView]) -> NSBox {
@@ -1010,18 +1087,22 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
     private func validatedOptions() throws -> MatrixScreenSaverOptions {
         let sizeIndex = Int(characterSizeSlider.doubleValue.rounded())
         let sizePair = MatrixScreenSaverOptions.characterSizePairs[sizeIndex]
-        let neoMessageSpeedFactor = try parseDouble(from: neoMessageSpeedFactorField, error: .neoMessageSpeedFactor)
-        let rainDensity = try parseDouble(from: rainDensityField, error: .rainDensity)
-        let frameRate = try parseDouble(from: frameRateField, error: .frameRate)
+         let neoMessageSpeedFactor = try parseDouble(from: neoMessageSpeedFactorField, error: .neoMessageSpeedFactor)
+         let rainDensity = try parseDouble(from: rainDensityField, error: .rainDensity)
+         let rainDurationSeconds = try parseInteger(from: rainDurationField, error: .rainDurationSeconds)
+         let frameRate = try parseDouble(from: frameRateField, error: .frameRate)
         let errorRate = try parseDouble(from: errorRateField, error: .errorRate)
 
         guard neoMessageSpeedFactor > 0 else {
             throw ValidationError.neoMessageSpeedFactor
         }
-        guard rainDensity > 0 else {
-            throw ValidationError.rainDensity
-        }
-        guard frameRate > 0, frameRate <= MatrixScreenSaverOptions.maximumFrameRate else {
+         guard rainDensity > 0 else {
+             throw ValidationError.rainDensity
+         }
+         guard rainDurationSeconds >= MatrixScreenSaverOptions.minimumRainDurationSeconds else {
+             throw ValidationError.rainDurationSeconds
+         }
+         guard frameRate > 0, frameRate <= MatrixScreenSaverOptions.maximumFrameRate else {
             throw ValidationError.frameRate
         }
         guard errorRate >= 0 else {
@@ -1039,8 +1120,10 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
             diffuseEnabled: diffuseCheckbox.state == .on,
             characterWidth: sizePair.width,
             characterHeight: sizePair.height,
-            rainDensity: rainDensity,
-            frameRate: frameRate,
+             rainDensity: rainDensity,
+             rainRunForever: rainRunForeverCheckbox.state == .on,
+             rainDurationSeconds: rainDurationSeconds,
+             frameRate: frameRate,
             errorRate: errorRate,
             characters: charactersField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines),
             scanLinesIntensity: scanLinesSlider.doubleValue / 100,
