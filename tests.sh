@@ -14,8 +14,10 @@ swiftc \
   "$SRC/Xorshift64.swift" \
   "$SRC/NeoMessageScene.swift" \
   "$SRC/MatrixRendererLimits.swift" \
+  "$SRC/ScreenSyncCoordinator.swift" \
   "$SRC/NativeMatrixRenderer.swift" \
   "$TESTS/Xorshift64Tests.swift" \
+  "$TESTS/ScreenSyncCoordinatorTests.swift" \
   "$TESTS/NativeMatrixRendererTests.swift" \
   "$TESTS/main.swift" \
   -o "$TEST_BIN"
