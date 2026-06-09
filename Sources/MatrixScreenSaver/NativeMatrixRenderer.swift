@@ -8,7 +8,9 @@ final class NativeMatrixRenderer {
         var twinkleEnabled = true
         var diffuseEnabled = true
         var rainDensity = 1.0
-        var frameRate = 25.0
+         var rainRunForever = true
+         var rainDurationSeconds = 300
+         var frameRate = 25.0
         var errorRate = 1.0
         var characters = ""
         var neoMessageLines: [String] = NeoMessageScene.defaultLines
@@ -26,7 +28,9 @@ final class NativeMatrixRenderer {
                 twinkleEnabled: twinkleEnabled,
                 diffuseEnabled: diffuseEnabled,
                 rainDensity: max(rainDensity, MatrixRendererLimits.minimumRainDensity),
-                frameRate: min(max(frameRate, MatrixRendererLimits.minimumFrameRate), MatrixRendererLimits.maximumFrameRate),
+                 rainRunForever: rainRunForever,
+                 rainDurationSeconds: max(rainDurationSeconds, 1),
+                 frameRate: min(max(frameRate, MatrixRendererLimits.minimumFrameRate), MatrixRendererLimits.maximumFrameRate),
                 errorRate: max(errorRate, MatrixRendererLimits.minimumErrorRate),
                 characters: characters,
                 neoMessageLines: neoMessageLines.isEmpty ? NeoMessageScene.defaultLines : neoMessageLines,
@@ -192,7 +196,6 @@ final class NativeMatrixRenderer {
     private static let numberIntroCursorBlinkPeriod: TimeInterval = 0.5   // matches NeoMessageScene
     private static let numberIntroCursorBlinkCount = 2                    // 4 half-periods × 0.5 s ≈ 2 s
     private static let numberIntroTypingInterval: TimeInterval = 1.0 / 40.0
-    private static let rainDuration: TimeInterval = 90.0   // how long rain runs before restarting
     private static let numberIntroRainFrames = 160
     private static let numberIntroBlackoutInterval: TimeInterval = 1.0
     private static let numberIntroBlackoutRounds = 10
@@ -239,9 +242,16 @@ final class NativeMatrixRenderer {
     private(set) var rows = 0
     private(set) var levelColors = NativeMatrixRenderer.palette
 
-    /// XORed into sceneSeed in beginSceneSequence so each physical display
-    /// gets an independent animation while preserving per-display determinism.
+    /// XORed into the rain RNG seed so each physical display gets independent
+    /// rain animation while the scripted scenes (neo message, number intro)
+    /// remain identical across displays.
     var seedOffset: UInt64 = 0
+
+    /// When set, ``beginSceneSequence()`` uses this value instead of computing
+    /// a start time from the current wall clock. The ``ScreenSyncCoordinator``
+    /// sets this so every display begins its scene sequence at the exact same
+    /// moment.
+    var overrideSceneStartTime: TimeInterval?
 
     private var configuration = Configuration()
     private var activeGlyphPool: [UnicodeScalar] = NativeMatrixRenderer.defaultGlyphPool
@@ -266,7 +276,11 @@ final class NativeMatrixRenderer {
     private var now = 100
     private var frameIndex = 0
     private var activeScene: Scene = .numberIntro
-    private enum NumberIntroPhase {
+     private var rainProducing = true
+     private var restartRequested = false
+     private var neoSceneDoneRequested = false
+     private var numberSceneDoneRequested = false
+     private enum NumberIntroPhase {
         case cursorBlink, typingFirstLine, pauseAfterFirst, secondLine, pauseAfterSecond, rain
     }
 
@@ -293,7 +307,7 @@ final class NativeMatrixRenderer {
     private var numberIntroSchedule = NumberIntroSchedule()
     private var numberIntroBlackoutCount = 0
     private var numberIntroBlackedColumns = Set<Int>()
-    private var rainStartTime: TimeInterval = 0   // unused; kept for future use
+    private var rainStartTime: TimeInterval = 0   // wall-clock time when current rain phase began
 
     /// Returns the rendered cell content at the requested grid position.
     subscript(row: Int, column: Int) -> RenderCell {
@@ -346,6 +360,7 @@ final class NativeMatrixRenderer {
     /// Starts the renderer state for a new saver session.
     func start() {
         running = true
+        restartRequested = false
         lastUpdateTime = Date.timeIntervalSinceReferenceDate
         pendingSimulationSteps = 0.0
         if columns > 0, rows > 0 {
@@ -357,6 +372,44 @@ final class NativeMatrixRenderer {
     /// Stops the renderer so no more simulation work is produced.
     func stop() {
         running = false
+    }
+
+    /// Returns whether a restart has been requested (by `stepRainFrame()` when
+    /// rain drains), then clears the flag. The View uses this to coordinate
+    /// the restart across all displays via the ``ScreenSyncCoordinator``.
+    func consumeRestartRequest() -> Bool {
+        defer { restartRequested = false }
+        return restartRequested
+    }
+
+    /// Returns whether the Neo scene has completed, then clears the flag.
+    /// The View uses this to coordinate the scene transition across all displays
+    /// via the ``ScreenSyncCoordinator``.
+    func consumeNeoSceneDone() -> Bool {
+        defer { neoSceneDoneRequested = false }
+        return neoSceneDoneRequested
+    }
+
+    /// Returns whether the Number scene has completed, then clears the flag.
+    /// The View uses this to coordinate the scene transition across all displays
+    /// via the ``ScreenSyncCoordinator``.
+    func consumeNumberSceneDone() -> Bool {
+        defer { numberSceneDoneRequested = false }
+        return numberSceneDoneRequested
+    }
+
+    /// Advances to the next scene in the sequence after a phase-advance barrier has resolved.
+    /// The View calls this after coordinating with other displays via the ``ScreenSyncCoordinator``.
+    func advanceToNextScene() {
+        switch activeScene {
+        case .neoMessage:
+            transitionFromNeoMessage()
+        case .numberIntro:
+            beginRainScene()
+        case .rainForever:
+            // Rain doesn't advance to another scene; it cycles via restart
+            break
+        }
     }
 
     /// Resizes the terminal grid and resets scene state to match it.
@@ -443,22 +496,60 @@ final class NativeMatrixRenderer {
         }
     }
 
-    /// Advances the continuous rain scene by one simulation step.
-    private func stepRainFrame() {
-        if frameIndex % spawnModulo == 0 {
-            addRandomThread()
-        }
-        frameIndex += 1
-        now += 1
+    /// Initializes the rain scene state.
+    private func beginRainScene(at wallClockTime: TimeInterval = Date.timeIntervalSinceReferenceDate) {
+        activeScene = .rainForever
+        rainStartTime = wallClockTime
+        rainProducing = true
+    }
 
-        layers[0].stepThreads(now: now, glyphProvider: randomGlyph)
-        layers[0].resolveLevels(now: now, errorRateModulo: errorRateModulo, glyphProvider: randomGlyph)
-        layers[1].stepThreads(now: now, glyphProvider: randomGlyph)
-        layers[1].resolveLevels(now: now, errorRateModulo: errorRateModulo, glyphProvider: randomGlyph)
-        layers[2].stepThreads(now: now, glyphProvider: randomGlyph)
+    /// Advances the continuous rain scene by one simulation step.
+     private func stepRainFrame() {
+         // Check if we need to stop producing new lines (wind-down)
+         if !configuration.rainRunForever && rainProducing {
+             let elapsedSeconds = Date.timeIntervalSinceReferenceDate - rainStartTime
+             let durationSeconds = TimeInterval(configuration.rainDurationSeconds)
+             if elapsedSeconds >= durationSeconds {
+                 rainProducing = false
+             }
+         }
+
+         // Only spawn new lines if rain is actively producing
+         if rainProducing && frameIndex % spawnModulo == 0 {
+             addRandomThread()
+         }
+         frameIndex += 1
+         now += 1
+
+         // Lines continue falling and stamping regardless; only spawning is gated
+         layers[0].stepThreads(now: now, glyphProvider: randomGlyph)
+         layers[0].resolveLevels(now: now, errorRateModulo: errorRateModulo, glyphProvider: randomGlyph)
+         
+         layers[1].stepThreads(now: now, glyphProvider: randomGlyph)
+         layers[1].resolveLevels(now: now, errorRateModulo: errorRateModulo, glyphProvider: randomGlyph)
+         
+         layers[2].stepThreads(now: now, glyphProvider: randomGlyph)
         layers[2].resolveLevels(now: now, errorRateModulo: errorRateModulo, glyphProvider: randomGlyph)
 
         constructRenderContent()
+
+         // If winding down and all layers are empty, restart the scene sequence
+         if !rainProducing && !configuration.rainRunForever {
+             let allLayersEmpty = layers.allSatisfy { layer in
+                 layer.threads.isEmpty && layer.content.allSatisfy { $0.isBlank }
+             }
+             if allLayersEmpty && !restartRequested {
+                 if configuration.skipSyncDelay {
+                     // Preview context: self-restart in place
+                     resetLayers()
+                     overrideSceneStartTime = nil
+                     beginSceneSequence()
+                 } else {
+                     // Engine context: hand off restart to View for coordinated timing
+                     restartRequested = true
+                 }
+             }
+         }
     }
 
     // MARK: - Number intro scene
@@ -617,7 +708,7 @@ final class NativeMatrixRenderer {
     }
 
     private func stepNumberRain(sceneTime: TimeInterval) {
-        while activeScene == .numberIntro {
+        while activeScene == .numberIntro && !numberSceneDoneRequested {
             let expectedSceneTime = numberIntroSchedule.rainStart
                 + Double(numberIntroBlackoutCount) * Self.numberIntroBlackoutInterval
             if sceneTime >= expectedSceneTime {
@@ -626,7 +717,7 @@ final class NativeMatrixRenderer {
                 break
             }
         }
-        guard activeScene == .numberIntro else { return }
+        guard activeScene == .numberIntro && !numberSceneDoneRequested else { return }
         scrollNumberRain()
         self.now += 1
     }
@@ -724,12 +815,17 @@ final class NativeMatrixRenderer {
                 backgroundLevel: 0, bold: false)
             numberIntroBlackedColumns.insert(col)
         }
-        visibleCountByRow[m] = (colStart..<colEnd).filter { numberIntroBlackedColumns.contains($0) }.count
-        numberIntroBlackoutCount += 1
-        if numberIntroBlackoutCount >= numberIntroSchedule.blackoutRounds.count {
-            activeScene = .rainForever
-            rainStartTime = Date.timeIntervalSinceReferenceDate
-        }
+         visibleCountByRow[m] = (colStart..<colEnd).filter { numberIntroBlackedColumns.contains($0) }.count
+         numberIntroBlackoutCount += 1
+         if numberIntroBlackoutCount >= numberIntroSchedule.blackoutRounds.count {
+             if configuration.skipSyncDelay {
+                 // Preview context: self-transition immediately
+                 beginRainScene()
+             } else {
+                 // Engine context: signal completion and let View coordinate barrier
+                 numberSceneDoneRequested = true
+             }
+         }
     }
 
     /// Returns a random palette level with power clamped to 0.2–0.6.
@@ -770,7 +866,13 @@ final class NativeMatrixRenderer {
         setRow0(text: state.currentLine ?? "", typedCount: state.visibleCharCount, showCursor: false)
         markAllRowsDirty()
         if neoScene.phase == .done {
-            transitionFromNeoMessage()
+            if configuration.skipSyncDelay {
+                // Preview context: self-transition immediately
+                transitionFromNeoMessage()
+            } else {
+                // Engine context: signal completion and let View coordinate barrier
+                neoSceneDoneRequested = true
+            }
         }
     }
 
@@ -780,8 +882,7 @@ final class NativeMatrixRenderer {
             activeScene = .numberIntro
             initNumberIntroScene()
         } else {
-            activeScene = .rainForever
-            rainStartTime = Date.timeIntervalSinceReferenceDate
+            beginRainScene()
             stepRainFrame()
         }
     }
@@ -791,19 +892,21 @@ final class NativeMatrixRenderer {
         now = 100
         frameIndex = 0
 
-        // In preview contexts (System Settings thumbnail, preview host) skip the
-        // multi-screen sync delay so scenes begin within one second of launch.
-        // In the screensaver engine the 10-second boundary ensures all displays
-        // sharing the same activation window use an identical startTime and seed.
+        // When the ScreenSyncCoordinator provides a shared start time use it
+        // directly so every display begins at the exact same moment. Otherwise
+        // fall back to the legacy heuristics: skip the delay in preview contexts,
+        // or quantise to a 10-second window in ScreenSaverEngine.
         let nowTime = Date.timeIntervalSinceReferenceDate
-        if configuration.skipSyncDelay {
+        if let override = overrideSceneStartTime {
+            sceneStartTime = override
+        } else if configuration.skipSyncDelay {
             sceneStartTime = nowTime + 1.0
         } else {
             let syncWindow: TimeInterval = 10.0
             sceneStartTime = floor(nowTime / syncWindow) * syncWindow + syncWindow
         }
-        sceneSeed = UInt64(bitPattern: Int64(sceneStartTime)) ^ seedOffset
-        rainRNG = Xorshift64(seed: sceneSeed &+ 3)
+        sceneSeed = UInt64(bitPattern: Int64(sceneStartTime))
+        rainRNG = Xorshift64(seed: sceneSeed &+ 3 &+ seedOffset)
 
         guard columns > 0, rows > 0 else {
             if configuration.neoMessageSceneEnabled {
@@ -826,8 +929,8 @@ final class NativeMatrixRenderer {
             activeScene = .numberIntro
             initNumberIntroScene()
         } else {
-            activeScene = .rainForever
-            rainStartTime = nowTime
+            let nowTime = Date.timeIntervalSinceReferenceDate
+            beginRainScene(at: nowTime)
             stepRainFrame()
         }
     }

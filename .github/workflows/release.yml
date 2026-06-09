@@ -34,6 +34,8 @@ jobs:
     if: github.event_name == 'workflow_dispatch'
     name: Prepare release PR
     runs-on: macos-15
+    outputs:
+      branch: ${{ steps.version.outputs.branch }}
     env:
       GH_TOKEN: ${{ github.token }}
 
@@ -43,13 +45,13 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Ensure release runs from main
+      - name: Ensure release runs from development
         shell: bash
         run: |
           set -euo pipefail
 
-          if [[ "${GITHUB_REF}" != "refs/heads/main" ]]; then
-            echo "Run this workflow from main." >&2
+          if [[ "${GITHUB_REF}" != "refs/heads/development" ]]; then
+            echo "Run this workflow from development." >&2
             exit 1
           fi
 
@@ -86,20 +88,16 @@ jobs:
             exit 1
           fi
 
-          printf '%s\n' "${next_version}" > VERSION
-
           echo "current=${current_version}" >> "$GITHUB_OUTPUT"
           echo "next=${next_version}" >> "$GITHUB_OUTPUT"
           echo "branch=${release_branch}" >> "$GITHUB_OUTPUT"
 
       - name: Inspect release refs
-        id: refs
         shell: bash
         run: |
           set -euo pipefail
 
           version="${{ steps.version.outputs.next }}"
-          branch="${{ steps.version.outputs.branch }}"
 
           if git ls-remote --exit-code --tags origin "refs/tags/${version}" >/dev/null 2>&1; then
             echo "Tag ${version} already exists." >&2
@@ -111,11 +109,21 @@ jobs:
             exit 1
           fi
 
-          if git ls-remote --exit-code --heads origin "${branch}" >/dev/null 2>&1; then
-            echo "branch_exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "branch_exists=false" >> "$GITHUB_OUTPUT"
-          fi
+      - name: Create release branch
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          branch="${{ steps.version.outputs.branch }}"
+
+          # Always (re)create from development so the release includes all
+          # new changes — even on a rerun where the branch already exists.
+          git fetch origin development
+          git switch -c "${branch}" origin/development
+
+          # Merge main to incorporate any commits not on development
+          # (e.g. previous release chore commits)
+          git merge origin/main --no-edit
 
       - name: Validate build
         shell: bash
@@ -138,7 +146,9 @@ jobs:
           fi
           today="$(date -u +%Y-%m-%d)"
 
-          # Collect conventional commits since the previous tag
+          # Collect conventional commits since the previous tag.
+          # --first-parent follows only the mainline (one entry per merged PR,
+          # no duplicates from feature branch commits).
           features=""
           fixes=""
           while IFS= read -r line; do
@@ -154,7 +164,7 @@ jobs:
               rest="${msg#fix(}"
               fixes="${fixes}- ${rest#*): }"$'\n'
             fi
-          done < <(git log "${prev_tag}..HEAD" --oneline --no-merges 2>/dev/null || git log --oneline --no-merges)
+          done < <(git log "${prev_tag}..HEAD" --oneline --first-parent 2>/dev/null || git log --oneline --first-parent)
 
           # Build the new changelog section
           new_section="## [${version}] - ${today}"$'\n'
@@ -174,36 +184,20 @@ jobs:
           } > "${tmp}"
           mv "${tmp}" CHANGELOG.md
 
-      - name: Create or reuse release branch
+      - name: Commit and push release changes
         shell: bash
         run: |
           set -euo pipefail
 
           version="${{ steps.version.outputs.next }}"
           branch="${{ steps.version.outputs.branch }}"
-          branch_exists="${{ steps.refs.outputs.branch_exists }}"
 
-          if [[ "${branch_exists}" == "true" ]]; then
-            git restore --source=HEAD --staged --worktree VERSION CHANGELOG.md
-            git fetch origin "${branch}"
-            git switch -C "${branch}" "origin/${branch}"
-
-            branch_version="$(tr -d '[:space:]' < VERSION)"
-            if [[ "${branch_version}" != "${version}" ]]; then
-              echo "Existing ${branch} has VERSION ${branch_version}, expected ${version}." >&2
-              exit 1
-            fi
-
-            exit 0
-          fi
-
-          git switch -c "${branch}"
           printf '%s\n' "${version}" > VERSION
           git add VERSION CHANGELOG.md
           git commit -m "chore(release): ${version}" -m "- bump VERSION to ${version}" -m "- update CHANGELOG.md"
-          git push --set-upstream origin "${branch}"
+          git push --force-with-lease --set-upstream origin "${branch}"
 
-      - name: Open or reuse release pull request
+      - name: Open release pull request
         id: pr
         shell: bash
         run: |
@@ -219,12 +213,15 @@ jobs:
             printf '## What'\''s changing\n\n%s\n\n## Validation\n- `./build.sh`\n' "${changelog_section}"
           )"
 
-          pr_url="$(gh pr list --head "${branch}" --base main --state open --json url --jq '.[0].url')"
-          if [[ -z "${pr_url}" || "${pr_url}" == "null" ]]; then
-            pr_url="$(gh pr create --base main --head "${branch}" --title "chore(release): ${version}" --body "${pr_body}")"
-          else
-            gh pr edit "${pr_url}" --body "${pr_body}"
+          # Close any existing release PR so the new one starts with a clean
+          # check-suite (reused PRs carry stale required-check expectations
+          # that GITHUB_TOKEN workflows can never satisfy).
+          existing="$(gh pr list --head "${branch}" --base main --state open --json number --jq '.[0].number')"
+          if [[ -n "${existing}" && "${existing}" != "null" ]]; then
+            gh pr close "${existing}" --delete-branch=false --comment "Superseded by a new release run."
           fi
+
+          pr_url="$(gh pr create --base main --head "${branch}" --title "chore(release): ${version}" --body "${pr_body}")"
 
           echo "url=${pr_url}" >> "$GITHUB_OUTPUT"
 
@@ -236,6 +233,41 @@ jobs:
             printf 'Publish is skipped on workflow_dispatch by design.\n'
             printf 'Merge that pull request into main to trigger the publish job.\n'
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # GITHUB_TOKEN pushes don't trigger other workflows, so the required
+  # checks ("Run tests", "Lint commit messages") would stay pending on the
+  # release PR.  These jobs run the same checks inline with matching names
+  # so branch protection on main is satisfied.
+  release-tests:
+    needs: prepare
+    if: github.event_name == 'workflow_dispatch'
+    name: Run tests
+    runs-on: macos-latest
+    steps:
+      - name: Check out release branch
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.prepare.outputs.branch }}
+
+      - name: Run tests
+        run: ./tests.sh
+
+  release-lint:
+    needs: prepare
+    if: github.event_name == 'workflow_dispatch'
+    name: Lint commit messages
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out release branch
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.prepare.outputs.branch }}
+          fetch-depth: 0
+
+      - name: Lint commits
+        uses: wagoid/commitlint-github-action@v6
+        with:
+          configFile: .commitlintrc.json
 
   publish:
     if: github.event_name == 'push'
