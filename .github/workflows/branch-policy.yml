@@ -4,6 +4,7 @@ permissions:
   contents: read
 
 on:
+  workflow_dispatch:
   pull_request:
     branches:
       - main
@@ -18,7 +19,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          source="${{ github.head_ref }}"
+          source="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
           echo "Source branch: ${source}"
 
           if [[ "${source}" == "development" || "${source}" == release/v* ]]; then

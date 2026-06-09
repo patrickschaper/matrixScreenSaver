@@ -24,6 +24,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  actions: write
 
 concurrency:
   group: release-${{ github.event_name }}-${{ github.ref_name }}
@@ -225,49 +226,28 @@ jobs:
 
           echo "url=${pr_url}" >> "$GITHUB_OUTPUT"
 
+      - name: Dispatch validation workflows
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          branch="${{ steps.version.outputs.branch }}"
+
+          # Run the real checks on the release branch so their check runs attach
+          # to the release commit, not this workflow_dispatch run.
+          gh workflow run branch-policy.yml --ref "${branch}"
+          gh workflow run commitlint.yml --ref "${branch}"
+          gh workflow run tests.yml --ref "${branch}"
+
       - name: Write pull request summary
         shell: bash
         run: |
           {
             printf 'Release pull request: %s\n' "${{ steps.pr.outputs.url }}"
+            printf 'Validation workflows have been dispatched on %s.\n' "${{ steps.version.outputs.branch }}"
             printf 'Publish is skipped on workflow_dispatch by design.\n'
             printf 'Merge that pull request into main to trigger the publish job.\n'
           } >> "$GITHUB_STEP_SUMMARY"
-
-  # GITHUB_TOKEN pushes don't trigger other workflows, so the required
-  # checks ("Run tests", "Lint commit messages") would stay pending on the
-  # release PR.  These jobs run the same checks inline with matching names
-  # so branch protection on main is satisfied.
-  release-tests:
-    needs: prepare
-    if: github.event_name == 'workflow_dispatch'
-    name: Run tests
-    runs-on: macos-latest
-    steps:
-      - name: Check out release branch
-        uses: actions/checkout@v5
-        with:
-          ref: ${{ needs.prepare.outputs.branch }}
-
-      - name: Run tests
-        run: ./tests.sh
-
-  release-lint:
-    needs: prepare
-    if: github.event_name == 'workflow_dispatch'
-    name: Lint commit messages
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out release branch
-        uses: actions/checkout@v5
-        with:
-          ref: ${{ needs.prepare.outputs.branch }}
-          fetch-depth: 0
-
-      - name: Lint commits
-        uses: wagoid/commitlint-github-action@v6
-        with:
-          configFile: .commitlintrc.json
 
   publish:
     if: github.event_name == 'push'
