@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+
+## [0.2.0] - 2026-06-10
+
+### Features
+
+- multi-screen sync coordinator (#85)
+- add two darker brightness steps to rain palette (#71)
+- group options sheet into sections (#69)
+
+### Bug Fixes
+
+- publish release PR required checks (#95)
+- dispatch release checks on release branch (#93)
+- exit number rain loop when scene completes (#89)
+- recreate release PR instead of reusing (#88)
+- run required checks inline in release workflow (#87)
+- trigger checks on release branch push (#86)
+- restrict release workflow dispatch to development branch (#83)
+- always regenerate changelog on release reruns (#82)
+- allow release workflow dispatch from development branch (#81)
+- source release changelog from development branch (#80)
+- derive current version from latest git tag in release workflow (#74)
+- auto-merge back-merge PR and sync VERSION after release (#73)
+- apply typing speed to all intro scenes (#70)
+
 ## [0.1.1] - 2026-05-20
 
 ### Features
