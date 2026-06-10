@@ -2,6 +2,19 @@ func nativeMatrixRendererTests() {
     ok(NativeMatrixRenderer().seedOffset == 0,
        "NativeMatrixRenderer: seedOffset defaults to 0")
 
+    let palette = NativeMatrixRenderer().levelColors
+    let hasNoPureWhite = !palette.contains { color in
+        color.red == 255 && color.green == 255 && color.blue == 255
+    }
+    ok(hasNoPureWhite,
+       "NativeMatrixRenderer: palette avoids pure white highlight")
+
+    let hasMaxGreenHighlight = palette.contains { color in
+        color.green == 255
+    }
+    ok(hasMaxGreenHighlight,
+       "NativeMatrixRenderer: palette keeps max-green highlight")
+
     let r1: NativeMatrixRenderer = .init()
     let r2: NativeMatrixRenderer = .init()
     r1.seedOffset = 0
