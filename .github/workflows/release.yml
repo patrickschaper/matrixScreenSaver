@@ -24,7 +24,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
-  actions: write
+  statuses: write
 
 concurrency:
   group: release-${{ github.event_name }}-${{ github.ref_name }}
@@ -37,6 +37,7 @@ jobs:
     runs-on: macos-15
     outputs:
       branch: ${{ steps.version.outputs.branch }}
+      sha: ${{ steps.release_commit.outputs.sha }}
     env:
       GH_TOKEN: ${{ github.token }}
 
@@ -186,6 +187,7 @@ jobs:
           mv "${tmp}" CHANGELOG.md
 
       - name: Commit and push release changes
+        id: release_commit
         shell: bash
         run: |
           set -euo pipefail
@@ -196,6 +198,7 @@ jobs:
           printf '%s\n' "${version}" > VERSION
           git add VERSION CHANGELOG.md
           git commit -m "chore(release): ${version}" -m "- bump VERSION to ${version}" -m "- update CHANGELOG.md"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           git push --force-with-lease --set-upstream origin "${branch}"
 
       - name: Open release pull request
@@ -226,28 +229,138 @@ jobs:
 
           echo "url=${pr_url}" >> "$GITHUB_OUTPUT"
 
-      - name: Dispatch validation workflows
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          branch="${{ steps.version.outputs.branch }}"
-
-          # Run the real checks on the release branch so their check runs attach
-          # to the release commit, not this workflow_dispatch run.
-          gh workflow run branch-policy.yml --ref "${branch}"
-          gh workflow run commitlint.yml --ref "${branch}"
-          gh workflow run tests.yml --ref "${branch}"
-
       - name: Write pull request summary
         shell: bash
         run: |
           {
             printf 'Release pull request: %s\n' "${{ steps.pr.outputs.url }}"
-            printf 'Validation workflows have been dispatched on %s.\n' "${{ steps.version.outputs.branch }}"
             printf 'Publish is skipped on workflow_dispatch by design.\n'
             printf 'Merge that pull request into main to trigger the publish job.\n'
           } >> "$GITHUB_STEP_SUMMARY"
+
+  release-tests:
+    needs: prepare
+    if: github.event_name == 'workflow_dispatch'
+    name: Run tests
+    runs-on: macos-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check out release branch
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.prepare.outputs.branch }}
+
+      - name: Run tests
+        id: tests
+        shell: bash
+        run: ./tests.sh
+
+      - name: Publish test status
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          state="success"
+          description="Test suite passed"
+          if [[ "${{ steps.tests.outcome }}" != "success" ]]; then
+            state="failure"
+            description="Test suite failed"
+          fi
+
+          gh api \
+            --method POST \
+            "repos/${GITHUB_REPOSITORY}/statuses/${{ needs.prepare.outputs.sha }}" \
+            -f state="${state}" \
+            -f context='Run tests' \
+            -f description="${description}" \
+            -f target_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+
+  release-lint:
+    needs: prepare
+    if: github.event_name == 'workflow_dispatch'
+    name: Lint commit messages
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check out release branch
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.prepare.outputs.branch }}
+          fetch-depth: 0
+
+      - name: Lint release commit
+        id: lint
+        uses: wagoid/commitlint-github-action@v6
+        with:
+          configFile: .commitlintrc.json
+          commitDepth: 1
+
+      - name: Publish lint status
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          state="success"
+          description="Commit messages passed"
+          if [[ "${{ steps.lint.outcome }}" != "success" ]]; then
+            state="failure"
+            description="Commit message lint failed"
+          fi
+
+          gh api \
+            --method POST \
+            "repos/${GITHUB_REPOSITORY}/statuses/${{ needs.prepare.outputs.sha }}" \
+            -f state="${state}" \
+            -f context='Lint commit messages' \
+            -f description="${description}" \
+            -f target_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+
+  release-branch-policy:
+    needs: prepare
+    if: github.event_name == 'workflow_dispatch'
+    name: Check source branch
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Validate release source branch
+        id: branch_policy
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          branch="${{ needs.prepare.outputs.branch }}"
+          echo "Source branch: ${branch}"
+
+          if [[ "${branch}" != release/v* ]]; then
+            echo "Expected release/v* branch, got ${branch}." >&2
+            exit 1
+          fi
+
+      - name: Publish branch policy status
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          state="success"
+          description="Release branch allowed"
+          if [[ "${{ steps.branch_policy.outcome }}" != "success" ]]; then
+            state="failure"
+            description="Release branch policy failed"
+          fi
+
+          gh api \
+            --method POST \
+            "repos/${GITHUB_REPOSITORY}/statuses/${{ needs.prepare.outputs.sha }}" \
+            -f state="${state}" \
+            -f context='Check source branch' \
+            -f description="${description}" \
+            -f target_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
 
   publish:
     if: github.event_name == 'push'
