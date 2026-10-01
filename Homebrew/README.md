@@ -12,6 +12,12 @@ Homebrew 7.0.7 ordinary mode supports the deprecated preflight/postflight blocks
 Developer mode rejects them. The narrow `Cask/InstallSteps` style exception is
 intentional: initial-install-only settings launch needs the prior receipt snapshot.
 Do not disable other audit checks or claim universal future Homebrew support.
+For style verification, use the single-cop command-line exception rather than
+source directives (Homebrew prohibits those):
+
+```bash
+brew style --except-cops Cask/InstallSteps "$PWD/Homebrew/Casks/matrix-screen-saver.rb"
+```
 
 ## Release handoff
 
@@ -58,3 +64,43 @@ update the tap manually, or fix configuration and rerun the existing publish job
 with explicit authorization. Tests use mock API calls and do not receive this
 credential, including on fork pull requests. No repository or secret is provisioned
 by these scripts.
+
+## Verification
+
+Run the offline suites with Ruby 3.4+ (or Homebrew's portable Ruby) and Python 3:
+
+```bash
+ruby Tests/Homebrew/cask_lifecycle_test.rb
+python3 -B -m unittest discover -s Tests/Homebrew -p '*_test.py'
+ruby -c Homebrew/Casks/matrix-screen-saver.rb
+bash -n Tests/Homebrew/integration_lifecycle.sh
+./tests.sh
+./build.sh
+```
+
+`.github/workflows/homebrew-tests.yml` runs offline tests without publishing secrets,
+uploads a clearly labeled fixture handoff, and pins Homebrew 7.0.7 for disposable
+macOS native lifecycle tests. To run the native test locally, obtain explicit
+authorization for a disposable environment first, then run:
+
+```bash
+bash Tests/Homebrew/integration_lifecycle.sh
+```
+
+The test requires an ARM64 macOS host and Homebrew 7.0.7. It redirects the native
+destination, all artifact directories, Caskroom, cache, logs, and fixture tap into
+one temporary directory. It uses real installers, upgrade orchestration, downloads,
+native moves, and quarantine operations. It intercepts only the exact absolute
+`/usr/bin/open` Wallpaper Settings call and never opens real settings. A separate
+sentinel outside the artifact destination verifies preference retention; it does
+not access the actual defaults domain. HOME alone is not used as isolation.
+
+The cask's prior-receipt snapshot lives outside the `cask` block because Homebrew
+refreshes that block when assigning the final config after staging. Recomputing
+the snapshot inside the block would suppress first-install setup.
+
+Native integration covers install, conflict failure, forced migration, upgrade,
+reinstall, uninstall, quarantine removal, failed settings launch, and the expected
+developer-mode deprecation error. Ordinary-mode warnings are expected, not a claim
+of a clean developer audit. Run workflow lint (for example `actionlint`) separately;
+never conceal unrelated style/audit failures with broad exclusions.

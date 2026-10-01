@@ -1,3 +1,7 @@
+# Config assignment re-evaluates the cask block after staging has saved metadata.
+# Snapshot outside that block so both refreshes and flight closures share one value.
+previously_managed = ::Cask::Caskroom.cask_installed?("matrix-screen-saver")
+
 cask "matrix-screen-saver" do
   version "0.2.0"
   sha256 "7a60c8ec2855a2df4cb008da7f79ea9e8526385897e3048bb53bb42421e07acd"
@@ -12,13 +16,9 @@ cask "matrix-screen-saver" do
 
   screen_saver "MatrixScreenSaver.saver"
 
-  # Staging writes a receipt before preflight; querying there misclassifies fresh installs.
-  previously_managed = @cask.installed?
-
   # Conditional initial-only setup has no equivalent declarative install step in Homebrew 7.0.7.
-  # rubocop:disable Cask/InstallSteps
   preflight do
-    saver = cask.artifacts.find { |artifact| artifact.is_a?(Cask::Artifact::ScreenSaver) }
+    saver = cask.artifacts.find { |artifact| artifact.is_a?(::Cask::Artifact::ScreenSaver) }
     if !previously_managed && (saver.target.exist? || saver.target.symlink?)
       opoo "Existing screen saver at #{saver.target}. To replace it while retaining options, run: " \
            "brew install --cask --force #{cask.full_name}"
@@ -38,10 +38,9 @@ cask "matrix-screen-saver" do
       begin
         system_command "/usr/bin/open",
                        args: ["x-apple.systempreferences:com.apple.Wallpaper-Settings.extension"]
-      rescue StandardError
+      rescue
         opoo "Could not open settings. Open System Settings > Wallpaper > Screen Saver and select MatrixScreenSaver."
       end
     end
   end
-  # rubocop:enable Cask/InstallSteps
 end

@@ -3,6 +3,12 @@ require "fileutils"
 
 # Models only the DSL boundary; native movement is separately integration-tested.
 module Cask
+  module Caskroom
+    class << self
+      attr_accessor :managed
+      def cask_installed?(_token) = managed
+    end
+  end
   module Artifact
     class ScreenSaver
       attr_reader :source, :target
@@ -25,11 +31,15 @@ class FakeCaskDSL
   end
 
   def load_definition
+    Cask::Caskroom.managed = @managed
     instance_eval(File.read(File.expand_path("../../../Homebrew/Casks/matrix-screen-saver.rb", __dir__)))
   end
 
   def cask(_token = nil, &block)
-    block ? instance_eval(&block) : self
+    return self unless block
+
+    @definition = block
+    instance_eval(&block)
   end
 
   def version(value = nil)
@@ -63,6 +73,9 @@ class FakeCaskDSL
 
   def install(force: false)
     @managed = true # Homebrew saves metadata BEFORE invoking preflight.
+    Cask::Caskroom.managed = true
+    @artifacts.clear
+    instance_eval(&@definition) # Final config assignment refreshes the cask block.
     instance_eval(&@preflight)
     artifact = @artifacts.first
     if artifact.target.exist? || artifact.target.symlink?
