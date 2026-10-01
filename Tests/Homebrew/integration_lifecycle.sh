@@ -14,7 +14,7 @@ export HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ANALYTICS=1 HOMEBREW_NO_INSTALL_CLE
 export HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_SUDO=1
 export HOMEBREW_NO_INSTALL_FROM_API=1
 # Prevent brew's developer-command probe from writing its persistent devcmdrun flag.
-# The driver unsets this before loading casks; its separate negative check sets it.
+# Definition loading and all lifecycle operations also run in developer mode.
 export HOMEBREW_DEVELOPER=1
 mkdir -p "$HOMEBREW_CACHE" "$HOMEBREW_LOGS" "$HOMEBREW_TEMP"
 PYTHONDONTWRITEBYTECODE=1 python3 - "$root" <<'PY'

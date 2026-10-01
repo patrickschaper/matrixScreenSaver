@@ -5,11 +5,12 @@ require "cask/upgrade"
 require "digest"
 require "stringio"
 
-ENV.delete("HOMEBREW_DEVELOPER")
+ENV["HOMEBREW_DEVELOPER"] = "1"
 ROOT = Pathname(ARGV.fetch(0)).realpath
 raise "Unsafe test root" unless ROOT.basename.to_s.start_with?("matrix-homebrew-integration.")
 raise "Homebrew 7.0.7 is required for this compatibility test" unless HOMEBREW_VERSION.start_with?("7.0.7")
 raise "Cache escaped isolation" unless HOMEBREW_CACHE.realpath.to_s.start_with?("#{ROOT}/")
+raise "Native checks require Homebrew's sandbox" unless Sandbox.use_for?("running cask artifact operations")
 
 # Redirect Homebrew's in-process Caskroom and tap objects, not the host installation.
 Cask::Caskroom.instance_variable_set(:@path, ROOT/"Caskroom")
@@ -21,27 +22,8 @@ TARGET = CONFIG.screen_saverdir/"MatrixScreenSaver.saver"
 PREFS = ROOT/"preferences-sentinel"
 PREFS.write("saved options\x00")
 COFFEE = "There is no spoon. There is coffee: https://www.buymeacoffee.com/yesman82".freeze
-SETTINGS = "x-apple.systempreferences:com.apple.Wallpaper-Settings.extension".freeze
-
-# Legacy blocks ignore the installer's command parameter. Intercept the default
-# class and ONLY this exact absolute executable/argument pair; everything else runs.
-module SettingsIntercept
-  attr_accessor :settings_calls, :fail_settings
-
-  def run!(executable, **options)
-    if executable.to_s == "/usr/bin/open"
-      raise "Unexpected open invocation" unless options[:args] == [SETTINGS]
-
-      self.settings_calls += 1
-      raise "Simulated headless settings failure" if fail_settings
-
-      return nil
-    end
-    super
-  end
-end
-SystemCommand.singleton_class.prepend(SettingsIntercept)
-SystemCommand.settings_calls = 0
+check_source = Pathname("Homebrew/Casks/matrix-screen-saver.rb").read
+raise "Cask must not launch Settings" if check_source.include?("/usr/bin/open")
 
 # Observe real stage ordering and plant real quarantine on fixture bytes before
 # preflight. No native filesystem/download/artifact/quarantine operation is mocked.
@@ -81,7 +63,10 @@ def definition(version)
   content.sub!(/^  url .+$/, "  url \"file://#{ROOT}/#{version}.zip\"")
   # Give the fixture a real isolated tap source for saved metadata and reloads.
   (TAP.path/"Casks/matrix-screen-saver.rb").write(content)
-  Cask::CaskLoader::FromContentLoader.new(content, tap: TAP).load(config: CONFIG)
+  loaded = nil
+  output = capture { loaded = Cask::CaskLoader::FromContentLoader.new(content, tap: TAP).load(config: CONFIG) }
+  check(!output.match?(/deprecated/i), "Definition load emitted deprecation warnings: #{output}")
+  loaded
 end
 
 def verify_target(version)
@@ -96,12 +81,14 @@ def verify_target(version)
 end
 
 def uninstall(cask)
-  Cask::Installer.new(cask).uninstall
+  output = capture { Cask::Installer.new(cask).uninstall }
+  check(!output.match?(/deprecated/i), "Uninstall emitted deprecation warnings")
+  check(!output.include?(COFFEE), "Uninstall printed install success")
   check(!TARGET.exist? && !TARGET.symlink?, "Native uninstall left target")
   check(PREFS.read == "saved options\x00", "Uninstall changed preferences")
 end
 
-# AE1: stage saves metadata, but the definition snapshot still opens once.
+# AE1: modern steps run in Homebrew's real sandbox, including actual echo stdout.
 fresh = definition("1.2.3")
 check(!fresh.installed?, "Fresh fixture unexpectedly managed")
 check(!fresh.depends_on.macos.allows?(MacOSVersion.from_symbol(:sonoma)), "Cask permits macOS before 15")
@@ -117,10 +104,11 @@ end
 puts "PASS native dependency guards reject Intel and macOS before 15"
 output = capture { Cask::Installer.new(fresh).install }
 puts output
-check(SystemCommand.settings_calls == 1, "Fresh setup not called exactly once (#{SystemCommand.settings_calls})")
 check(output.scan(COFFEE).length == 1, "Fresh coffee output count wrong")
+check(output.include?("Open System Settings > Wallpaper > Screen Saver"), "Manual selection guidance missing")
+check(!output.match?(/deprecated/i), "Install emitted deprecation warnings")
 verify_target("1.2.3")
-puts "PASS AE1 native fresh install and real stage snapshot"
+puts "PASS AE1 sandboxed native fresh install and actual coffee stdout"
 
 # AE4: successor evaluates while prior metadata exists, before native upgrade.
 successor = definition("1.2.4")
@@ -132,13 +120,13 @@ output = capture do
                            new_cask_installer: Cask::Installer.new(successor, upgrade: true))
 end
 verify_target("1.2.4")
-check(SystemCommand.settings_calls == 1, "Upgrade opened settings")
-check(output.scan(COFFEE).length == 1 && !output.include?("brew install --cask --force"), "Upgrade guidance wrong")
+check(output.scan(COFFEE).length == 1, "Upgrade coffee output count wrong")
+check(!output.match?(/deprecated/i), "Upgrade emitted deprecation warnings")
 puts "PASS AE4 real two-version native upgrade"
 
 reinstall = definition("1.2.4")
-capture { Cask::Installer.new(reinstall, reinstall: true).install }
-check(SystemCommand.settings_calls == 1, "Reinstall opened settings")
+output = capture { Cask::Installer.new(reinstall, reinstall: true).install }
+check(output.scan(COFFEE).length == 1, "Reinstall coffee output count wrong")
 verify_target("1.2.4")
 uninstall(reinstall)
 puts "PASS AE5 native uninstall and managed reinstall preference retention"
@@ -146,6 +134,7 @@ puts "PASS AE5 native uninstall and managed reinstall preference retention"
 # AE2/AE3: existing manual bundle survives native rejection, then explicit force replaces.
 TARGET.mkpath
 (TARGET/"manual-executable").write("manual sentinel")
+SystemCommand.run!("/usr/bin/xattr", args: ["-w", "com.apple.quarantine", "manual-quarantine", TARGET.to_s])
 manual = definition("1.2.3")
 failed = false
 output = capture do
@@ -158,33 +147,39 @@ output = capture do
 end
 check(failed, "Native artifact did not reject manual conflict")
 check((TARGET/"manual-executable").read == "manual sentinel", "Manual bundle changed")
-check(output.include?("brew install --cask --force #{manual.full_name}"), "Missing qualified migration guidance")
-check(!output.include?(COFFEE) && SystemCommand.settings_calls == 1, "Failure printed success or opened settings")
+quarantine = SystemCommand.run!("/usr/bin/xattr", args: ["-p", "com.apple.quarantine", TARGET.to_s])
+check(quarantine.stdout.strip == "manual-quarantine", "Preflight changed manual target quarantine")
+check(output.include?("brew install --cask --force patrickschaper/tap/matrix-screen-saver"), "Missing qualified migration guidance")
+check(!output.include?(COFFEE), "Failure printed success")
 check(PREFS.read == "saved options\x00", "Conflict changed preferences")
 forced = definition("1.2.3")
 output = capture { Cask::Installer.new(forced, force: true).install }
 verify_target("1.2.3")
 check(!(TARGET/"manual-executable").exist?, "Force did not replace manual bundle")
-check(output.scan(COFFEE).length == 1 && SystemCommand.settings_calls == 2, "Forced migration setup wrong")
+check(output.scan(COFFEE).length == 1, "Forced migration success output wrong")
 uninstall(forced)
 puts "PASS AE2/AE3 native conflict rejection and explicit force replacement"
 
-SystemCommand.fail_settings = true
-headless = definition("1.2.3")
-output = capture { Cask::Installer.new(headless).install }
-verify_target("1.2.3")
-check(output.include?("Could not open settings") && output.scan(COFFEE).length == 1, "Headless fallback missing")
-uninstall(headless)
-puts "PASS failed settings launch retains successful native installation"
-
-ENV["HOMEBREW_DEVELOPER"] = "1"
-begin
-  definition("1.2.3")
-  raise "Developer mode unexpectedly accepted deprecated hooks"
-rescue MethodDeprecatedError => error
-  check(error.message.include?("preflight"), "Unexpected developer-mode failure")
-  puts "PASS expected developer-mode preflight deprecation rejection"
-ensure
-  ENV.delete("HOMEBREW_DEVELOPER")
+# Homebrew 7.0.7's existence guard misses dangling symlinks, but its native
+# artifact rejects them. No custom deletion or unsandboxed fallback is added.
+File.symlink(ROOT/"missing", TARGET)
+broken = definition("1.2.3")
+output = capture do
+  begin
+    Cask::Installer.new(broken).install
+    raise "Native artifact accepted broken symlink without force"
+  rescue Cask::CaskError => error
+    check(error.message.include?("already"), "Unexpected broken-symlink rejection")
+  end
 end
+check(TARGET.symlink?, "Broken symlink was changed")
+check(!output.include?(COFFEE), "Broken-symlink conflict printed success")
+check(!output.include?("brew install --cask --force"), "Existence guard unexpectedly matched broken symlink")
+forced = definition("1.2.3")
+capture { Cask::Installer.new(forced, force: true).install }
+verify_target("1.2.3")
+uninstall(forced)
+puts "PASS native broken-symlink conflict and explicit force replacement"
+definition("1.2.3")
+puts "PASS developer-mode definition load and uninstall without legacy warnings"
 puts "PASS all native lifecycle checks; installed saver and real Settings were never touched"

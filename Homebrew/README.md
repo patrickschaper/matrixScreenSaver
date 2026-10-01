@@ -9,16 +9,65 @@ It retains the `dev.patsch.MatrixScreenSaver` preferences domain and has no zap
 or preference-cleanup hook. Its published binary requires Apple Silicon (ARM64)
 and macOS 15 (Sequoia) or newer.
 
-Homebrew 7.0.7 ordinary mode supports the deprecated preflight/postflight blocks.
-Developer mode rejects them. The narrow `Cask/InstallSteps` style exception is
-intentional: initial-install-only settings launch needs the prior receipt snapshot.
-Do not disable other audit checks or claim universal future Homebrew support.
-For style verification, use the single-cop command-line exception rather than
-source directives (Homebrew prohibits those):
+Homebrew 7.0.7 runs the modern `preflight_steps` and `postflight_steps` in its
+supported sandbox. Developer mode accepts the definition without deprecation
+warnings. Full cask style, including `Cask/InstallSteps`, needs no exclusions:
 
 ```bash
-brew style --except-cops Cask/InstallSteps "$PWD/Homebrew/Casks/matrix-screen-saver.rb"
+brew style "$PWD/Homebrew/Casks/matrix-screen-saver.rb"
 ```
+
+## Installation, lifecycle, and security
+
+```bash
+brew trust --cask patrickschaper/tap/matrix-screen-saver
+brew install --cask patrickschaper/tap/matrix-screen-saver
+```
+
+The fully qualified install trusts this cask, not the entire tap. Explicit
+`brew trust --cask` also permits subsequent installs using the short name.
+
+**Security:** preflight removes quarantine recursively only from the
+checksum-verified staged `MatrixScreenSaver.saver`, before Homebrew moves it.
+This bypasses Gatekeeper quarantine checks; it does not make the bundle notarized
+or Apple-approved. Install only if you trust the release publisher. The cask
+prints this disclosure before invoking `/usr/bin/xattr`; failure aborts installation.
+
+After installation, open **System Settings > Wallpaper > Screen Saver** and
+select **MatrixScreenSaver** manually. Modern Homebrew's sandbox blocks opening
+Settings, so automatic opening was intentionally removed. The cask never selects
+the saver or opens a browser. Successful install, upgrade, and reinstall print:
+
+> There is no spoon. There is coffee: https://www.buymeacoffee.com/yesman82
+
+An existing manual bundle is not silently replaced. The native artifact rejects
+an unforced conflict; opt in to replacement while retaining saved options with:
+
+```bash
+brew install --cask --force patrickschaper/tap/matrix-screen-saver
+```
+
+The conditional guidance honors Homebrew's configured `screen_saverdir`.
+Homebrew 7.0.7's `if_path_exists` checks `exist?`, not `symlink?`: a dangling
+symlink is still rejected by the native artifact, but does not print the custom
+migration message. Use the same explicit `--force` command to replace it.
+The echo step narrowly declares the native target in `writable_paths` because
+Homebrew uses that declaration to grant guard read access under HOME; echo does
+not modify it. Only the staged bundle is passed to xattr. No sandbox disabling
+or custom unsandboxed installer is used.
+
+```bash
+brew upgrade --cask patrickschaper/tap/matrix-screen-saver
+brew uninstall --cask patrickschaper/tap/matrix-screen-saver
+```
+
+Upgrades and reinstalls remain native Homebrew operations. An upgrade may print
+the existing-target guidance because Homebrew can leave an empty target directory
+during replacement; no prior-receipt snapshot or initial-install-only behavior
+is needed. Custom destinations are honored, and other saver copies are not removed.
+Migration, upgrade, reinstall, and ordinary uninstall retain the
+`dev.patsch.MatrixScreenSaver` options domain. There is no zap hook or preference
+rewrite. Uninstall prints neither coffee nor installation guidance.
 
 ## Release handoff
 
@@ -96,17 +145,15 @@ bash Tests/Homebrew/integration_lifecycle.sh
 The test requires an ARM64 macOS host and Homebrew 7.0.7. It redirects the native
 destination, all artifact directories, Caskroom, cache, logs, and fixture tap into
 one temporary directory. It uses real installers, upgrade orchestration, downloads,
-native moves, and quarantine operations. It intercepts only the exact absolute
-`/usr/bin/open` Wallpaper Settings call and never opens real settings. A separate
+native moves, sandboxed install steps, echo stdout, and quarantine operations.
+There is no Settings-launch mock: the cask contains no Settings-launch command.
+A separate
 sentinel outside the artifact destination verifies preference retention; it does
 not access the actual defaults domain. HOME alone is not used as isolation.
 
-The cask's prior-receipt snapshot lives outside the `cask` block because Homebrew
-refreshes that block when assigning the final config after staging. Recomputing
-the snapshot inside the block would suppress first-install setup.
-
 Native integration covers install, conflict failure, forced migration, upgrade,
-reinstall, uninstall, quarantine removal, failed settings launch, and the expected
-developer-mode deprecation error. Ordinary-mode warnings are expected, not a claim
-of a clean developer audit. Run workflow lint (for example `actionlint`) separately;
-never conceal unrelated style/audit failures with broad exclusions.
+reinstall, uninstall, quarantine removal, broken-symlink conflict/force semantics,
+and developer-mode acceptance without legacy warnings on definition load or
+uninstall. Run workflow lint (for example `actionlint`) separately; never conceal
+unrelated style/audit failures with exclusions. Compatibility is verified against
+7.0.7, not promised for every future Homebrew release.

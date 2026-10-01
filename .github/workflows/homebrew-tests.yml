@@ -68,9 +68,9 @@ jobs:
           repository="$(brew --repository)"
           git -C "$repository" fetch --depth=1 origin tag 7.0.7
           git -C "$repository" checkout --detach FETCH_HEAD
-      - name: Native lifecycle with exact Settings interception
+      - name: Sandboxed native lifecycle in isolated directories
         run: bash Tests/Homebrew/integration_lifecycle.sh
-      - name: Cask style with documented single-cop exception
+      - name: Full cask style
         env:
           HOMEBREW_DEVELOPER: '1'
-        run: brew style --except-cops Cask/InstallSteps "$PWD/Homebrew/Casks/matrix-screen-saver.rb"
+        run: brew style "$PWD/Homebrew/Casks/matrix-screen-saver.rb"
