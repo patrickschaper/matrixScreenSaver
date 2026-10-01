@@ -469,6 +469,55 @@ jobs:
           version="${{ steps.version.outputs.value }}"
           gh release create "${version}" "${{ steps.version.outputs.archive }}" --title "${version}" --notes-file "${{ steps.notes.outputs.file }}" --target "${GITHUB_SHA}"
 
+      - name: Generate Homebrew handoff from published asset
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.value }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 Scripts/render-homebrew-release.py \
+            --version "$RELEASE_VERSION" \
+            --provenance "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID@$GITHUB_SHA" \
+            --output "$RUNNER_TEMP/homebrew-handoff"
+
+      - name: Upload manual Homebrew handoff
+        uses: actions/upload-artifact@v4
+        with:
+          name: homebrew-handoff-${{ steps.version.outputs.value }}
+          path: ${{ runner.temp }}/homebrew-handoff
+          if-no-files-found: error
+
+      - name: Summarize manual tap update
+        env:
+          TAP_TARGET: ${{ vars.HOMEBREW_TAP_REPOSITORY }}
+        shell: bash
+        run: |
+          {
+            echo 'Homebrew handoff: download the artifact and copy Casks/matrix-screen-saver.rb to your selected tap.'
+            echo 'manifest.json records the published download URL, version, SHA-256, architecture, and provenance.'
+            if [[ -z "$TAP_TARGET" ]]; then
+              echo 'Tap is unconfigured, not live. No external tap mutation requested.'
+            else
+              echo 'Optional tap PR requested. Human review and merge required; manual artifact remains available on failure.'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Propose optional tap pull request
+        id: tap_update
+        if: vars.HOMEBREW_TAP_REPOSITORY != ''
+        continue-on-error: true
+        env:
+          TAP_TARGET: ${{ vars.HOMEBREW_TAP_REPOSITORY }}
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          GH_TOKEN: ''
+        shell: bash
+        run: python3 Scripts/update-homebrew-tap.py --target "$TAP_TARGET" --handoff "$RUNNER_TEMP/homebrew-handoff"
+
+      - name: Report optional tap update failure
+        if: steps.tap_update.outcome == 'failure'
+        shell: bash
+        run: echo 'Optional tap PR failed. Release and manual artifact are available. Inspect logs, configure a tap-scoped token, then retry or copy the cask manually.' >> "$GITHUB_STEP_SUMMARY"
+
       - name: Back-merge main into development
         shell: bash
         run: |
