@@ -1,3 +1,4 @@
+import base64
 import importlib.util
 from pathlib import Path
 import unittest
@@ -9,6 +10,7 @@ class FakeAPI:
     def __init__(self):
         self.calls = []
         self.branch = False
+        self.branch_sha = "base"
         self.content = None
         self.prs = []
 
@@ -19,7 +21,7 @@ class FakeAPI:
         if "/git/ref/heads/main" in path:
             return {"object": {"sha": "base"}}
         if "/git/ref/heads/" in path:
-            return {"object": {"sha": "base"}} if self.branch else None
+            return {"object": {"sha": self.branch_sha}} if self.branch else None
         if path.endswith("/git/refs"):
             self.branch = True
             return {}
@@ -27,6 +29,7 @@ class FakeAPI:
             if method == "GET":
                 return {"sha": "content-sha", "content": self.content} if self.content else None
             self.content = body["content"]
+            self.branch_sha = "updated"
             return {}
         if "/pulls?" in path:
             return self.prs
@@ -60,6 +63,49 @@ class TapUpdateTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.module.update(api, target, version, "cask")
             self.assertEqual([], api.calls)
+
+    def test_partial_upload_retry_recovers_untouched_branch(self):
+        from unittest.mock import patch
+        api = FakeAPI()
+        api.content = base64.b64encode(b"old cask").decode()
+        request = api.request
+
+        def fail_upload(method, path, body=None, missing_ok=False):
+            if method == "PUT":
+                raise RuntimeError("upload interrupted")
+            return request(method, path, body, missing_ok)
+
+        with patch.object(api, "request", side_effect=fail_upload):
+            with self.assertRaisesRegex(RuntimeError, "upload interrupted"):
+                self.module.update(api, "owner/homebrew-test", "1.2.3", "new cask")
+        self.assertTrue(api.branch)
+        self.module.update(api, "owner/homebrew-test", "1.2.3", "new cask")
+        self.assertEqual("new cask", base64.b64decode(api.content).decode())
+        self.assertEqual(1, len(api.prs))
+
+    def test_divergent_branch_is_never_overwritten(self):
+        for content in (None, base64.b64encode(b"human cask").decode()):
+            with self.subTest(content=content):
+                api = FakeAPI()
+                api.branch, api.branch_sha, api.content = True, "human-commit", content
+                with self.assertRaisesRegex(ValueError, "no overwrite"):
+                    self.module.update(api, "owner/homebrew-test", "1.2.3", "new cask")
+                self.assertEqual(content, api.content)
+                self.assertTrue(all(method == "GET" for method, _, _ in api.calls))
+
+    def test_closed_pr_is_not_duplicated_and_merged_pr_is_reused(self):
+        for merged in (None, "2026-10-01T00:00:00Z"):
+            with self.subTest(merged=merged):
+                api = FakeAPI()
+                url = self.module.update(api, "owner/homebrew-test", "1.2.3", "cask")
+                api.prs[0].update(state="closed", merged_at=merged)
+                api.calls.clear()
+                if merged:
+                    self.assertEqual(url, self.module.update(api, "owner/homebrew-test", "1.2.3", "cask"))
+                else:
+                    with self.assertRaisesRegex(ValueError, "closed"):
+                        self.module.update(api, "owner/homebrew-test", "1.2.3", "cask")
+                self.assertTrue(all(method == "GET" for method, _, _ in api.calls))
 
     def test_api_errors_do_not_expose_credentials(self):
         from unittest.mock import patch

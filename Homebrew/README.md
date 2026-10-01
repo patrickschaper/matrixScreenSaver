@@ -54,8 +54,9 @@ Only after the user chooses and provisions a tap, configure the source repositor
 
 The workflow creates a version-specific branch and one PR, reusing matching
 content and the PR on reruns. It never pushes to the tap's default branch or
-merges a PR. Human review and merge are required. An existing branch with different
-content fails without overwriting it; inspect the branch before retrying. A closed,
+merges a PR. Human review and merge are required. A failed upload can be retried
+only while its branch still matches the current default-branch commit. An existing
+divergent branch fails without overwriting it; inspect the branch before retrying. A closed,
 unmerged version PR must be reopened manually rather than duplicated.
 
 Missing credentials or API failure affect only the optional step. The published

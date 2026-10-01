@@ -51,7 +51,10 @@ def update(api, target, version, content):
     encoded = base64.b64encode(content.encode()).decode()
     matches = existing is not None and base64.b64decode(existing["content"]).decode() == content
     if branch_ref is not None and not matches:
-        raise ValueError("Existing version branch differs; inspect it before retrying (no overwrite)")
+        base = api.request("GET", f"{repo}/git/ref/heads/{urllib.parse.quote(default, safe='')}")["object"]["sha"]
+        # Retry a failed upload only while the branch is untouched; never replace divergent work.
+        if branch_ref["object"]["sha"] != base:
+            raise ValueError("Existing version branch differs; inspect it before retrying (no overwrite)")
     if not matches:
         body = {"message": f"chore: update matrix-screen-saver to {version}", "content": encoded, "branch": branch}
         if existing:

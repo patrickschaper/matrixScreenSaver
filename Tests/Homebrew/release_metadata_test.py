@@ -66,20 +66,35 @@ class ReleaseMetadataTest(unittest.TestCase):
         self.assertIn("depends_on macos: :tahoe", (self.root / "out/Casks/matrix-screen-saver.rb").read_text())
 
     def test_fetch_consumes_existing_asset_and_missing_asset_fails(self):
-        from unittest.mock import patch
+        from unittest.mock import Mock, call, patch
         spec = importlib.util.spec_from_file_location("render_release", SCRIPT)
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         asset = {"name": "1.2.3.zip", "url": module.asset_url("1.2.3"),
-                 "digest": "sha256:" + "a" * 64}
-        with patch.object(module.subprocess, "run") as run:
-            run.return_value.stdout = json.dumps({"assets": [asset]})
-            for _ in range(2):
-                module.fetch_release("1.2.3", self.root)
-            self.assertEqual(4, run.call_count)
-            self.assertTrue(all(call.args[0][:2] == ["gh", "release"] for call in run.call_args_list))
-            self.assertFalse(any("build" in str(call) for call in run.call_args_list))
+                 "digest": "sha256:" + hashlib.sha256(self.archive.read_bytes()).hexdigest()}
+        view = ["gh", "release", "view", "1.2.3", "--repo", module.REPOSITORY, "--json", "assets"]
+        download = ["gh", "release", "download", "1.2.3", "--repo", module.REPOSITORY,
+                    "--pattern", "1.2.3.zip", "--dir", str(self.root)]
+
+        def fetch(command, **kwargs):
+            if command == view:
+                return Mock(stdout=json.dumps({"assets": [asset]}))
+            self.assertEqual(download, command)
+            (self.root / "1.2.3.zip").write_bytes(self.archive.read_bytes())
+
+        with patch.object(module.subprocess, "run", side_effect=fetch) as run:
+            for attempt in range(2):
+                archive, url, digest = module.fetch_release("1.2.3", self.root)
+                self.assertEqual((self.root / "1.2.3.zip", asset["url"], asset["digest"]), (archive, url, digest))
+                manifest = module.render(archive, "1.2.3", url, digest, "fixture", self.root / f"fetched-{attempt}")
+                self.assertEqual(asset["digest"], "sha256:" + manifest["sha256"])
+                archive.unlink()
+            self.assertEqual([
+                call(view, check=True, capture_output=True, text=True), call(download, check=True),
+                call(view, check=True, capture_output=True, text=True), call(download, check=True),
+            ], run.call_args_list)
             run.reset_mock()
+            run.side_effect = None
             run.return_value.stdout = json.dumps({"assets": []})
             with self.assertRaises(ValueError):
                 module.fetch_release("1.2.3", self.root)
