@@ -1,0 +1,76 @@
+require "pathname"
+require "fileutils"
+
+# Models only the DSL boundary; native movement is separately integration-tested.
+module Cask
+  module Artifact
+    class ScreenSaver
+      attr_reader :source, :target
+
+      def initialize(source, target)
+        @source, @target = source, target
+      end
+    end
+  end
+end
+
+class FakeCaskDSL
+  attr_accessor :managed, :fail_quarantine, :fail_open
+  attr_reader :artifacts, :commands, :dependencies, :messages
+
+  def initialize(root, managed: false)
+    @root, @managed = Pathname(root), managed
+    @cask = self
+    @artifacts, @commands, @dependencies, @messages = [], [], {}, []
+  end
+
+  def load_definition
+    instance_eval(File.read(File.expand_path("../../../Homebrew/Casks/matrix-screen-saver.rb", __dir__)))
+  end
+
+  def cask(_token = nil, &block)
+    block ? instance_eval(&block) : self
+  end
+
+  def version(value = nil)
+    @version = value if value
+    @version
+  end
+
+  %i[sha256 url name desc homepage].each { |key| define_method(key) { |*_args| } }
+  def depends_on(**values)
+    @dependencies.merge!(values)
+  end
+
+  def installed? = @managed
+  def full_name = "fixture/tap/matrix-screen-saver"
+  def screen_saver(name)
+    @artifacts << Cask::Artifact::ScreenSaver.new(@root/"stage"/name, @root/"custom savers"/name)
+  end
+
+  def preflight(&block) = @preflight = block
+  def postflight(&block) = @postflight = block
+  def ohai(message) = @messages << message
+  def opoo(message) = @messages << message
+
+  def system_command(executable, **options)
+    @commands << [executable, options.fetch(:args)]
+    raise "quarantine failed" if executable == "/usr/bin/xattr" && @fail_quarantine
+    raise "settings unavailable" if executable == "/usr/bin/open" && @fail_open
+  end
+
+  def evaluate(&block) = instance_eval(&block)
+
+  def install(force: false)
+    @managed = true # Homebrew saves metadata BEFORE invoking preflight.
+    instance_eval(&@preflight)
+    artifact = @artifacts.first
+    if artifact.target.exist? || artifact.target.symlink?
+      raise "native conflict" unless force
+      FileUtils.rm_rf(artifact.target)
+    end
+    FileUtils.mkdir_p(artifact.target.dirname)
+    FileUtils.mv(artifact.source, artifact.target)
+    instance_eval(&@postflight)
+  end
+end
