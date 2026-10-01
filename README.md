@@ -4,102 +4,19 @@
 
 This is a macOS screen saver based on the iconic rain of characters and symbols known from the movie The Matrix.
 
-## Homebrew install
-
-The public [Homebrew tap](https://github.com/patrickschaper/homebrew-tap) provides
-the cask. Add it before installing:
-
-```bash
-TAP="patrickschaper/tap"
-brew tap "$TAP"
-```
-
-The cask supports Apple Silicon (ARM64) and macOS 15 (Sequoia) or newer.
-It uses deprecated hooks supported by ordinary Homebrew 7.0.7; developer-mode
-installs reject those hooks. Future Homebrew compatibility is not guaranteed.
-
-**Security:** installation removes quarantine from the checksum-verified staged
-bundle. This bypasses Gatekeeper quarantine checks; it does not make the bundle
-notarized or Apple-approved. Install only if you trust the release publisher.
-
-### Fresh install
-
-```bash
-brew install --cask "$TAP/matrix-screen-saver"
-```
-
-Homebrew's fully qualified install command above trusts only this cask, not the
-whole tap. To use the short name instead, explicitly trust the cask first:
+## Quick install
 
 ```bash
 brew trust --cask patrickschaper/tap/matrix-screen-saver
-brew install --cask matrix-screen-saver
+brew install --cask patrickschaper/tap/matrix-screen-saver
 ```
 
-After a successful first install, Wallpaper settings opens. You must manually select
-**MatrixScreenSaver** under **Screen Saver**. If settings cannot open, navigate to
-**System Settings > Wallpaper > Screen Saver** yourself. The cask never selects
-the saver automatically.
+## Buy me a coffee
 
-### Migrate a manual installation
+There is no spoon. There is coffee. Donations help fund a developer license for signing the screen saver.
 
-An existing bundle at Homebrew's screen saver destination is not silently deleted.
-An unforced install fails with migration guidance. To explicitly allow Homebrew
-to replace that saver bundle:
-
-```bash
-brew install --cask --force "$TAP/matrix-screen-saver"
-```
-
-This replaces the bundle and retains saved options in `dev.patsch.MatrixScreenSaver`.
-Forced migration also opens settings once for manual selection. A custom Homebrew
-screen saver destination is honored; other copies are not removed.
-
-### Upgrade
-
-```bash
-brew upgrade --cask "$TAP/matrix-screen-saver"
-```
-
-Managed upgrades do not show the manual-install conflict warning. Managed
-upgrades do not open settings; reinstalls also suppress initial setup.
-Successful installs and upgrades print one invitation without opening a browser:
-
-> There is no spoon. There is coffee: https://www.buymeacoffee.com/yesman82
-
-### Ordinary uninstall
-
-```bash
-brew uninstall --cask "$TAP/matrix-screen-saver"
-```
-
-Homebrew removes its saver bundle but retains saved options. Migration, upgrade,
-and ordinary uninstall never rewrite or delete the preferences domain.
-
-## Manual quick install (alternative)
-
-This route is not Homebrew-managed. To switch later, use the explicit migration
-command above. The quarantine command below bypasses Gatekeeper quarantine checks;
-it does not make the bundle notarized or Apple-approved. The replacement command
-deletes the existing bundle, not its saved options. Trust the publisher before
-running these commands.
-
-1. Open the [latest release](https://github.com/patrickschaper/matrixScreenSaver/releases/latest) and download the versioned `.zip` file from the release assets.
-2. Double-click the downloaded `.zip` file to extract `MatrixScreenSaver.saver`.
-3. In Terminal, run the following commands from the directory that contains the extracted `MatrixScreenSaver.saver` file:
-
-   ```bash
-   xattr -dr com.apple.quarantine MatrixScreenSaver.saver
-   mkdir -p "$HOME/Library/Screen Savers"
-   rm -rf "$HOME/Library/Screen Savers/MatrixScreenSaver.saver"
-   ditto MatrixScreenSaver.saver "$HOME/Library/Screen Savers/MatrixScreenSaver.saver"
-   open "x-apple.systempreferences:com.apple.Wallpaper-Settings.extension"
-   ```
-
-4. In the opened Wallpaper settings, switch to **Screen Saver** and select **MatrixScreenSaver**.
-5. Enjoy and donate — so I can invest in a developer license for signing the screen saver and make it installable with a double-click (Thanks Apple 😐)<br>
-   <a href="https://www.buymeacoffee.com/yesman82"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" width="150"></a><br>
-   <img src="docs/bmc_qr.png" alt="Buy Me a Coffee QR code" width="150">
+<a href="https://www.buymeacoffee.com/yesman82"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" width="150"></a><br>
+<img src="docs/bmc_qr.png" alt="Buy Me a Coffee QR code" width="150">
 
 ## Options
 
