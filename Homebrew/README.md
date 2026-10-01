@@ -1,7 +1,8 @@
 # Homebrew tap payload
 
-`Casks/matrix-screen-saver.rb` is ready to copy to a user-selected tap as
-`Casks/matrix-screen-saver.rb`. No public tap is configured or live yet.
+The public tap is [patrickschaper/homebrew-tap](https://github.com/patrickschaper/homebrew-tap).
+`Casks/matrix-screen-saver.rb` here is the source payload for the same path in
+that repository. Users add it with `brew tap patrickschaper/tap`.
 
 The payload uses Homebrew's native `screen_saver` artifact, not the local installer.
 It retains the `dev.patsch.MatrixScreenSaver` preferences domain and has no zap
@@ -26,8 +27,11 @@ versioned zip, including on reruns. It checks the asset digest, bundle identity
 and version, archive layout, thin ARM64 Mach-O bundle, and minimum macOS version.
 It uploads `homebrew-handoff-VERSION`, containing `Casks/matrix-screen-saver.rb`
 and `manifest.json` with version, URL, SHA-256, architecture, OS floor, and provenance.
-Copy the generated cask into your selected tap and review it before merging.
-No tap target is selected by this repository: publication remains unconfigured.
+Copy the generated cask into `patrickschaper/homebrew-tap` and review it before
+merging. The source repository's `HOMEBREW_TAP_REPOSITORY` variable is configured
+to that target. Automatic update PRs remain unconfigured until the separate
+`HOMEBREW_TAP_TOKEN` secret is supplied and the release workflow changes reach
+the published source branch.
 
 Offline validation:
 
@@ -43,11 +47,12 @@ Omit `--archive`, `--asset-url`, and `--digest` to retrieve the release through
 `gh`; the renderer never builds a replacement archive. A new unsupported OS floor
 or architecture fails closed until the compatibility policy is updated.
 
-## Optional tap PR (disabled by default)
+## Optional tap PR (token pending)
 
-Only after the user chooses and provisions a tap, configure the source repository:
+The tap exists and the target variable is set. To enable update PRs, configure
+a dedicated credential on the source repository:
 
-- Variable `HOMEBREW_TAP_REPOSITORY`: exact `owner/repository` target.
+- Variable `HOMEBREW_TAP_REPOSITORY`: `patrickschaper/homebrew-tap` (already set).
 - Secret `HOMEBREW_TAP_TOKEN`: separate fine-grained credential limited to that
   tap's **contents** and **pull requests** write permissions (plus metadata read).
   The source-repository `GITHUB_TOKEN` is not cross-repository authorization.

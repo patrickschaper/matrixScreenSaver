@@ -4,15 +4,14 @@
 
 This is a macOS screen saver based on the iconic rain of characters and symbols known from the movie The Matrix.
 
-## Homebrew install (tap not live yet)
+## Homebrew install
 
-The local [tap payload](Homebrew/README.md) is prepared, but the public tap is
-unconfigured and **not live**. The commands below are templates, not working
-installation commands until a tap owner publishes it. Replace the placeholder
-with the chosen tap before running them:
+The public [Homebrew tap](https://github.com/patrickschaper/homebrew-tap) provides
+the cask. Add it before installing:
 
 ```bash
-TAP="YOUR_OWNER/YOUR_TAP" # unconfigured placeholder
+TAP="patrickschaper/tap"
+brew tap "$TAP"
 ```
 
 The cask supports Apple Silicon (ARM64) and macOS 15 (Sequoia) or newer.
