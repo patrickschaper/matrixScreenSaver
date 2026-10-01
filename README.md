@@ -4,7 +4,78 @@
 
 This is a macOS screen saver based on the iconic rain of characters and symbols known from the movie The Matrix.
 
-## Quick install
+## Homebrew install (tap not live yet)
+
+The local [tap payload](Homebrew/README.md) is prepared, but the public tap is
+unconfigured and **not live**. The commands below are templates, not working
+installation commands until a tap owner publishes it. Replace the placeholder
+with the chosen tap before running them:
+
+```bash
+TAP="YOUR_OWNER/YOUR_TAP" # unconfigured placeholder
+```
+
+The cask supports Apple Silicon (ARM64) and macOS 15 (Sequoia) or newer.
+It uses deprecated hooks supported by ordinary Homebrew 7.0.7; developer-mode
+installs reject those hooks. Future Homebrew compatibility is not guaranteed.
+
+**Security:** installation removes quarantine from the checksum-verified staged
+bundle. This bypasses Gatekeeper quarantine checks; it does not make the bundle
+notarized or Apple-approved. Install only if you trust the release publisher.
+
+### Fresh install
+
+```bash
+brew install --cask "$TAP/matrix-screen-saver"
+```
+
+After a successful first install, Wallpaper settings opens. You must manually select
+**MatrixScreenSaver** under **Screen Saver**. If settings cannot open, navigate to
+**System Settings > Wallpaper > Screen Saver** yourself. The cask never selects
+the saver automatically.
+
+### Migrate a manual installation
+
+An existing bundle at Homebrew's screen saver destination is not silently deleted.
+An unforced install fails with migration guidance. To explicitly allow Homebrew
+to replace that saver bundle:
+
+```bash
+brew install --cask --force "$TAP/matrix-screen-saver"
+```
+
+This replaces the bundle and retains saved options in `dev.patsch.MatrixScreenSaver`.
+Forced migration also opens settings once for manual selection. A custom Homebrew
+screen saver destination is honored; other copies are not removed.
+
+### Upgrade
+
+```bash
+brew upgrade --cask "$TAP/matrix-screen-saver"
+```
+
+Managed upgrades do not show the manual-install conflict warning. Managed
+upgrades do not open settings; reinstalls also suppress initial setup.
+Successful installs and upgrades print one invitation without opening a browser:
+
+> There is no spoon. There is coffee: https://www.buymeacoffee.com/yesman82
+
+### Ordinary uninstall
+
+```bash
+brew uninstall --cask "$TAP/matrix-screen-saver"
+```
+
+Homebrew removes its saver bundle but retains saved options. Migration, upgrade,
+and ordinary uninstall never rewrite or delete the preferences domain.
+
+## Manual quick install (alternative)
+
+This route is not Homebrew-managed. To switch later, use the explicit migration
+command above. The quarantine command below bypasses Gatekeeper quarantine checks;
+it does not make the bundle notarized or Apple-approved. The replacement command
+deletes the existing bundle, not its saved options. Trust the publisher before
+running these commands.
 
 1. Open the [latest release](https://github.com/patrickschaper/matrixScreenSaver/releases/latest) and download the versioned `.zip` file from the release assets.
 2. Double-click the downloaded `.zip` file to extract `MatrixScreenSaver.saver`.

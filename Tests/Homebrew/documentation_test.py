@@ -1,0 +1,29 @@
+from pathlib import Path
+import unittest
+
+ROOT = Path(__file__).resolve().parents[2]
+
+
+class DocumentationTest(unittest.TestCase):
+    def test_user_lifecycle_and_security(self):
+        text = (ROOT / "README.md").read_text()
+        for command in ["brew install --cask", "brew install --cask --force",
+                        "brew upgrade --cask", "brew uninstall --cask"]:
+            self.assertIn(f'{command} "$TAP/matrix-screen-saver"', text)
+        for phrase in ["YOUR_OWNER/YOUR_TAP", "not live", "Gatekeeper quarantine checks",
+                       "notarized or Apple-approved", "retains", "manually select",
+                       "upgrades do not open", "Apple Silicon", "macOS 15",
+                       "https://www.buymeacoffee.com/yesman82"]:
+            self.assertIn(phrase, text)
+        self.assertNotIn("--zap", text)
+
+    def test_maintainer_permissions_and_compatibility(self):
+        text = (ROOT / "Homebrew/README.md").read_text()
+        for phrase in ["HOMEBREW_TAP_REPOSITORY", "HOMEBREW_TAP_TOKEN", "contents",
+                       "pull requests", "Human review", "manifest.json", "Developer mode",
+                       "Cask/InstallSteps", "7.0.7", "unconfigured"]:
+            self.assertIn(phrase, text)
+
+
+if __name__ == "__main__":
+    unittest.main()
