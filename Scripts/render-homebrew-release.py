@@ -61,8 +61,7 @@ def render(archive_path, version, url, digest, provenance, output):
     validate_version(version)
     if url != asset_url(version):
         raise ValueError("Asset URL must be the immutable versioned release URL")
-    data = Path(archive_path).read_bytes()
-    sha256 = hashlib.sha256(data).hexdigest()
+    sha256 = hashlib.sha256(Path(archive_path).read_bytes()).hexdigest()
     if digest != f"sha256:{sha256}":
         raise ValueError("Downloaded asset does not match the release SHA-256 digest")
     with zipfile.ZipFile(archive_path) as archive:

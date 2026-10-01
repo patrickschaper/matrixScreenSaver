@@ -26,7 +26,6 @@ class FakeCaskDSL
 
   def initialize(root, managed: false)
     @root, @managed = Pathname(root), managed
-    @cask = self
     @artifacts, @commands, @dependencies, @messages = [], [], {}, []
   end
 
@@ -52,7 +51,6 @@ class FakeCaskDSL
     @dependencies.merge!(values)
   end
 
-  def installed? = @managed
   def full_name = "fixture/tap/matrix-screen-saver"
   def screen_saver(name)
     @artifacts << Cask::Artifact::ScreenSaver.new(@root/"stage"/name, @root/"custom savers"/name)
@@ -68,8 +66,6 @@ class FakeCaskDSL
     raise "quarantine failed" if executable == "/usr/bin/xattr" && @fail_quarantine
     raise "settings unavailable" if executable == "/usr/bin/open" && @fail_open
   end
-
-  def evaluate(&block) = instance_eval(&block)
 
   def install(force: false)
     @managed = true # Homebrew saves metadata BEFORE invoking preflight.
