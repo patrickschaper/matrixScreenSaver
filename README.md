@@ -28,6 +28,14 @@ notarized or Apple-approved. Install only if you trust the release publisher.
 brew install --cask "$TAP/matrix-screen-saver"
 ```
 
+Homebrew's fully qualified install command above trusts only this cask, not the
+whole tap. To use the short name instead, explicitly trust the cask first:
+
+```bash
+brew trust --cask patrickschaper/tap/matrix-screen-saver
+brew install --cask matrix-screen-saver
+```
+
 After a successful first install, Wallpaper settings opens. You must manually select
 **MatrixScreenSaver** under **Screen Saver**. If settings cannot open, navigate to
 **System Settings > Wallpaper > Screen Saver** yourself. The cask never selects

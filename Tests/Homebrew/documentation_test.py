@@ -19,6 +19,8 @@ class DocumentationTest(unittest.TestCase):
         self.assertNotIn("--zap", text)
         self.assertNotIn("YOUR_OWNER/YOUR_TAP", text)
         self.assertNotIn("tap not live yet", text)
+        self.assertIn("brew trust --cask patrickschaper/tap/matrix-screen-saver", text)
+        self.assertIn("trusts only this cask", text)
 
     def test_maintainer_permissions_and_compatibility(self):
         text = (ROOT / "Homebrew/README.md").read_text()
