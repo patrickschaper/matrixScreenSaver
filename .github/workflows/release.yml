@@ -483,7 +483,7 @@ jobs:
       - name: Upload manual Homebrew handoff
         uses: actions/upload-artifact@v4
         with:
-          name: homebrew-handoff-${{ steps.version.outputs.value }}
+          name: homebrew-handoff-${{ steps.version.outputs.value }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/homebrew-handoff
           if-no-files-found: error
 
@@ -498,11 +498,11 @@ jobs:
             if [[ -z "$TAP_TARGET" ]]; then
               echo 'Tap is unconfigured, not live. No external tap mutation requested.'
             else
-              echo 'Optional tap PR requested. Human review and merge required; manual artifact remains available on failure.'
+              echo 'Automatic tap publication configured. A dedicated tap contents-write token is required; manual artifact remains available on failure.'
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Propose optional tap pull request
+      - name: Publish automatic tap update
         id: tap_update
         if: vars.HOMEBREW_TAP_REPOSITORY != ''
         continue-on-error: true
@@ -511,12 +511,16 @@ jobs:
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           GH_TOKEN: ''
         shell: bash
-        run: python3 Scripts/update-homebrew-tap.py --target "$TAP_TARGET" --handoff "$RUNNER_TEMP/homebrew-handoff"
+        run: |
+          set -euo pipefail
+          python3 Scripts/update-homebrew-tap.py --publish --target "$TAP_TARGET" --handoff "$RUNNER_TEMP/homebrew-handoff" | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Report optional tap update failure
         if: steps.tap_update.outcome == 'failure'
         shell: bash
-        run: echo 'Optional tap PR failed. Release and manual artifact are available. Inspect logs, configure a tap-scoped token, then retry or copy the cask manually.' >> "$GITHUB_STEP_SUMMARY"
+        run: |
+          echo '::warning::Automatic tap update failed. Release and manual handoff remain available; inspect the tap and token configuration before retrying.'
+          echo 'Automatic tap update failed. Release and manual artifact are available. Configure HOMEBREW_TAP_TOKEN with tap contents-write permission if missing. Inspect logs and current cask for conflicts before rerunning the publish job, or review and copy the handoff manually. Do not overwrite newer versions or unrelated edits.' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Back-merge main into development
         shell: bash
