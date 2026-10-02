@@ -1,0 +1,76 @@
+name: Homebrew distribution tests
+
+on:
+  push:
+    branches: [development, 'feat/**', 'fix/**']
+  pull_request:
+    branches: [development, main]
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  HOMEBREW_NO_AUTO_UPDATE: '1'
+  HOMEBREW_NO_ANALYTICS: '1'
+  PYTHONDONTWRITEBYTECODE: '1'
+
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.4'
+      - name: Fixture and documentation tests
+        run: |
+          ruby Tests/Homebrew/cask_lifecycle_test.rb
+          python3 -B -m unittest discover -s Tests/Homebrew -p '*_test.py'
+          ruby -c Homebrew/Casks/matrix-screen-saver.rb
+          bash -n Tests/Homebrew/integration_lifecycle.sh
+      - name: Generate reviewable fixture handoff
+        run: |
+          python3 -B - <<'PY'
+          import hashlib
+          import importlib.util
+          import os
+          from pathlib import Path
+          import sys
+          sys.path.insert(0, 'Tests/Homebrew')
+          from fixtures.release_fixture import write_archive
+          spec = importlib.util.spec_from_file_location('renderer', 'Scripts/render-homebrew-release.py')
+          renderer = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(renderer)
+          root = Path(os.environ['RUNNER_TEMP'])
+          archive = root / 'fixture.zip'
+          write_archive(archive)
+          renderer.render(archive, '1.2.3', renderer.asset_url('1.2.3'),
+                          'sha256:' + hashlib.sha256(archive.read_bytes()).hexdigest(),
+                          'CI fixture only; NOT a published release', root / 'fixture-handoff')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: homebrew-fixture-handoff-not-for-publication
+          path: ${{ runner.temp }}/fixture-handoff
+          if-no-files-found: error
+
+  native-lifecycle:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Pin Homebrew compatibility version on disposable runner
+        run: |
+          repository="$(brew --repository)"
+          git -C "$repository" fetch --depth=1 origin tag 7.0.7
+          git -C "$repository" checkout --detach FETCH_HEAD
+      - name: Sandboxed native lifecycle in isolated directories
+        run: bash Tests/Homebrew/integration_lifecycle.sh
+      - name: Full cask style
+        env:
+          HOMEBREW_DEVELOPER: '1'
+        run: brew style "$PWD/Homebrew/Casks/matrix-screen-saver.rb"

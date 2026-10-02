@@ -1293,12 +1293,16 @@ final class NativeMatrixRenderer {
             }
 
             if minimum + 1 < levels {
+                // The xterm cube quantizes each channel to 6 steps (0, 95, 135,
+                // 175, 215, 255). A 0.95 cap still rounds back up to 255, so the
+                // highlight must stay below 0.9 to avoid pure white.
+                let highlightCap = 0.89
                 for level in (minimum + 1)..<levels {
                     let remaining = Double(levels - 1 - level)
                     let denominator = Double(levels - 1 - minimum)
-                    let r = 1.0 - (1.0 - Double(red) / edge) * (remaining / denominator)
+                    let r = highlightCap - (highlightCap - Double(red) / edge) * (remaining / denominator)
                     let g = 1.0 - (1.0 - Double(green) / edge) * (remaining / denominator)
-                    let b = 1.0 - (1.0 - Double(blue) / edge) * (remaining / denominator)
+                    let b = highlightCap - (highlightCap - Double(blue) / edge) * (remaining / denominator)
                     indices.append(color2index(r, g, b, levels: levels))
                 }
             }

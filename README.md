@@ -6,22 +6,17 @@ This is a macOS screen saver based on the iconic rain of characters and symbols 
 
 ## Quick install
 
-1. Open the [latest release](https://github.com/patrickschaper/matrixScreenSaver/releases/latest) and download the versioned `.zip` file from the release assets.
-2. Double-click the downloaded `.zip` file to extract `MatrixScreenSaver.saver`.
-3. In Terminal, run the following commands from the directory that contains the extracted `MatrixScreenSaver.saver` file:
+```bash
+brew trust --cask patrickschaper/tap/matrix-screen-saver
+brew install --cask patrickschaper/tap/matrix-screen-saver
+```
 
-   ```bash
-   xattr -dr com.apple.quarantine MatrixScreenSaver.saver
-   mkdir -p "$HOME/Library/Screen Savers"
-   rm -rf "$HOME/Library/Screen Savers/MatrixScreenSaver.saver"
-   ditto MatrixScreenSaver.saver "$HOME/Library/Screen Savers/MatrixScreenSaver.saver"
-   open "x-apple.systempreferences:com.apple.Wallpaper-Settings.extension"
-   ```
+## Buy me a coffee
 
-4. In the opened Wallpaper settings, switch to **Screen Saver** and select **MatrixScreenSaver**.
-5. Enjoy and donate — so I can invest in a developer license for signing the screen saver and make it installable with a double-click (Thanks Apple 😐)<br>
-   <a href="https://www.buymeacoffee.com/yesman82"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" width="150"></a><br>
-   <img src="docs/bmc_qr.png" alt="Buy Me a Coffee QR code" width="150">
+There is no spoon. There is coffee. Donations help fund a developer license for signing the screen saver.
+
+<a href="https://www.buymeacoffee.com/yesman82"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" width="150"></a><br>
+<img src="docs/bmc_qr.png" alt="Buy Me a Coffee QR code" width="150">
 
 ## Options
 
