@@ -32,6 +32,7 @@ This repository is hosted on GitHub. When relevant, assume GitHub-native feature
 | `MatrixScreenSaverOptions.swift` | Persisted options model and native **Options…** configure sheet |
 | `MatrixRendererLimits.swift` | Shared numeric clamps/limits (Foundation-only, no AppKit/ScreenSaver dependency) |
 | `NeoMessageScene.swift` | "Neo" intro message state machine |
+| `CmdCaptureScene.swift` | Runs a command in the background, captures its stdout, and reveals it before the trace program |
 | `Xorshift64.swift` | Deterministic 64-bit RNG |
 | `TerminalSupport.swift` | Shared terminal-like types: `TerminalSize`, `TerminalColor` |
 
@@ -47,6 +48,7 @@ This repository is hosted on GitHub. When relevant, assume GitHub-native feature
 |---|---|
 | `main.swift` | TAP harness entry point — `ok()` helper, orchestrates test files, prints plan |
 | `Xorshift64Tests.swift` | Tests for `Xorshift64` RNG determinism |
+| `CmdCaptureSceneTests.swift` | Tests for `CmdCaptureScene` phases and `NeoMessageScene` name templating |
 | `NativeMatrixRendererTests.swift` | Tests for renderer `seedOffset` default and per-display divergence |
 
 ### Scripts
@@ -58,6 +60,7 @@ This repository is hosted on GitHub. When relevant, assume GitHub-native feature
 | `install.sh` | Builds and installs to `~/Library/Screen Savers/`, kills `ScreenSaverEngine` |
 | `preview.sh` | Builds and launches the saver in the preview host for fast iteration |
 | `Scripts/install-saver.sh` | Shared installer (strips quarantine, copies with `ditto`, verifies hash) |
+| `Scripts/apply-theme.sh` | Applies the full desktop theme (dark mode/accent, wallpaper, iTerm2 profile, Terminal preset) and installs/selects the saver — see `theme/` |
 
 ### CI — `.github/workflows/`
 

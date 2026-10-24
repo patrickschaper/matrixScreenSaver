@@ -16,12 +16,23 @@ struct NeoMessageScene {
         case done
     }
 
-    static let defaultLines: [String] = [
-        "Wake up, Neo...",
-        "The Matrix has you.",
-        "Follow the white rabbit.",
-        "Knock, knock, Neo.",
-    ]
+    /// Name used in the intro message when the user hasn't configured one.
+    static let fallbackName = "Neo"
+
+    /// Builds the classic 4-line intro message addressed to `name`, falling back to
+    /// ``fallbackName`` ("Neo") when `name` is empty.
+    static func lines(forName name: String) -> [String] {
+        let resolved = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let addressee = resolved.isEmpty ? fallbackName : resolved
+        return [
+            "Wake up, \(addressee)...",
+            "The Matrix has you.",
+            "Follow the white rabbit.",
+            "Knock, knock, \(addressee).",
+        ]
+    }
+
+    static let defaultLines: [String] = lines(forName: "")
 
     static let charsPerSecond: Double = 40.0
     static let cursorBlinkInterval: TimeInterval = 0.5

@@ -83,6 +83,7 @@ func consumerHostTests() {
     let configuration: NativeMatrixRenderer.Configuration? = stored("configuration", in: renderer)
     check(configuration?.skipSyncDelay == true, "live visual options retain independent fallback transitions")
     options.neoMessageSceneEnabled = true
+    options.cmdSceneEnabled = false
     options.numberSceneEnabled = true
     options.neoMessageLines = ["X"]
     options.rainRunForever = false
