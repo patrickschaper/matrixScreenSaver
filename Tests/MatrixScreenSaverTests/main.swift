@@ -17,6 +17,7 @@ func ok(_ condition: Bool, _ description: String, file: StaticString = #file, li
 
 xorshift64Tests()
 screenSyncCoordinatorTests()
+cmdCaptureSceneTests()
 nativeMatrixRendererTests()
 wallpaperPlaybackStateTests()
 sharedWallpaperFrameTests()

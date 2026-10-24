@@ -378,6 +378,10 @@ final class MatrixScreenSaverView: ScreenSaverView {
             ScreenSyncCoordinator.shared.requestPhaseAdvance(ObjectIdentifier(self))
             pendingSceneAdvance = true
             NSLog("MatrixScreenSaver Neo scene complete — requesting phase advance")
+        } else if nativeRenderer.consumeCmdSceneDone() {
+            ScreenSyncCoordinator.shared.requestPhaseAdvance(ObjectIdentifier(self))
+            pendingSceneAdvance = true
+            NSLog("MatrixScreenSaver cmd capture scene complete — requesting phase advance")
         } else if nativeRenderer.consumeNumberSceneDone() {
             ScreenSyncCoordinator.shared.requestPhaseAdvance(ObjectIdentifier(self))
             pendingSceneAdvance = true

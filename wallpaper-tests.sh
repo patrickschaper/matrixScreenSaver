@@ -19,6 +19,7 @@ swiftc "$OPTIMIZATION" -framework Foundation -framework AppKit -framework Screen
   "$SOURCE_DIR/MatrixScreenSaverOptions.swift" \
   "$SOURCE_DIR/Xorshift64.swift" \
   "$SOURCE_DIR/NeoMessageScene.swift" \
+  "$SOURCE_DIR/CmdCaptureScene.swift" \
   "$SOURCE_DIR/MatrixRendererLimits.swift" \
   "$SOURCE_DIR/NativeMatrixRenderer.swift" \
   "$SOURCE_DIR/ScreenSyncCoordinator.swift" \

@@ -42,7 +42,10 @@ The saver exposes a native **Options…** sheet. The values are stored with `Scr
 | Characters | Restrict rain glyphs to a custom set (e.g. ATGC). Leave empty for the default. | *(empty)* |
 | Neo message scene | Show the Neo message intro before the main scene. | On |
 | Neo message speed | Typing and pause speed multiplier for the Neo message intro. A positive number. | 1.0 |
-| Neo message lines | Lines typed during the Neo message intro. Between 1 and 10 lines, up to 256 characters each. | The 4 classic lines |
+| Name | Name used in the intro message ("Wake up, {name}..."). Only applies when Neo message lines is empty. | *(empty — uses "Neo")* |
+| Neo message lines | Custom lines typed during the Neo message intro, up to 10 lines / 256 characters each. Leave empty to use the Name-based default message instead. | *(empty)* |
+| cmd capture scene | Run a command and reveal its captured stdout before the trace program (Number scene). Runs after the Neo message and before the Number scene. Skipped entirely if disabled or if no commands are configured. | Off |
+| cmd commands | One shell command per line. A random one runs each time the screen saver starts (all displays in a multi-monitor setup agree on the same pick). Empty disables the scene. | *(empty)* |
 | Scan lines intensity | Opacity of the CRT scan line overlay (0 = off, 100 = fully opaque). | 25 |
 | Scan lines vertical | Orientation of the scan line overlay (vertical or horizontal). | On (vertical) |
 
@@ -57,13 +60,14 @@ The saver exposes a native **Options…** sheet. The values are stored with `Scr
 - Native Swift/AppKit screen saver bundle
 - Edge-to-edge full-screen saver output, with terminal-style chrome kept in the preview host
 - In-process renderer for `rain-forever` with an optional upstream `number` intro
-- Native **Options…** sheet for Number scene, Twinkle, Diffuse, Character size, Rain density, Frame rate, Error rate, Characters, Neo message scene/speed/lines, and Scan lines
+- Native **Options…** sheet for Number scene, Twinkle, Diffuse, Character size, Rain density, Frame rate, Error rate, Characters, Neo message scene/speed/lines, cmd capture scene/commands, and Scan lines
 - Preview app for fast iteration without reinstalling
 
 ### Repository layout
 
 - `Sources/MatrixScreenSaver/MatrixScreenSaverView.swift` - screen saver view, layout, drawing, and option wiring
 - `Sources/MatrixScreenSaver/NativeMatrixRenderer.swift` - native Matrix scene renderer
+- `Sources/MatrixScreenSaver/CmdCaptureScene.swift` - runs a command, captures its output, and reveals it before the trace program
 - `Sources/MatrixScreenSaver/MatrixScreenSaverOptions.swift` - options model and native configure sheet
 - `Sources/MatrixScreenSaver/TerminalSupport.swift` - small shared terminal types used by the active renderer
 - `Scripts/install-saver.sh` - shared ditto-based installer used by local installs

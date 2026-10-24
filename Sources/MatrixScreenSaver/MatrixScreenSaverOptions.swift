@@ -5,7 +5,10 @@ struct MatrixScreenSaverOptions: Equatable {
     private enum Keys {
         static let neoMessageSceneEnabled = "NeoMessageSceneEnabled"
         static let neoMessageSpeedFactor = "NeoMessageSpeedFactor"
+        static let name = "Name"
         static let neoMessageLines = "NeoMessageLines"
+        static let cmdSceneEnabled = "CmdSceneEnabled"
+        static let commands = "Commands"
         static let numberSceneEnabled = "NumberSceneEnabled"
         static let twinkleEnabled = "TwinkleEnabled"
         static let diffuseEnabled = "DiffuseEnabled"
@@ -23,7 +26,10 @@ struct MatrixScreenSaverOptions: Equatable {
 
     static let defaultNeoMessageSceneEnabled = true
     static let defaultNeoMessageSpeedFactor = 1.0
-    static let defaultNeoMessageLines = NeoMessageScene.defaultLines
+    static let defaultName = ""
+    static let defaultNeoMessageLines: [String] = []
+    static let defaultCmdSceneEnabled = false
+    static let defaultCommands: [String] = []
     static let defaultNumberSceneEnabled = true
     static let defaultTwinkleEnabled = true
     static let defaultDiffuseEnabled = true
@@ -50,10 +56,15 @@ struct MatrixScreenSaverOptions: Equatable {
      static let maxNeoMessageLineLength = 256
      static let minimumRainDurationSeconds = 1
      static let maximumRainDurationSeconds = 9999
+     static let maxCommandCount = 20
+     static let maxCommandLength = 512
 
     static let neoMessageSceneDescription = "Show the Neo message intro. On by default."
     static let neoMessageSpeedFactorDescription = "Speed multiplier for intro scene typing (Neo message and number scene). Default: 1.0."
-    static let neoMessageLinesDescription = "Lines typed during the Neo message intro (1–10, max 256 chars)."
+    static let nameDescription = "Name used in the intro message (\"Wake up, {name}...\"). Empty = Neo."
+    static let neoMessageLinesDescription = "Lines typed during the Neo message intro (0–10, max 256 chars). Leave empty to use the Name-based default message."
+    static let cmdSceneDescription = "Run a command and reveal its captured output before the trace program. Off by default — most installs won't have a command configured."
+    static let commandsDescription = "One shell command per line. A random one runs each time the screen saver starts. Empty disables the scene."
     static let numberSceneDescription = "Show the startup number scene. On by default."
     static let diffuseDescription = "On by default."
     static let twinkleDescription = "On by default."
@@ -73,7 +84,10 @@ struct MatrixScreenSaverOptions: Equatable {
 
     var neoMessageSceneEnabled = defaultNeoMessageSceneEnabled
     var neoMessageSpeedFactor = defaultNeoMessageSpeedFactor
+    var name = defaultName
     var neoMessageLines = defaultNeoMessageLines
+    var cmdSceneEnabled = defaultCmdSceneEnabled
+    var commands = defaultCommands
     var numberSceneEnabled = defaultNumberSceneEnabled
     var twinkleEnabled = defaultTwinkleEnabled
     var diffuseEnabled = defaultDiffuseEnabled
@@ -105,6 +119,8 @@ struct MatrixScreenSaverOptions: Equatable {
         NativeMatrixRenderer.Configuration(
             neoMessageSceneEnabled: neoMessageSceneEnabled,
             neoMessageSpeedFactor: neoMessageSpeedFactor,
+            cmdSceneEnabled: cmdSceneEnabled,
+            commands: commands,
             numberSceneEnabled: numberSceneEnabled,
             twinkleEnabled: twinkleEnabled,
             diffuseEnabled: diffuseEnabled,
@@ -114,6 +130,7 @@ struct MatrixScreenSaverOptions: Equatable {
              frameRate: frameRate,
             errorRate: errorRate,
             characters: characters,
+            neoMessageName: name,
             neoMessageLines: neoMessageLines,
             skipSyncDelay: isPreview
         )
@@ -126,13 +143,21 @@ struct MatrixScreenSaverOptions: Equatable {
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .map { String($0.prefix(Self.maxNeoMessageLineLength)) }
                 .filter { !$0.isEmpty }
-            let clamped = Array(result.prefix(Self.maxNeoMessageLineCount))
-            return clamped.isEmpty ? Self.defaultNeoMessageLines : clamped
+            return Array(result.prefix(Self.maxNeoMessageLineCount))
         }()
+        let sanitizedCommands: [String] = commands
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .map { String($0.prefix(Self.maxCommandLength)) }
+            .filter { !$0.isEmpty }
+            .prefix(Self.maxCommandCount)
+            .map { $0 }
         return MatrixScreenSaverOptions(
             neoMessageSceneEnabled: neoMessageSceneEnabled,
             neoMessageSpeedFactor: max(neoMessageSpeedFactor, Self.minimumNeoMessageSpeedFactor),
+            name: name.trimmingCharacters(in: .whitespacesAndNewlines),
             neoMessageLines: sanitizedLines,
+            cmdSceneEnabled: cmdSceneEnabled,
+            commands: sanitizedCommands,
             numberSceneEnabled: numberSceneEnabled,
             twinkleEnabled: twinkleEnabled,
             diffuseEnabled: diffuseEnabled,
@@ -167,7 +192,10 @@ struct MatrixScreenSaverOptions: Equatable {
         defaults.register(defaults: [
             Keys.neoMessageSceneEnabled: defaultNeoMessageSceneEnabled,
             Keys.neoMessageSpeedFactor: defaultNeoMessageSpeedFactor,
+            Keys.name: defaultName,
             Keys.neoMessageLines: defaultNeoMessageLines,
+            Keys.cmdSceneEnabled: defaultCmdSceneEnabled,
+            Keys.commands: defaultCommands,
             Keys.numberSceneEnabled: defaultNumberSceneEnabled,
             Keys.twinkleEnabled: defaultTwinkleEnabled,
             Keys.diffuseEnabled: defaultDiffuseEnabled,
@@ -189,7 +217,10 @@ struct MatrixScreenSaverOptions: Equatable {
         MatrixScreenSaverOptions(
             neoMessageSceneEnabled: defaults.bool(forKey: Keys.neoMessageSceneEnabled),
             neoMessageSpeedFactor: defaults.double(forKey: Keys.neoMessageSpeedFactor),
+            name: defaults.string(forKey: Keys.name) ?? defaultName,
             neoMessageLines: (defaults.array(forKey: Keys.neoMessageLines) as? [String]) ?? defaultNeoMessageLines,
+            cmdSceneEnabled: defaults.bool(forKey: Keys.cmdSceneEnabled),
+            commands: (defaults.array(forKey: Keys.commands) as? [String]) ?? defaultCommands,
             numberSceneEnabled: defaults.bool(forKey: Keys.numberSceneEnabled),
             twinkleEnabled: defaults.bool(forKey: Keys.twinkleEnabled),
             diffuseEnabled: defaults.bool(forKey: Keys.diffuseEnabled),
@@ -211,7 +242,10 @@ struct MatrixScreenSaverOptions: Equatable {
         let options = sanitized()
         defaults.set(options.neoMessageSceneEnabled, forKey: Keys.neoMessageSceneEnabled)
         defaults.set(options.neoMessageSpeedFactor, forKey: Keys.neoMessageSpeedFactor)
+        defaults.set(options.name, forKey: Keys.name)
         defaults.set(options.neoMessageLines, forKey: Keys.neoMessageLines)
+        defaults.set(options.cmdSceneEnabled, forKey: Keys.cmdSceneEnabled)
+        defaults.set(options.commands, forKey: Keys.commands)
         defaults.set(options.numberSceneEnabled, forKey: Keys.numberSceneEnabled)
         defaults.set(options.twinkleEnabled, forKey: Keys.twinkleEnabled)
         defaults.set(options.diffuseEnabled, forKey: Keys.diffuseEnabled)
@@ -263,6 +297,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
     private let rootStack = NSStackView()
     private let neoMessageSceneCheckbox = NSButton(checkboxWithTitle: "Activate", target: nil, action: nil)
     private let neoMessageSpeedFactorField = NSTextField(string: "")
+    private let nameField = NSTextField(string: "")
     private let linesTableView = NSTableView()
     private let linesScrollView = NSScrollView()
     private var editorLines: [String] = []
@@ -275,6 +310,9 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
     private static let removeColumnID = NSUserInterfaceItemIdentifier("remove")
     private var pendingLines: [String] = MatrixScreenSaverOptions.defaultNeoMessageLines
     private var linesEditorWindow: NSWindow?
+    private let cmdSceneCheckbox = NSButton(checkboxWithTitle: "Activate", target: nil, action: nil)
+    private let commandsTextView = NSTextView()
+    private let commandsScrollView = NSScrollView()
     private let numberSceneCheckbox = NSButton(checkboxWithTitle: "Activate", target: nil, action: nil)
     private let twinkleCheckbox = NSButton(checkboxWithTitle: "Twinkling effect", target: nil, action: nil)
     private let diffuseCheckbox = NSButton(checkboxWithTitle: "Glow effect", target: nil, action: nil)
@@ -333,7 +371,10 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
     func prepare(using options: MatrixScreenSaverOptions) {
         neoMessageSceneCheckbox.state = options.neoMessageSceneEnabled ? .on : .off
         neoMessageSpeedFactorField.stringValue = Self.format(options.neoMessageSpeedFactor)
+        nameField.stringValue = options.name
         pendingLines = options.neoMessageLines
+        cmdSceneCheckbox.state = options.cmdSceneEnabled ? .on : .off
+        commandsTextView.string = options.commands.joined(separator: "\n")
         numberSceneCheckbox.state = options.numberSceneEnabled ? .on : .off
         twinkleCheckbox.state = options.twinkleEnabled ? .on : .off
         diffuseCheckbox.state = options.diffuseEnabled ? .on : .off
@@ -451,7 +492,12 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         ])
         let neoGroup = makeGroupBox(title: "Neo message scene", views: [
             makeCheckboxSection(checkbox: neoMessageSceneCheckbox, description: MatrixScreenSaverOptions.neoMessageSceneDescription),
+            makeTextSection(title: "Name", field: nameField, description: MatrixScreenSaverOptions.nameDescription, fieldWidth: Self.textFieldWidth / 2),
             makeNeoMessageLinesButtonRow(),
+        ])
+        let cmdGroup = makeGroupBox(title: "cmd capture scene", views: [
+            makeCheckboxSection(checkbox: cmdSceneCheckbox, description: MatrixScreenSaverOptions.cmdSceneDescription),
+            makeMultilineTextSection(title: "Commands", textView: commandsTextView, scrollView: commandsScrollView, description: MatrixScreenSaverOptions.commandsDescription),
         ])
         let numberGroup = makeGroupBox(title: "Number scene", views: [
             makeCheckboxSection(checkbox: numberSceneCheckbox, description: MatrixScreenSaverOptions.numberSceneDescription),
@@ -466,11 +512,12 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
          ])
         rootStack.addArrangedSubview(generalGroup)
         rootStack.addArrangedSubview(neoGroup)
+        rootStack.addArrangedSubview(cmdGroup)
         rootStack.addArrangedSubview(numberGroup)
         rootStack.addArrangedSubview(rainGroup)
 
         let groupWidth = -(rootStack.edgeInsets.left + rootStack.edgeInsets.right)
-        for group in [generalGroup, neoGroup, numberGroup, rainGroup] {
+        for group in [generalGroup, neoGroup, cmdGroup, numberGroup, rainGroup] {
             group.widthAnchor.constraint(equalTo: rootStack.widthAnchor, constant: groupWidth).isActive = true
         }
 
@@ -692,7 +739,6 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
             .map { String($0.prefix(MatrixScreenSaverOptions.maxNeoMessageLineLength)) }
-        if pendingLines.isEmpty { pendingLines = MatrixScreenSaverOptions.defaultNeoMessageLines }
         window.endSheet(linesEditorWindow ?? window)
     }
 
@@ -977,6 +1023,37 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         return stack
     }
 
+    /// Builds a labeled multi-line text input (one entry per line) with its description.
+    private func makeMultilineTextSection(title: String, textView: NSTextView, scrollView: NSScrollView, description: String) -> NSView {
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 4
+        stack.setHuggingPriority(.required, for: .vertical)
+
+        let label = NSTextField(labelWithString: title)
+        label.font = .systemFont(ofSize: 13, weight: .semibold)
+
+        textView.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
+        textView.isRichText = false
+        textView.isAutomaticQuoteSubstitutionEnabled = false
+        textView.isAutomaticDashSubstitutionEnabled = false
+        textView.isAutomaticSpellingCorrectionEnabled = false
+        textView.textContainerInset = NSSize(width: 6, height: 6)
+
+        scrollView.documentView = textView
+        scrollView.hasVerticalScroller = true
+        scrollView.borderType = .bezelBorder
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.widthAnchor.constraint(equalToConstant: Self.textFieldWidth * 1.6).isActive = true
+        scrollView.heightAnchor.constraint(equalToConstant: 90).isActive = true
+
+        stack.addArrangedSubview(label)
+        stack.addArrangedSubview(scrollView)
+        stack.addArrangedSubview(makeDescriptionLabel(description))
+        return stack
+    }
+
      /// Builds the rain duration section with "Run forever" checkbox and optional seconds field.
      private func makeRainDurationSection() -> NSView {
          let stack = NSStackView()
@@ -1120,12 +1197,16 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
             throw ValidationError.errorRate
         }
 
-        let neoMessageLines = pendingLines.isEmpty ? MatrixScreenSaverOptions.defaultNeoMessageLines : pendingLines
-
         return MatrixScreenSaverOptions(
             neoMessageSceneEnabled: neoMessageSceneCheckbox.state == .on,
             neoMessageSpeedFactor: neoMessageSpeedFactor,
-            neoMessageLines: neoMessageLines,
+            name: nameField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines),
+            neoMessageLines: pendingLines,
+            cmdSceneEnabled: cmdSceneCheckbox.state == .on,
+            commands: commandsTextView.string
+                .components(separatedBy: .newlines)
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty },
             numberSceneEnabled: numberSceneCheckbox.state == .on,
             twinkleEnabled: twinkleCheckbox.state == .on,
             diffuseEnabled: diffuseCheckbox.state == .on,
