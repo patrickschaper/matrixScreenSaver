@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+
+## [0.3.1] - 2026-10-27
+
+### Features
+
+- sign and notarize GitHub releases (#111)
+
+### Bug Fixes
+
+- speed up wallpaper startup and restore desktop images (#108)
+- compact options and add coffee links (#107)
+
 ## [0.4.0] - 2026-10-27
 
 ### Bug Fixes
