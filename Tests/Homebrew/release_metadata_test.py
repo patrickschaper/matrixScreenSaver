@@ -165,6 +165,30 @@ class ReleaseMetadataTest(unittest.TestCase):
                         prepare.index("./build.sh\n"))
         self.assertIn('ditto "build/MatrixWallpaper.app" "${release_dir}/MatrixWallpaper.app"', publish)
 
+    def test_release_uses_highest_version_tag_not_nearest(self):
+        repository = self.root / "repository"
+        repository.mkdir()
+
+        def git(*args):
+            return subprocess.run(["git", "-c", "user.name=Test", "-c", "user.email=test@example.invalid",
+                                   "-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false",
+                                   "-c", "core.hooksPath=/dev/null", *args], cwd=repository,
+                                  check=True, capture_output=True, text=True)
+
+        git("init", "--quiet")
+        git("commit", "--allow-empty", "-m", "older release commit")
+        git("tag", "0.4.0")
+        git("tag", "0.10.0")
+        git("commit", "--allow-empty", "-m", "nearer older version tag")
+        git("tag", "0.3.0")
+        workflow = (ROOT / ".github/workflows/release.yml").read_text()
+        assignment = next(line.strip() for line in workflow.splitlines()
+                          if line.strip().startswith('current_version="$('))
+        result = subprocess.run(["bash", "-euo", "pipefail", "-c",
+                                 assignment + '\nprintf "%s" "$current_version"'],
+                                cwd=repository, check=True, capture_output=True, text=True)
+        self.assertEqual("0.10.0", result.stdout)
+
     def test_fetch_consumes_existing_asset_and_missing_asset_fails(self):
         from unittest.mock import Mock, call, patch
         spec = importlib.util.spec_from_file_location("render_release", SCRIPT)

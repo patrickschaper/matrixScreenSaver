@@ -75,10 +75,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Use the latest git tag as the source of truth so the bump is
-          # always based on the actual last release, even if the VERSION file
-          # is stale (e.g. a back-merge PR was never merged).
-          current_version="$(git describe --tags --abbrev=0 2>/dev/null | tr -d '[:space:]')"
+          # Squash merges can leave an older tag nearer than the latest release.
+          current_version="$(git for-each-ref --sort=-version:refname --count=1 --format='%(refname:short)' refs/tags)"
           if [[ -z "${current_version}" ]]; then
             current_version="$(tr -d '[:space:]' < VERSION)"
           fi
