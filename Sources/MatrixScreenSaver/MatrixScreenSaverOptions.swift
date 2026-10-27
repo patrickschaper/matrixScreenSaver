@@ -261,7 +261,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
 
     private let window: NSWindow
     private let rootStack = NSStackView()
-    private let neoMessageSceneCheckbox = NSButton(checkboxWithTitle: "Activate", target: nil, action: nil)
+    private let neoMessageSceneCheckbox = NSButton(checkboxWithTitle: "Show Neo message scene", target: nil, action: nil)
     private let neoMessageSpeedFactorField = NSTextField(string: "")
     private let linesTableView = NSTableView()
     private let linesScrollView = NSScrollView()
@@ -275,7 +275,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
     private static let removeColumnID = NSUserInterfaceItemIdentifier("remove")
     private var pendingLines: [String] = MatrixScreenSaverOptions.defaultNeoMessageLines
     private var linesEditorWindow: NSWindow?
-    private let numberSceneCheckbox = NSButton(checkboxWithTitle: "Activate", target: nil, action: nil)
+    private let numberSceneCheckbox = NSButton(checkboxWithTitle: "Show number scene", target: nil, action: nil)
     private let twinkleCheckbox = NSButton(checkboxWithTitle: "Twinkling effect", target: nil, action: nil)
     private let diffuseCheckbox = NSButton(checkboxWithTitle: "Glow effect", target: nil, action: nil)
     private let scanLinesSlider: NSSlider = {
@@ -417,62 +417,42 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         rootStack.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
         rootStack.translatesAutoresizingMaskIntoConstraints = false
 
-        // Header row: title left, About link right
-        let headerContainer = NSView()
-        headerContainer.translatesAutoresizingMaskIntoConstraints = false
-
-        let titleLabel = NSTextField(labelWithString: "macOS Matrix Screen Saver")
-        titleLabel.font = .systemFont(ofSize: 15, weight: .semibold)
-        titleLabel.translatesAutoresizingMaskIntoConstraints = false
-
         let aboutButton = NSButton(title: "About", target: self, action: #selector(openRepository(_:)))
         aboutButton.bezelStyle = .inline
         aboutButton.isBordered = false
         aboutButton.contentTintColor = .linkColor
         aboutButton.font = .systemFont(ofSize: 13)
-        aboutButton.translatesAutoresizingMaskIntoConstraints = false
 
-        headerContainer.addSubview(titleLabel)
-        headerContainer.addSubview(aboutButton)
-        NSLayoutConstraint.activate([
-            titleLabel.leadingAnchor.constraint(equalTo: headerContainer.leadingAnchor),
-            titleLabel.centerYAnchor.constraint(equalTo: headerContainer.centerYAnchor),
-            aboutButton.trailingAnchor.constraint(equalTo: headerContainer.trailingAnchor),
-            aboutButton.firstBaselineAnchor.constraint(equalTo: titleLabel.firstBaselineAnchor),
-            headerContainer.heightAnchor.constraint(equalTo: titleLabel.heightAnchor),
-        ])
-        rootStack.addArrangedSubview(headerContainer)
-
-        let generalGroup = makeGroupBox(title: "General", views: [
+        let tabs = NSTabView()
+        tabs.translatesAutoresizingMaskIntoConstraints = false
+        tabs.addTabViewItem(makeOptionsTab(title: "General", views: [
             makeCharacterSizeSection(),
             makeScanLinesSection(),
-            makeNumericSection(title: "Typing speed", field: neoMessageSpeedFactorField, description: MatrixScreenSaverOptions.neoMessageSpeedFactorDescription),
             makeNumericSection(title: "Frame rate", field: frameRateField, description: MatrixScreenSaverOptions.frameRateDescription),
-        ])
-        let neoGroup = makeGroupBox(title: "Neo message scene", views: [
+        ]))
+        tabs.addTabViewItem(makeOptionsTab(title: "Intro scenes", views: [
             makeCheckboxSection(checkbox: neoMessageSceneCheckbox, description: MatrixScreenSaverOptions.neoMessageSceneDescription),
             makeNeoMessageLinesButtonRow(),
-        ])
-        let numberGroup = makeGroupBox(title: "Number scene", views: [
             makeCheckboxSection(checkbox: numberSceneCheckbox, description: MatrixScreenSaverOptions.numberSceneDescription),
-        ])
-         let rainGroup = makeGroupBox(title: "Rain scene", views: [
+            makeNumericSection(title: "Typing speed", field: neoMessageSpeedFactorField, description: MatrixScreenSaverOptions.neoMessageSpeedFactorDescription),
+        ]))
+        tabs.addTabViewItem(makeOptionsTab(title: "Rain", views: [
              makeCheckboxSection(checkbox: twinkleCheckbox, description: MatrixScreenSaverOptions.twinkleDescription),
              makeCheckboxSection(checkbox: diffuseCheckbox, description: MatrixScreenSaverOptions.diffuseDescription),
              makeNumericSection(title: "Density", field: rainDensityField, description: MatrixScreenSaverOptions.rainDensityDescription),
              makeRainDurationSection(),
              makeTextSection(title: "Characters", field: charactersField, description: MatrixScreenSaverOptions.charactersDescription, fieldWidth: Self.textFieldWidth / 2),
              makeNumericSection(title: "Error rate", field: errorRateField, description: MatrixScreenSaverOptions.errorRateDescription),
-         ])
-        rootStack.addArrangedSubview(generalGroup)
-        rootStack.addArrangedSubview(neoGroup)
-        rootStack.addArrangedSubview(numberGroup)
-        rootStack.addArrangedSubview(rainGroup)
+        ]))
+        rootStack.addArrangedSubview(tabs)
 
         let groupWidth = -(rootStack.edgeInsets.left + rootStack.edgeInsets.right)
-        for group in [generalGroup, neoGroup, numberGroup, rainGroup] {
-            group.widthAnchor.constraint(equalTo: rootStack.widthAnchor, constant: groupWidth).isActive = true
-        }
+        // Keep every page the same size so switching tabs never moves the dialog buttons.
+        NSLayoutConstraint.activate([
+            tabs.widthAnchor.constraint(equalToConstant: 520),
+            tabs.heightAnchor.constraint(equalToConstant: 460),
+            tabs.widthAnchor.constraint(equalTo: rootStack.widthAnchor, constant: groupWidth),
+        ])
 
         let buttons = NSStackView()
         buttons.orientation = .horizontal
@@ -495,11 +475,6 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         footer.distribution = .fill
         footer.translatesAutoresizingMaskIntoConstraints = false
 
-        let spacerLeft = NSView()
-        spacerLeft.translatesAutoresizingMaskIntoConstraints = false
-        spacerLeft.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        spacerLeft.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-
         let versionString = Bundle(for: MatrixScreenSaverOptionsSheetController.self)
             .infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
         let versionLabel = NSTextField(labelWithString: versionString.isEmpty ? "" : "v\(versionString)")
@@ -513,7 +488,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         spacerRight.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         footer.addArrangedSubview(resetButton)
-        footer.addArrangedSubview(spacerLeft)
+        footer.addArrangedSubview(aboutButton)
         footer.addArrangedSubview(versionLabel)
         footer.addArrangedSubview(spacerRight)
         footer.addArrangedSubview(buttons)
@@ -531,8 +506,8 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         NSLayoutConstraint.activate([
             rootStack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
             rootStack.topAnchor.constraint(equalTo: contentView.topAnchor),
-            rootStack.trailingAnchor.constraint(lessThanOrEqualTo: contentView.trailingAnchor),
-            rootStack.bottomAnchor.constraint(lessThanOrEqualTo: contentView.bottomAnchor),
+            rootStack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            rootStack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
         ])
 
         sizeWindowToFitContent()
@@ -554,6 +529,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         let label = NSTextField(labelWithString: "Lines")
         label.font = .systemFont(ofSize: 13, weight: .semibold)
         label.setContentHuggingPriority(.required, for: .horizontal)
+        label.widthAnchor.constraint(equalToConstant: 100).isActive = true
 
         let editButton = NSButton(title: "Edit…", target: self, action: #selector(editLines(_:)))
         editButton.setContentHuggingPriority(.required, for: .horizontal)
@@ -879,6 +855,9 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         let label = NSTextField(labelWithString: "Scan lines")
         label.font = .systemFont(ofSize: 13, weight: .semibold)
         label.setContentHuggingPriority(.required, for: .horizontal)
+        label.widthAnchor.constraint(equalToConstant: 100).isActive = true
+        scanLinesSlider.setAccessibilityLabel("Scan line intensity")
+        scanLinesDirectionPopup.setAccessibilityLabel("Scan line direction")
 
         scanLinesSlider.target = self
         scanLinesSlider.action = #selector(scanLinesSliderChanged(_:))
@@ -933,6 +912,8 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         let label = NSTextField(labelWithString: title)
         label.font = .systemFont(ofSize: 13, weight: .semibold)
         label.setContentHuggingPriority(.required, for: .horizontal)
+        label.widthAnchor.constraint(equalToConstant: 100).isActive = true
+        field.setAccessibilityLabel(title)
 
         field.alignment = .left
         field.controlSize = .regular
@@ -963,6 +944,8 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         let label = NSTextField(labelWithString: title)
         label.font = .systemFont(ofSize: 13, weight: .semibold)
         label.setContentHuggingPriority(.required, for: .horizontal)
+        label.widthAnchor.constraint(equalToConstant: 100).isActive = true
+        field.setAccessibilityLabel(title)
 
         field.alignment = .left
         field.controlSize = .regular
@@ -1000,6 +983,8 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
          let secondsLabel = NSTextField(labelWithString: "Seconds")
          secondsLabel.font = .systemFont(ofSize: 13, weight: .semibold)
          secondsLabel.setContentHuggingPriority(.required, for: .horizontal)
+         secondsLabel.widthAnchor.constraint(equalToConstant: 100).isActive = true
+         rainDurationField.setAccessibilityLabel("Rain duration in seconds")
 
          rainDurationField.alignment = .left
          rainDurationField.controlSize = .regular
@@ -1032,6 +1017,8 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         let titleLabel = NSTextField(labelWithString: "Character size")
         titleLabel.font = .systemFont(ofSize: 13, weight: .semibold)
         titleLabel.setContentHuggingPriority(.required, for: .horizontal)
+        titleLabel.widthAnchor.constraint(equalToConstant: 100).isActive = true
+        characterSizeSlider.setAccessibilityLabel("Character size")
 
         characterSizeSlider.translatesAutoresizingMaskIntoConstraints = false
         characterSizeSlider.widthAnchor.constraint(equalToConstant: 120).isActive = true
@@ -1060,12 +1047,12 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
          rainDurationField.isEnabled = !isRunningForever
      }
 
-    /// Builds a titled group box containing a vertical stack of option sections.
-    private func makeGroupBox(title: String, views: [NSView]) -> NSBox {
-        let box = NSBox()
-        box.title = title
-        box.contentViewMargins = NSSize(width: 8, height: 8)
-
+    /// Builds a top-aligned tab page with full-width sections so help text wraps within the page.
+    private func makeOptionsTab(title: String, views: [NSView]) -> NSTabViewItem {
+        let item = NSTabViewItem(identifier: title)
+        item.label = title
+        let contentView = NSView()
+        item.view = contentView
         let stack = NSStackView(views: views)
         stack.orientation = .vertical
         stack.alignment = .leading
@@ -1073,24 +1060,27 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         stack.setHuggingPriority(.required, for: .vertical)
         stack.translatesAutoresizingMaskIntoConstraints = false
 
-        guard let contentView = box.contentView else { return box }
         contentView.addSubview(stack)
         NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
-            stack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
-            stack.topAnchor.constraint(equalTo: contentView.topAnchor),
-            stack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
+            stack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+            stack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+            stack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 16),
+            stack.bottomAnchor.constraint(lessThanOrEqualTo: contentView.bottomAnchor, constant: -16),
         ])
+        for view in views {
+            view.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+        }
 
-        return box
+        return item
     }
 
     /// Creates the smaller descriptive text used under each option row.
     private func makeDescriptionLabel(_ description: String) -> NSTextField {
-        let label = NSTextField(labelWithString: description)
+        let label = NSTextField(wrappingLabelWithString: description)
         label.font = .systemFont(ofSize: 11)
         label.textColor = .secondaryLabelColor
         label.alignment = .left
+        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         return label
     }
 

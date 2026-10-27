@@ -74,11 +74,12 @@ func sharedSaverTests() {
         applied = true
     }
     controller.prepare(using: options)
+    checkOptionsLayout(in: controller.configureSheet())
     let applyButton = buttons(in: controller.configureSheet().contentView!).first { $0.title == "OK" }
     check(applyButton != nil, "native options window exposes Apply")
     applyButton?.performClick(nil)
     let loaded = MatrixScreenSaverOptions.load(from: defaults)
-    check(applied && loaded.frameRate == 42 && loaded.neoMessageLines == ["Shared options"],
+    check(applied && loaded.frameRate == 42 && loaded.neoMessageLines == ["Shared options"] && !loaded.numberSceneEnabled,
           "native Apply validates and delivers options through the reusable callback")
     options.frameRate = -10
     options.save(to: defaults)
@@ -110,6 +111,51 @@ func sharedSaverTests() {
         change(&changed)
         check(changed.requiresSceneRestart(comparedTo: original), "\(name) requests a coordinated scene restart")
     }
+}
+
+/// Checks every native tab at its laid-out size and leaves an edit on an inactive page for Apply.
+private func checkOptionsLayout(in window: NSWindow) {
+    let content = window.contentView!
+    content.layoutSubtreeIfNeeded()
+    let size = content.bounds.size
+    check(size.width <= 600 && size.height <= 600,
+          "options fit in a compact window without screen-sized help text")
+    guard let tabs = descendants(of: content).compactMap({ $0 as? NSTabView }).first else {
+        check(false, "options organize settings into native tabs")
+        return
+    }
+    for item in tabs.tabViewItems {
+        tabs.selectTabViewItem(item)
+        content.layoutSubtreeIfNeeded()
+        let page = item.view!
+        let controls = descendants(of: page).compactMap { $0 as? NSControl }
+        check(!controls.isEmpty && controls.allSatisfy { page.bounds.contains($0.convert($0.bounds, to: page)) },
+              "\(item.label) keeps every control and help label inside its page")
+        let top = controls.map { $0.convert($0.bounds, to: page).maxY }.max() ?? 0
+        check((12...20).contains(page.bounds.maxY - top), "\(item.label) starts with a consistent small top margin")
+        if let stack = page.subviews.first as? NSStackView {
+            let sections = stack.arrangedSubviews
+            check(zip(sections, sections.dropFirst()).allSatisfy { $0.frame.minY >= $1.frame.maxY },
+                  "\(item.label) sections do not overlap")
+        }
+        if let number = controls.compactMap({ $0 as? NSButton }).first(where: { $0.title == "Show number scene" }) {
+            number.performClick(nil)
+        }
+        if let forever = controls.compactMap({ $0 as? NSButton }).first(where: { $0.title == "Run forever" }),
+           let seconds = controls.compactMap({ $0 as? NSTextField }).first(where: { $0.accessibilityLabel() == "Rain duration in seconds" }) {
+            forever.performClick(nil)
+            check(seconds.isEnabled, "rain duration becomes editable when Run forever is off")
+            forever.performClick(nil)
+            check(!seconds.isEnabled, "rain duration is disabled again when Run forever is on")
+        }
+        check(content.bounds.size == size, "switching to \(item.label) keeps the window size stable")
+    }
+    tabs.selectTabViewItem(at: 0)
+}
+
+/// Traverses the native hierarchy, including labels and editable controls.
+private func descendants(of view: NSView) -> [NSView] {
+    view.subviews.flatMap { [$0] + descendants(of: $0) }
 }
 
 /// Finds actual controls so integration checks use the native UI action, not private methods.
