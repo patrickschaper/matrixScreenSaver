@@ -15,6 +15,8 @@ final class DesktopWallpaperController {
     private struct SavedImage: Codable {
         let url: URL
         let options: Data
+        /// Older backups omit this field; pending restores can be superseded by a new Start.
+        var restorePending: Bool? = nil
     }
 
     /// Storage shared across launches, outside the replaceable application bundle.
@@ -53,17 +55,24 @@ final class DesktopWallpaperController {
         var originals = try load()
         try prepareBlackImage()
         var failure: Error?
-        for id in screens() where originals[id] == nil {
+        for id in screens() where originals[id] == nil || originals[id]?.restorePending == true {
             do {
-                guard let image = readImage(id), image.url.isFileURL, image.url != blackImageURL else {
+                guard let image = readImage(id), image.url.isFileURL,
+                      image.url != blackImageURL || originals[id]?.restorePending == true else {
                     throw Self.error("Could not save the original wallpaper for display \(id).")
                 }
-                let options = Dictionary(uniqueKeysWithValues: image.options.map { ($0.key.rawValue, $0.value) })
-                let archive = try NSKeyedArchiver.archivedData(withRootObject: options, requiringSecureCoding: true)
-                // Validate restoration before committing to replace the user's desktop.
-                _ = try decodeOptions(archive)
+                let saved: SavedImage
+                if image.url == blackImageURL, let pending = originals[id] {
+                    saved = SavedImage(url: pending.url, options: pending.options)
+                } else {
+                    let options = Dictionary(uniqueKeysWithValues: image.options.map { ($0.key.rawValue, $0.value) })
+                    let archive = try NSKeyedArchiver.archivedData(withRootObject: options, requiringSecureCoding: true)
+                    // Validate restoration before committing to replace the user's desktop.
+                    _ = try decodeOptions(archive)
+                    saved = SavedImage(url: image.url, options: archive)
+                }
                 var updated = originals
-                updated[id] = SavedImage(url: image.url, options: archive)
+                updated[id] = saved
                 try save(updated)
                 originals = updated
                 try setImage(Image(url: blackImageURL, options: [.imageScaling: NSImageScaling.scaleAxesIndependently.rawValue]), id)
@@ -85,8 +94,16 @@ final class DesktopWallpaperController {
                 guard let current = readImage(id) else {
                     throw Self.error("Could not read the wallpaper for display \(id); its backup was kept.")
                 }
-                if current.url == blackImageURL {
+                if current.url == blackImageURL || current.url == saved.url {
+                    var pending = saved
+                    pending.restorePending = true
+                    var updated = originals
+                    updated[id] = pending
+                    try save(updated)
+                    originals = updated
                     try setImage(Image(url: saved.url, options: try decodeOptions(saved.options)), id)
+                    // A successful setter only accepts the request; reads can still report black.
+                    guard let observed = readImage(id), observed.url != blackImageURL else { continue }
                 }
                 var updated = originals
                 updated.removeValue(forKey: id)

@@ -19,6 +19,10 @@ final class DesktopWallpaperFixture {
     var unreadable = Set<String>()
     /// Observes writes to verify backup-before-mutation ordering.
     var beforeWrite: (() -> Void)?
+    /// Models setters returning before macOS exposes the new wallpaper through its read API.
+    var defersWrites = false
+    /// Latest accepted image for each display, not yet visible to reads.
+    var pendingImages: [String: DesktopWallpaperController.Image] = [:]
 
     /// Creates another controller over the same storage to model process relaunch.
     func controller() -> DesktopWallpaperController {
@@ -27,8 +31,15 @@ final class DesktopWallpaperFixture {
         }, setImage: { image, id in
             self.beforeWrite?()
             if self.failing.contains(id) { throw NSError(domain: "TestDesktop", code: 1) }
-            self.images[id] = image
+            if self.defersWrites { self.pendingImages[id] = image }
+            else { self.images[id] = image }
         })
+    }
+
+    /// Makes accepted desktop changes visible, preserving the latest request for each display.
+    func settleWrites() {
+        images.merge(pendingImages) { _, latest in latest }
+        pendingImages.removeAll()
     }
 
     deinit { try? FileManager.default.removeItem(at: directory) }
@@ -36,6 +47,7 @@ final class DesktopWallpaperFixture {
 
 /// Verifies round trips, durable recovery, and failures without changing the user's desktop.
 func desktopWallpaperTests() {
+    delayedDesktopRestoreTests()
     let fixture = DesktopWallpaperFixture()
     let originals = fixture.images
     let controller = fixture.controller()
@@ -114,4 +126,48 @@ func desktopWallpaperTests() {
     unreadable.unreadable = ["first"]
     do { try unreadable.controller().start(); check(false, "unreadable desktop settings are reported") }
     catch { check(unreadable.images["first"]?.url.path == "/original-a.jpg", "unreadable desktop is left untouched") }
+}
+
+/// Preserves originals when an immediate Start races macOS's asynchronous restore visibility.
+private func delayedDesktopRestoreTests() {
+    let fixture = DesktopWallpaperFixture()
+    let controller = fixture.controller()
+    do {
+        try controller.start()
+        fixture.defersWrites = true
+        try controller.restore()
+        check(fixture.images.values.allSatisfy { $0.url == controller.blackImageURL },
+              "delayed restore fixture still reports black after the setter returns")
+        let relaunched = fixture.controller()
+        try relaunched.start()
+        fixture.settleWrites()
+        check(fixture.images.values.allSatisfy { $0.url == controller.blackImageURL },
+              "immediate Start supersedes pending restoration without losing wallpaper ownership")
+        try relaunched.restore()
+        fixture.settleWrites()
+        check(fixture.images["first"]?.url.path == "/original-a.jpg" && fixture.images["second"]?.url.path == "/original-b.jpg",
+              "Stop after an asynchronous restart restores the actual originals, not black")
+        try fixture.controller().restore()
+
+        fixture.defersWrites = false
+        try controller.start()
+        fixture.defersWrites = true
+        try controller.restore()
+        fixture.settleWrites()
+        fixture.images["first"] = .init(url: URL(fileURLWithPath: "/new-after-delayed-restore.jpg"), options: [:])
+        try fixture.controller().start()
+        fixture.settleWrites()
+        try controller.restore()
+        fixture.settleWrites()
+        check(fixture.images["first"]?.url.path == "/new-after-delayed-restore.jpg",
+              "a new session captures a newer user choice after pending restoration")
+
+        try controller.restore()
+        try controller.start()
+        try controller.restore()
+        fixture.settleWrites()
+        check(fixture.images["first"]?.url.path == "/new-after-delayed-restore.jpg" &&
+              fixture.images["second"]?.url.path == "/original-b.jpg",
+              "immediate Stop supersedes a black-image update that is not yet visible")
+    } catch { check(false, "immediate Start after delayed restore succeeds: \(error.localizedDescription)") }
 }
