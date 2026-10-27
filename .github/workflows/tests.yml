@@ -24,6 +24,9 @@ jobs:
       - name: Run tests
         run: ./tests.sh
 
+      - name: Check signing and notarization scripts
+        run: python3 Tests/Signing/signing_test.py
+
       - name: Build screen saver
         run: ./build.sh
 

@@ -21,7 +21,7 @@ brew install --cask patrickschaper/tap/matrix-screen-saver && open /Applications
 
 ## Buy me a coffee
 
-There is no spoon. There is coffee. Donations help fund a developer license for signing the screen saver.
+There is no spoon. There is coffee. Donations help cover the Apple Developer membership and ongoing development.
 
 <a href="https://www.buymeacoffee.com/yesman82"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" width="150"></a><br>
 <img src="docs/bmc_qr.png" alt="Buy Me a Coffee QR code" width="150">
@@ -92,6 +92,9 @@ build/MatrixWallpaper.app
 ```
 
 Both build scripts read the current version from `./VERSION` and write it into their bundle metadata.
+
+Local builds and ordinary CI use ad-hoc signing and do not need Apple credentials.
+Only the GitHub release publish job uses Developer ID signing and Apple notarization.
 
 ### Test
 

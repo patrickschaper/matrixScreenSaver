@@ -409,16 +409,76 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Build screen saver and wallpaper app
+      - name: Import Developer ID and notarization credentials
         if: steps.release.outputs.exists != 'true'
+        env:
+          DEVELOPER_ID_CERTIFICATE_BASE64: ${{ secrets.DEVELOPER_ID_CERTIFICATE_BASE64 }}
+          DEVELOPER_ID_CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+          SIGNING_IDENTITY: ${{ secrets.SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${DEVELOPER_ID_CERTIFICATE_BASE64:?Configure DEVELOPER_ID_CERTIFICATE_BASE64.}"
+          : "${DEVELOPER_ID_CERTIFICATE_PASSWORD:?Configure DEVELOPER_ID_CERTIFICATE_PASSWORD.}"
+          : "${APPLE_ID:?Configure APPLE_ID.}"
+          : "${APPLE_TEAM_ID:?Configure APPLE_TEAM_ID.}"
+          : "${APPLE_APP_PASSWORD:?Configure APPLE_APP_PASSWORD.}"
+          if [[ "$SIGNING_IDENTITY" != "Developer ID Application: "* ]]; then
+            echo 'Configure SIGNING_IDENTITY with the full Developer ID Application certificate name.' >&2
+            exit 1
+          fi
+
+          KEYCHAIN_PATH="$RUNNER_TEMP/matrix-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -hex 32)"
+          echo "::add-mask::$KEYCHAIN_PASSWORD"
+          umask 077
+          printf '%s' "$DEVELOPER_ID_CERTIFICATE_BASE64" | base64 --decode > "$RUNNER_TEMP/developer-id.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$RUNNER_TEMP/developer-id.p12" -P "$DEVELOPER_ID_CERTIFICATE_PASSWORD" \
+            -k "$KEYCHAIN_PATH" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH" >/dev/null
+          security list-keychains -d user -s "$KEYCHAIN_PATH" "$HOME/Library/Keychains/login.keychain-db"
+          xcrun notarytool store-credentials matrix-release --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" --keychain "$KEYCHAIN_PATH"
+          rm -f "$RUNNER_TEMP/developer-id.p12"
+
+      - name: Build and sign screen saver and wallpaper app
+        if: steps.release.outputs.exists != 'true'
+        env:
+          SIGNING_IDENTITY: ${{ secrets.SIGNING_IDENTITY }}
         shell: bash
         run: |
           set -euo pipefail
           rm -rf build
           ./build.sh
           ./build-wallpaper.sh
+          bash Scripts/sign-bundle.sh "build/MatrixScreenSaver.saver"
+          bash Scripts/sign-bundle.sh "build/MatrixWallpaper.app"
           codesign --verify --deep --strict "build/MatrixScreenSaver.saver"
           codesign --verify --deep --strict "build/MatrixWallpaper.app"
+
+      - name: Notarize and staple both bundles
+        if: steps.release.outputs.exists != 'true'
+        env:
+          NOTARY_KEYCHAIN_PROFILE: matrix-release
+          NOTARY_KEYCHAIN: ${{ runner.temp }}/matrix-signing.keychain-db
+        shell: bash
+        run: bash Scripts/notarize.sh
+
+      - name: Remove signing credentials
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f "$RUNNER_TEMP/developer-id.p12"
+          if [[ -f "$RUNNER_TEMP/matrix-signing.keychain-db" ]]; then
+            security delete-keychain "$RUNNER_TEMP/matrix-signing.keychain-db"
+          fi
 
       - name: Stage release files
         if: steps.release.outputs.exists != 'true'

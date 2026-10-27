@@ -40,6 +40,10 @@ cmake-build-*/
 *.vsix
 
 # Xcode and Swift user data
+# Signing credentials must stay in Keychain or GitHub secrets.
+*.p12
+*.p8
+*.keychain-db
 xcuserdata/
 *.xcuserdatad/
 *.xcuserstate
