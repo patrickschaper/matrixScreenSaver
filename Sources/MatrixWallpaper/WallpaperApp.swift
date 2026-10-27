@@ -99,6 +99,9 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(.separator())
         menu.addItem(loginItems.item)
         menu.addItem(.separator())
+        let coffee = NSMenuItem(title: "Buy me a coffee ☕", action: #selector(openDonationPage(_:)), keyEquivalent: "")
+        coffee.target = self
+        menu.addItem(coffee)
         let quit = NSMenuItem(title: "Quit Matrix Wallpaper", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         quit.target = NSApp
         menu.addItem(quit)
@@ -182,6 +185,13 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         controller.configureSheet().center()
         controller.configureSheet().makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    /// Opens the project's donation page in the default browser.
+    @objc private func openDonationPage(_ sender: Any?) {
+        if let url = URL(string: "https://www.buymeacoffee.com/yesman82") {
+            NSWorkspace.shared.open(url)
+        }
     }
 
     /// Updates ordinary rendering settings in place; grid and scene-cycle changes restart together.

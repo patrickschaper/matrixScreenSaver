@@ -384,6 +384,13 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         }
     }
 
+    /// Opens the project's donation page in the default browser.
+    @objc private func openDonationPage(_ sender: Any?) {
+        if let url = URL(string: "https://www.buymeacoffee.com/yesman82") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
     /// Restores the controls to the default option values.
     @objc private func resetToDefaults(_ sender: Any?) {
         pendingLines = MatrixScreenSaverOptions.defaultNeoMessageLines
@@ -482,6 +489,14 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         versionLabel.textColor = .tertiaryLabelColor
         versionLabel.setContentHuggingPriority(.required, for: .horizontal)
 
+        let coffeeButton = NSButton(title: "Buy me a coffee ☕", target: self, action: #selector(openDonationPage(_:)))
+        coffeeButton.bezelStyle = .inline
+        coffeeButton.isBordered = false
+        coffeeButton.controlSize = .small
+        coffeeButton.contentTintColor = .linkColor
+        coffeeButton.font = .systemFont(ofSize: 11)
+        coffeeButton.setContentHuggingPriority(.required, for: .horizontal)
+
         let spacerRight = NSView()
         spacerRight.translatesAutoresizingMaskIntoConstraints = false
         spacerRight.setContentHuggingPriority(.defaultLow, for: .horizontal)
@@ -490,6 +505,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         footer.addArrangedSubview(resetButton)
         footer.addArrangedSubview(aboutButton)
         footer.addArrangedSubview(versionLabel)
+        footer.addArrangedSubview(coffeeButton)
         footer.addArrangedSubview(spacerRight)
         footer.addArrangedSubview(buttons)
 
