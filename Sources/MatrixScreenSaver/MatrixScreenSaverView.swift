@@ -95,6 +95,17 @@ final class MatrixScreenSaverView: ScreenSaverView {
     private var colorCache: [TerminalColor: NSColor] = [:]
     private var nativeRegularGlyphsByLevel: [[UnicodeScalar: CGImage]] = []
     private var nativeBoldGlyphsByLevel: [[UnicodeScalar: CGImage]] = []
+    /// Glyph pixels depend on cell-derived font metrics and renderer content, not canvas size.
+    private struct GlyphCacheKey: Equatable {
+        let cellSize: CGSize
+        let regularFont: NSFont
+        let boldFont: NSFont
+        let textInsetY: CGFloat
+        let palette: [TerminalColor]
+        let scalars: [UnicodeScalar]
+    }
+    /// Inputs used by the current regular and bold rasters.
+    private var nativeGlyphCacheKey: GlyphCacheKey?
     private var nativeDiffuseColorsByLevel: [CGColor] = []
     private var nativeFrameBuffer: UnsafeMutableRawPointer?
     private var nativeFrameContext: CGContext?
@@ -244,7 +255,9 @@ final class MatrixScreenSaverView: ScreenSaverView {
             // Register with the coordinator and defer renderer start until
             // all expected instances are ready (or the timeout elapses).
             let screenCount = NSScreen.screens.count
-            ScreenSyncCoordinator.shared.register(ObjectIdentifier(self), expectedCount: screenCount)
+            // Wallpaper attaches every window before registration, so it needs no extra lead-in.
+            ScreenSyncCoordinator.shared.register(ObjectIdentifier(self), expectedCount: screenCount,
+                                                   startupDelay: isWallpaperHost ? 0 : ScreenSyncCoordinator.startDelay)
             pendingSync = true
             NSLog("MatrixScreenSaver sync registered (%d/%d)", ScreenSyncCoordinator.shared.registeredCount, screenCount)
         } else {
@@ -432,7 +445,6 @@ final class MatrixScreenSaverView: ScreenSaverView {
         saverOptions = Self.loadSaverOptions()
         applySaverOptions(saverOptions, persist: false, restartAnimation: false)
         shouldReloadOptionsOnStart = true
-        updateLayout()
         needsDisplay = true
     }
 
@@ -624,6 +636,7 @@ final class MatrixScreenSaverView: ScreenSaverView {
         releaseNativeFrameResources()
         terminalSize = nil
         nativeRegularGlyphsByLevel.removeAll(keepingCapacity: false)
+        nativeGlyphCacheKey = nil
         nativeBoldGlyphsByLevel.removeAll(keepingCapacity: false)
         nativeDiffuseColorsByLevel.removeAll(keepingCapacity: false)
         colorCache.removeAll(keepingCapacity: false)
@@ -914,11 +927,16 @@ final class MatrixScreenSaverView: ScreenSaverView {
         context.restoreGState()
     }
 
-    /// Rebuilds the colored glyph cache for the current font metrics.
+    /// Retains glyph rasters across layout passes until their pixel-producing inputs change.
     private func rebuildNativeGlyphCache() {
         let palette = nativeRenderer.levelColors
+        let key = GlyphCacheKey(cellSize: CGSize(width: cellWidth, height: lineHeight),
+                                regularFont: regularFont, boldFont: boldFont, textInsetY: textInsetY,
+                                palette: palette, scalars: nativeRenderer.supportedScalars)
+        guard nativeGlyphCacheKey != key else { return }
         nativeRegularGlyphsByLevel = makeNativeGlyphCaches(palette: palette, font: regularFont)
         nativeBoldGlyphsByLevel = makeNativeGlyphCaches(palette: palette, font: boldFont)
+        nativeGlyphCacheKey = key
     }
 
     /// Rebuilds the diffuse background fill palette used by the renderer.

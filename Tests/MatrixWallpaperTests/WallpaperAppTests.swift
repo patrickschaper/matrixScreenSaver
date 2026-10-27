@@ -4,6 +4,7 @@ import AppKit
 func wallpaperAppTests() {
     wallpaperIconTests()
     wallpaperSyncMenuTests()
+    wallpaperDeferredLaunchTests()
     let suite = "MatrixWallpaperPlaybackTests.\(UUID().uuidString)"
     let defaults = UserDefaults(suiteName: suite)!
     defer { defaults.removePersistentDomain(forName: suite) }
@@ -12,6 +13,13 @@ func wallpaperAppTests() {
     let host = WallpaperApp(defaults: defaults, desktopWallpaper: desktopController)
     host.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
     defer { host.applicationWillTerminate(Notification(name: NSApplication.willTerminateNotification)) }
+    let status: NSStatusItem? = stored("statusItem", in: host)
+    check(status?.menu?.items.first?.title == "Stop", "launch installs playback controls before returning")
+    check(stored("windows", in: host, as: [DesktopWindow].self)?.isEmpty == true &&
+          ScreenSyncCoordinator.shared.registeredCount == 0 &&
+          desktop.images["first"]?.url.path == "/original-a.jpg" && desktop.images["second"]?.url.path == "/original-b.jpg",
+          "launch returns before creating views, registering playback, or acquiring desktops")
+    check(eventually { desktopWindowCount() == NSScreen.screens.count }, "queued launch starts playback on the main run loop")
     check(desktop.images.values.allSatisfy { $0.url == desktopController.blackImageURL }, "host launch applies black desktop images")
     check(desktopWindowCount() == NSScreen.screens.count, "app creates one desktop window per display")
     check(ScreenSyncCoordinator.shared.registeredCount == NSScreen.screens.count, "app starts every display as one coordinated session")
@@ -152,6 +160,112 @@ func wallpaperAppTests() {
     wallpaperTerminationRecoveryTests()
 }
 
+/// Exercises launch cancellation and notifications before the queued continuation can run.
+private func wallpaperDeferredLaunchTests() {
+    let suite = "MatrixWallpaperDeferredLaunchTests.\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: suite)!
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let workspace = NSWorkspace.shared.notificationCenter
+    do {
+        let desktop = DesktopWallpaperFixture()
+        let controller = desktop.controller()
+        try controller.start()
+        var recoveredBeforeAcquiring = false
+        desktop.beforeWrite = {
+            if desktop.images["first"]?.url.path == "/original-a.jpg" && desktop.images["second"]?.url.path == "/original-b.jpg" {
+                recoveredBeforeAcquiring = true
+            }
+        }
+        defer { desktop.beforeWrite = nil }
+        let host = WallpaperApp(defaults: defaults, desktopWallpaper: desktop.controller())
+        host.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
+        defer { host.applicationWillTerminate(Notification(name: NSApplication.willTerminateNotification)) }
+        check(!recoveredBeforeAcquiring && ScreenSyncCoordinator.shared.registeredCount == 0,
+              "stale desktop recovery is deferred until after launch returns")
+        check(eventually { desktopWindowCount() == NSScreen.screens.count }, "queued launch recovers a stale desktop backup")
+        check(recoveredBeforeAcquiring && desktop.images.values.allSatisfy { $0.url == controller.blackImageURL },
+              "queued launch restores every original before acquiring black desktops again")
+        NSApp.sendAction(NSSelectorFromString("togglePlayback:"), to: host, from: nil)
+        check(desktop.images["first"]?.url.path == "/original-a.jpg" && desktop.images["second"]?.url.path == "/original-b.jpg",
+              "Stop after deferred recovery restores the original images")
+    } catch {
+        check(false, "deferred recovery fixture: \(error)")
+    }
+    for action in ["Stop", "Quit", "Stop then Start"] {
+        let desktop = DesktopWallpaperFixture()
+        var writes = 0
+        desktop.beforeWrite = { writes += 1 }
+        let host = WallpaperApp(defaults: defaults, desktopWallpaper: desktop.controller())
+        host.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
+        defer { host.applicationWillTerminate(Notification(name: NSApplication.willTerminateNotification)) }
+        if action == "Quit" {
+            host.applicationWillTerminate(Notification(name: NSApplication.willTerminateNotification))
+        } else {
+            NSApp.sendAction(NSSelectorFromString("togglePlayback:"), to: host, from: nil)
+            check(writes == 0 && ScreenSyncCoordinator.shared.registeredCount == 0,
+                  "immediate Stop cancels launch without acquiring desktops")
+            if action == "Stop then Start" {
+                NSApp.sendAction(NSSelectorFromString("togglePlayback:"), to: host, from: nil)
+                check(desktopWindowCount() == NSScreen.screens.count,
+                      "explicit Start after cancelling launch remains synchronous")
+            }
+        }
+        let windows = stored("windows", in: host, as: [DesktopWindow].self) ?? []
+        let windowIDs = Set(windows.map(ObjectIdentifier.init))
+        workspace.post(name: NSWorkspace.didWakeNotification, object: nil)
+        NotificationCenter.default.post(name: NSApplication.didChangeScreenParametersNotification, object: nil)
+        var drained = false
+        DispatchQueue.main.async { drained = true }
+        check(eventually { drained }, "\(action) drains the stale launch continuation")
+        check(Set((stored("windows", in: host, as: [DesktopWindow].self) ?? []).map(ObjectIdentifier.init)) == windowIDs,
+              "\(action) cannot be undone or duplicated by queued launch work")
+        check(writes == (action == "Stop then Start" ? desktop.connected.count : 0) &&
+              ScreenSyncCoordinator.shared.registeredCount == windows.count,
+              "\(action) leaves only the requested desktop ownership and session membership")
+        if action == "Quit" {
+            check(stored("observers", in: host, as: [(NotificationCenter, NSObjectProtocol)].self)?.isEmpty == true &&
+                  stored("statusItem", in: host, as: NSStatusItem?.self).flatMap { $0 } == nil,
+                  "immediate Quit removes observers and the status item")
+        }
+    }
+
+    let desktop = DesktopWallpaperFixture()
+    var writes = 0
+    desktop.beforeWrite = { writes += 1 }
+    let host = WallpaperApp(defaults: defaults, desktopWallpaper: desktop.controller())
+    host.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
+    defer { host.applicationWillTerminate(Notification(name: NSApplication.willTerminateNotification)) }
+    NotificationCenter.default.post(name: NSApplication.didChangeScreenParametersNotification, object: nil)
+    check(writes == 0 && ScreenSyncCoordinator.shared.registeredCount == 0,
+          "display reconciliation cannot bypass pending launch")
+    NSApp.sendAction(NSSelectorFromString("showOptions:"), to: host, from: nil)
+    let optionsController: MatrixScreenSaverOptionsSheetController? = stored("optionsController", in: host)
+    check(optionsController != nil, "pending launch exposes the options controller")
+    check(writes == 0 && ScreenSyncCoordinator.shared.registeredCount == 0,
+          "opening options cannot bypass pending launch")
+    workspace.post(name: NSWorkspace.willSleepNotification, object: nil)
+    workspace.post(name: NSWorkspace.sessionDidResignActiveNotification, object: nil)
+    NotificationCenter.default.post(name: NSApplication.didChangeScreenParametersNotification, object: nil)
+    NSApp.sendAction(NSSelectorFromString("toggleScreenSaverSync:"), to: host, from: nil)
+    NSApp.sendAction(NSSelectorFromString("toggleScreenSaverSync:"), to: host, from: nil)
+    if let displayID = NSScreen.main?.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? UInt32 {
+        DistributedNotificationCenter.default().postNotificationName(SharedWallpaperFrame.requestNotification,
+            object: String(displayID), userInfo: nil, deliverImmediately: true)
+    }
+    check(writes == 0 && stored("windows", in: host, as: [DesktopWindow].self)?.isEmpty == true,
+          "pending launch notifications and sync changes cannot acquire desktops or create views")
+    var drained = false
+    DispatchQueue.main.async { drained = true }
+    check(eventually { drained }, "suspended launch continuation drains")
+    check(writes == 0 && ScreenSyncCoordinator.shared.registeredCount == 0,
+          "sleep and session suspension prevent queued startup and frame requests from starting playback")
+    workspace.post(name: NSWorkspace.didWakeNotification, object: nil)
+    check(writes == 0, "wake during launch suspension does not override an inactive session")
+    workspace.post(name: NSWorkspace.sessionDidBecomeActiveNotification, object: nil)
+    check(desktopWindowCount() == NSScreen.screens.count && ScreenSyncCoordinator.shared.registeredCount == NSScreen.screens.count,
+          "resuming deferred launch starts one session using the current displays")
+}
+
 /// Ensures a failed restore cannot block Quit and stale entries cannot replace a newer choice.
 private func wallpaperTerminationRecoveryTests() {
     let suite = "MatrixWallpaperRecoveryTests.\(UUID().uuidString)"
@@ -161,6 +275,7 @@ private func wallpaperTerminationRecoveryTests() {
     let controller = desktop.controller()
     let host = WallpaperApp(defaults: defaults, desktopWallpaper: controller)
     host.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
+    check(eventually { desktopWindowCount() == NSScreen.screens.count }, "recovery fixture awaits launch playback")
     desktop.unreadable = ["first"]
     host.applicationWillTerminate(Notification(name: NSApplication.willTerminateNotification))
     check(NSApp.modalWindow == nil && desktopWindowCount() == 0,
@@ -172,6 +287,7 @@ private func wallpaperTerminationRecoveryTests() {
     desktop.images["first"] = .init(url: URL(fileURLWithPath: "/new-after-failed-quit.jpg"), options: [:])
     let relaunched = WallpaperApp(defaults: defaults, desktopWallpaper: desktop.controller())
     relaunched.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
+    check(eventually { desktopWindowCount() == NSScreen.screens.count }, "relaunch awaits recovery and playback")
     check(desktop.images.values.allSatisfy { $0.url == controller.blackImageURL }, "relaunch recovers stale entries and starts black")
     NSApp.sendAction(NSSelectorFromString("togglePlayback:"), to: relaunched, from: nil)
     check(desktop.images["first"]?.url.path == "/new-after-failed-quit.jpg",

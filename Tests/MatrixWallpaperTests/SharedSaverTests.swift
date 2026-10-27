@@ -3,6 +3,7 @@ import ScreenSaver
 
 /// Exercises the shared view and options controller through their hosting boundaries.
 func sharedSaverTests() {
+    glyphCacheTests()
     guard let screen = NSScreen.main,
           let first = MatrixScreenSaverView(frame: screen.frame, isPreview: false),
           let second = MatrixScreenSaverView(frame: screen.frame, isPreview: false) else {
@@ -21,6 +22,7 @@ func sharedSaverTests() {
     secondWindow.setFrame(NSRect(x: screen.frame.minX, y: screen.frame.minY, width: 960, height: 600), display: false)
     firstWindow.orderBack(nil)
     secondWindow.orderBack(nil)
+    let beforeStartup = Date.timeIntervalSinceReferenceDate
     first.startAnimation()
     second.startAnimation()
     for window in additionalWindows {
@@ -28,6 +30,9 @@ func sharedSaverTests() {
         (window.contentView as! ScreenSaverView).startAnimation()
     }
     check(ScreenSyncCoordinator.shared.registeredCount == 2 + additionalWindows.count, "wallpaper hosts register for coordinated scenes")
+    let startup = ScreenSyncCoordinator.shared.resolvedStartTime()
+    check(startup != nil && startup! >= beforeStartup && startup! - Date.timeIntervalSinceReferenceDate <= 0.1,
+          "wallpaper hosts resolve a shared start without the screensaver's one-second lead-in")
     check(first.bounds.size != second.bounds.size, "coordinated hosts retain their individual canvas sizes")
     wait(2)
     check(ScreenSyncCoordinator.shared.resolvedStartTime() != nil, "wallpaper participants share a resolved start")
@@ -111,6 +116,47 @@ func sharedSaverTests() {
         change(&changed)
         check(changed.requiresSceneRestart(comparedTo: original), "\(name) requests a coordinated scene restart")
     }
+}
+
+/// Checks raster reuse through layout and option updates, retaining images to compare identity safely.
+private func glyphCacheTests() {
+    let view = MatrixScreenSaverView(frame: NSRect(x: 0, y: 0, width: 640, height: 360), isPreview: true)!
+    func glyph(_ scalar: UnicodeScalar, bold: Bool = false) -> CGImage? {
+        let name = bold ? "nativeBoldGlyphsByLevel" : "nativeRegularGlyphsByLevel"
+        let levels: [[UnicodeScalar: CGImage]]? = stored(name, in: view)
+        return levels?.last?[scalar]
+    }
+    let original = glyph("A")
+    let originalBold = glyph("A", bold: true)
+    view.setFrameSize(NSSize(width: 800, height: 480))
+    view.layout()
+    view.startAnimation()
+    check(original != nil && original === glyph("A") && originalBold === glyph("A", bold: true),
+          "layout, canvas resize, and animation startup reuse unchanged glyph rasters")
+    var options = MatrixScreenSaverView.loadSaverOptions()
+    options.frameRate = 42
+    view.applyWallpaperOptions(options)
+    check(original === glyph("A"), "frame-rate changes preserve glyph rasters")
+    options.characters = "☃"
+    view.applyWallpaperOptions(options)
+    check(glyph("☃") != nil && glyph("☃", bold: true) != nil,
+          "custom characters populate both glyph caches")
+    let custom = glyph("☃")
+    options.characterWidth += 2
+    view.applyWallpaperOptions(options)
+    check(custom != nil && custom !== glyph("☃") && glyph("☃")?.width == custom!.width + 2 &&
+          glyph("☃")?.height == custom!.height,
+          "character-width changes regenerate glyphs at the new width")
+    let wider = glyph("☃")
+    options.characterHeight += 2
+    view.applyWallpaperOptions(options)
+    check(wider !== glyph("☃") && glyph("☃")?.height == wider!.height + 2,
+          "character-height changes regenerate glyphs at the new height")
+    view.stopAnimation()
+    view.startAnimation()
+    check(glyph("A") != nil && glyph("A", bold: true) != nil,
+          "restarting after resource cleanup recreates usable glyph caches")
+    view.stopAnimation()
 }
 
 /// Checks every native tab at its laid-out size and leaves an edit on an inactive page for Apply.

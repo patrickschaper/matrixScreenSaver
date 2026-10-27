@@ -48,6 +48,12 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// User intent and independent suspension conditions for this session.
     private var playback = WallpaperPlaybackState()
 
+    /// Gates reconciliation until launch has yielded and desktop recovery has completed.
+    private var pendingLaunch: DispatchWorkItem?
+
+    /// Prevents queued notifications or menu callbacks from restarting a terminated host.
+    private var isTerminating = false
+
     /// Menu action whose label follows requested playback, not temporary suspension.
     private let playbackItem = NSMenuItem(title: "Stop", action: #selector(togglePlayback(_:)), keyEquivalent: "")
 
@@ -82,7 +88,7 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }.sorted { $0.id < $1.id }
     }
 
-    /// Creates menu controls and begins observing desktop playback conditions.
+    /// Installs menu controls and observers, then queues desktop recovery and playback on the main run loop.
     func applicationDidFinishLaunching(_ notification: Notification) {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let url = Bundle.main.url(forResource: "MenuBarIcon", withExtension: "pdf"),
@@ -141,8 +147,16 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
             guard let id = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? UInt32 else { return false }
             return CGDisplayIsAsleep(id) != 0
         })
-        updateDesktopWallpaper(restoring: true)
-        reconcilePlayback()
+        let startup = DispatchWorkItem { [weak self] in
+            guard let self, !self.isTerminating, self.pendingLaunch != nil else { return }
+            if self.playback.isRequested { self.updateDesktopWallpaper(restoring: true) }
+            // Recovery alerts can pump the run loop and receive Stop or Quit.
+            guard !self.isTerminating, self.pendingLaunch != nil else { return }
+            self.pendingLaunch = nil
+            self.reconcilePlayback()
+        }
+        pendingLaunch = startup
+        DispatchQueue.main.async(execute: startup)
     }
 
     /// Refreshes both optional controls when installations or system settings change.
@@ -174,6 +188,9 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// Starts or stops at the user's request without overriding system suspension.
     @objc private func togglePlayback(_ sender: Any?) {
+        guard !isTerminating else { return }
+        pendingLaunch?.cancel()
+        pendingLaunch = nil
         if !playback.isRequested { updateDesktopWallpaper(restoring: true) }
         playback.isRequested.toggle()
         reconcilePlayback()
@@ -221,6 +238,7 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     ///
     /// - Parameter restart: Forces coordinated reconstruction after options or display changes.
     private func reconcilePlayback(restart: Bool = false) {
+        guard !isTerminating, pendingLaunch == nil else { return }
         playbackItem.title = playback.isRequested ? "Stop" : "Start"
         if !playback.isRequested { updateDesktopWallpaper(restoring: true) }
         if !playback.isRequested || restart { removeDesktopWindows() }
@@ -236,6 +254,7 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
         updateDesktopWallpaper(restoring: false)
+        guard !isTerminating, playback.shouldRun else { return }
         if let suspendedAt {
             let duration = Date.timeIntervalSinceReferenceDate - suspendedAt
             ScreenSyncCoordinator.shared.shiftTimeline(by: duration)
@@ -391,6 +410,10 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// Removes observers and native animation work before the process exits.
     func applicationWillTerminate(_ notification: Notification) {
+        isTerminating = true
+        pendingLaunch?.cancel()
+        pendingLaunch = nil
+        playback.isRequested = false
         frameLeaseTimer?.invalidate()
         frameLeaseTimer = nil
         for (center, token) in observers { center.removeObserver(token) }

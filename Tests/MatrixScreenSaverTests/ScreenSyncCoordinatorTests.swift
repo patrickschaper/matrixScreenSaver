@@ -5,6 +5,42 @@ func screenSyncCoordinatorTests() {
     do {
         let coordinator = ScreenSyncCoordinator.shared
         coordinator._resetForTesting()
+        let first = NSObject(), second = NSObject()
+        let firstID = ObjectIdentifier(first), secondID = ObjectIdentifier(second)
+        coordinator.register(firstID, expectedCount: 2, startupDelay: 0)
+        ok(coordinator.resolvedStartTime() == nil, "ScreenSyncCoordinator: fast startup still waits for every display")
+        let before = Date.timeIntervalSinceReferenceDate
+        coordinator.register(secondID, expectedCount: 2, startupDelay: 0)
+        let start = coordinator.resolvedStartTime()!
+        ok(start >= before && start <= Date.timeIntervalSinceReferenceDate && coordinator.startContentTime == start &&
+           coordinator.resolvedStartTime() == start,
+           "ScreenSyncCoordinator: fast startup shares one immediate playback and content anchor")
+        coordinator.requestRestart(firstID)
+        coordinator.requestRestart(secondID)
+        ok(coordinator.resolvedRestartTime()! > Date.timeIntervalSinceReferenceDate + 0.9,
+           "ScreenSyncCoordinator: fast initial startup preserves the rain restart delay")
+        coordinator.unregister(firstID)
+        coordinator.unregister(secondID)
+        coordinator.register(firstID, expectedCount: 1)
+        ok(coordinator.resolvedStartTime()! > Date.timeIntervalSinceReferenceDate + 0.9,
+           "ScreenSyncCoordinator: a new default session retains its one-second startup delay")
+        coordinator._resetForTesting()
+        coordinator.register(firstID, expectedCount: 2, startupDelay: 0)
+        // Shift the existing clock rather than waiting 20 seconds for the timeout fallback.
+        coordinator.shiftTimeline(by: -ScreenSyncCoordinator.registrationTimeout - 1)
+        let timeoutBefore = Date.timeIntervalSinceReferenceDate
+        let timeoutStart = coordinator.resolvedStartTime()!
+        ok(timeoutStart >= timeoutBefore && timeoutStart <= Date.timeIntervalSinceReferenceDate,
+           "ScreenSyncCoordinator: registration timeout uses the session's fast startup delay")
+        coordinator._resetForTesting()
+        coordinator.register(firstID, expectedCount: 1)
+        ok(coordinator.resolvedStartTime()! > Date.timeIntervalSinceReferenceDate + 0.9,
+           "ScreenSyncCoordinator: testing reset restores the default startup delay")
+        coordinator.unregister(firstID)
+    }
+    do {
+        let coordinator = ScreenSyncCoordinator.shared
+        coordinator._resetForTesting()
         let native = NSObject(), shared = NSObject()
         coordinator.register(ObjectIdentifier(native), expectedCount: 2)
         coordinator.excludeFromSynchronization(ObjectIdentifier(shared))

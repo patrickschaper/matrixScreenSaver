@@ -30,6 +30,8 @@ final class ScreenSyncCoordinator {
     private var excludedIDs: Set<ObjectIdentifier> = []
     private var firstRegistrationTime: TimeInterval = 0
     private var resolvedTime: TimeInterval?
+    /// Initial lead-in selected by the first participant; rain restarts retain their own delay.
+    private var sessionStartDelay = ScreenSyncCoordinator.startDelay
 
     /// Immutable startup date used for scripted content and seeds even if playback clocks pause.
     private(set) var startContentTime: TimeInterval?
@@ -72,12 +74,14 @@ final class ScreenSyncCoordinator {
     /// - Parameters:
     ///   - id: Unique identity of the registering view (use `ObjectIdentifier`).
     ///   - expectedCount: Total number of displays (typically `NSScreen.screens.count`).
-    func register(_ id: ObjectIdentifier, expectedCount: Int) {
+    ///   - startupDelay: Initial lead-in in seconds, captured on the first registration of a session.
+    func register(_ id: ObjectIdentifier, expectedCount: Int, startupDelay: TimeInterval = ScreenSyncCoordinator.startDelay) {
         excludedIDs.remove(id)
         if registeredIDs.isEmpty {
             self.expectedCount = max(expectedCount, 1)
             self.maxExpectedCount = max(expectedCount, 1)
             firstRegistrationTime = Date.timeIntervalSinceReferenceDate
+            sessionStartDelay = startupDelay
             resolvedTime = nil
             startContentTime = nil
         } else {
@@ -103,6 +107,7 @@ final class ScreenSyncCoordinator {
         phaseAdvanceRequestedIDs.remove(id)
         if registeredIDs.isEmpty {
             resolvedTime = nil
+            sessionStartDelay = Self.startDelay
             startContentTime = nil
             restartResolvedTime = nil
             restartContentTime = nil
@@ -137,7 +142,7 @@ final class ScreenSyncCoordinator {
     private func tryResolveStart() {
         guard resolvedTime == nil, !registeredIDs.isEmpty else { return }
         if registeredIDs.count >= max(maxExpectedCount - excludedIDs.count, 1) {
-            resolvedTime = Date.timeIntervalSinceReferenceDate + Self.startDelay
+            resolvedTime = Date.timeIntervalSinceReferenceDate + sessionStartDelay
             startContentTime = resolvedTime
         }
     }
@@ -166,7 +171,7 @@ final class ScreenSyncCoordinator {
 
         let elapsed = Date.timeIntervalSinceReferenceDate - firstRegistrationTime
         if elapsed >= Self.registrationTimeout {
-            let time = Date.timeIntervalSinceReferenceDate + Self.startDelay
+            let time = Date.timeIntervalSinceReferenceDate + sessionStartDelay
             resolvedTime = time
             startContentTime = time
             return time
@@ -312,6 +317,7 @@ final class ScreenSyncCoordinator {
         registeredIDs = []
         excludedIDs = []
         firstRegistrationTime = 0
+        sessionStartDelay = Self.startDelay
         resolvedTime = nil
         startContentTime = nil
         restartRequestedIDs = []
