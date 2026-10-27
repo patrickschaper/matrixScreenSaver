@@ -494,7 +494,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         coffeeButton.isBordered = false
         coffeeButton.controlSize = .small
         coffeeButton.contentTintColor = .linkColor
-        coffeeButton.font = .systemFont(ofSize: 11)
+        coffeeButton.font = aboutButton.font
         coffeeButton.setContentHuggingPriority(.required, for: .horizontal)
 
         let spacerRight = NSView()
