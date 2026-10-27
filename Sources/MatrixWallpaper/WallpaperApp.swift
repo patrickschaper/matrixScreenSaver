@@ -9,6 +9,11 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Owns login controls independently of wallpaper playback and preferences.
     private let loginItems: LoginItemController
 
+    /// Owns the original desktop images independently of animation windows.
+    private let desktopWallpaper: DesktopWallpaperController
+    /// Avoids repeating the same alert for every system notification.
+    private var lastWallpaperError: String?
+
     /// Wallpaper-only preferences, separate from shared rendering options.
     private let defaults: UserDefaults
     /// Installed saver locations, replaceable with temporary directories in tests.
@@ -24,12 +29,15 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     ///   - loginItems: Menu controller backed by macOS registration.
     ///   - defaults: Store for wallpaper-only preferences.
     ///   - screenSaverDirectories: User and local installed-saver directories.
+    ///   - desktopWallpaper: Durable desktop settings controller, isolated in tests.
     init(loginItems: LoginItemController = LoginItemController(), defaults: UserDefaults = .standard,
          screenSaverDirectories: [URL] = FileManager.default.urls(for: .libraryDirectory, in: [.userDomainMask, .localDomainMask])
-            .map { $0.appendingPathComponent("Screen Savers") }) {
+            .map { $0.appendingPathComponent("Screen Savers") },
+         desktopWallpaper: DesktopWallpaperController = DesktopWallpaperController()) {
         self.loginItems = loginItems
         self.defaults = defaults
         self.screenSaverDirectories = screenSaverDirectories
+        self.desktopWallpaper = desktopWallpaper
         super.init()
         defaults.register(defaults: [Self.syncPreferenceKey: true])
     }
@@ -133,6 +141,7 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
             guard let id = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? UInt32 else { return false }
             return CGDisplayIsAsleep(id) != 0
         })
+        updateDesktopWallpaper(restoring: true)
         reconcilePlayback()
     }
 
@@ -165,6 +174,7 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// Starts or stops at the user's request without overriding system suspension.
     @objc private func togglePlayback(_ sender: Any?) {
+        if !playback.isRequested { updateDesktopWallpaper(restoring: true) }
         playback.isRequested.toggle()
         reconcilePlayback()
     }
@@ -212,6 +222,7 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// - Parameter restart: Forces coordinated reconstruction after options or display changes.
     private func reconcilePlayback(restart: Bool = false) {
         playbackItem.title = playback.isRequested ? "Stop" : "Start"
+        if !playback.isRequested { updateDesktopWallpaper(restoring: true) }
         if !playback.isRequested || restart { removeDesktopWindows() }
         guard playback.isRequested else { return }
         guard playback.shouldRun else {
@@ -224,6 +235,7 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
             return
         }
+        updateDesktopWallpaper(restoring: false)
         if let suspendedAt {
             let duration = Date.timeIntervalSinceReferenceDate - suspendedAt
             ScreenSyncCoordinator.shared.shiftTimeline(by: duration)
@@ -260,6 +272,25 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
             if playback.shouldShowDesktop {
                 if !window.isVisible { window.orderBack(nil) }
             } else if window.isVisible { window.orderOut(nil) }
+        }
+    }
+
+    /// Changes desktop ownership without coupling it to transient animation windows.
+    /// - Parameter restoring: Restores originals instead of acquiring newly connected desktops.
+    private func updateDesktopWallpaper(restoring: Bool) {
+        do {
+            if restoring { try desktopWallpaper.restore() }
+            else { try desktopWallpaper.start() }
+            lastWallpaperError = nil
+        } catch {
+            let message = error.localizedDescription
+            NSLog("Matrix Wallpaper desktop image: %@", message)
+            guard lastWallpaperError != message else { return }
+            lastWallpaperError = message
+            let alert = NSAlert()
+            alert.messageText = restoring ? "Could not restore the desktop wallpaper" : "Could not set the desktop to black"
+            alert.informativeText = "\(message)\nSaved wallpaper settings are kept for retry on Stop or the next launch."
+            alert.runModal()
         }
     }
 
@@ -364,6 +395,9 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         frameLeaseTimer = nil
         for (center, token) in observers { center.removeObserver(token) }
         observers.removeAll()
+        // Installers request Quit too; a recovery error must not hold termination in a modal loop.
+        do { try desktopWallpaper.restore() }
+        catch { NSLog("Matrix Wallpaper desktop restore deferred until next launch: %@", error.localizedDescription) }
         removeDesktopWindows()
         optionsController?.configureSheet().close()
         optionsController = nil

@@ -77,7 +77,8 @@ func loginItemTests() {
 
     status = .enabled
     menu.removeAllItems()
-    let host = WallpaperApp(loginItems: controller)
+    let desktop = DesktopWallpaperFixture()
+    let host = WallpaperApp(loginItems: controller, desktopWallpaper: desktop.controller())
     host.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
     let hostMenu = controller.item.menu!
     status = .notRegistered

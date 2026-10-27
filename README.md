@@ -165,6 +165,17 @@ shares the wallpaper's animation. Uncheck it to let the saver animate independen
 The choice survives app restarts and saver reinstallation; opening the menu refreshes
 installation detection. This does not change visual options or synchronization between monitors.
 
+While Matrix Wallpaper runs, it saves each display's desktop image and display options,
+then sets the underlying wallpaper to plain black. **Stop** and **Quit Matrix Wallpaper**
+restore those settings. Temporary pauses and animation restarts keep the original backup.
+If you choose a different wallpaper while Matrix runs, that newer choice is preserved.
+
+Backups are stored in `~/Library/Application Support/MatrixWallpaper/DesktopWallpaper/`.
+After a crash or force-quit, reopen Matrix Wallpaper and choose **Stop** to restore the desktop.
+Disconnected displays and failed restores keep their backups for a later retry.
+Exact restoration is supported for static images; macOS's public API cannot preserve every
+dynamic/aerial wallpaper, rotating collection, or separate Space configuration.
+
 ### Origin
 
 This project started as an attempt to wrap `cxxmatrix` inside a macOS screen saver.
