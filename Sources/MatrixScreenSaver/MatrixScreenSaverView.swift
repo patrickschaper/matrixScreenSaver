@@ -90,6 +90,17 @@ final class MatrixScreenSaverView: ScreenSaverView {
     private var lineHeight: CGFloat = 22
     private var regularFont = NSFont.monospacedSystemFont(ofSize: 16, weight: .medium)
     private var boldFont = NSFont.monospacedSystemFont(ofSize: 16, weight: .semibold)
+    /// Resolved rain fonts by family name for the current cell size.
+    private var rainFonts: [String: NSFont] = [:]
+
+    /// Resolves each family name to a font at the given size, skipping fonts that are not installed.
+    private static func makeRainFonts(names: [String], size: CGFloat) -> [String: NSFont] {
+        var fonts = [String: NSFont]()
+        for name in names {
+            if let f = RainFontCatalog.font(named: name, size: size) { fonts[name] = f }
+        }
+        return fonts
+    }
     private var titleFont = NSFont.systemFont(ofSize: 13, weight: .medium)
     private var textInsetY: CGFloat = 2
     private var colorCache: [TerminalColor: NSColor] = [:]
@@ -103,6 +114,8 @@ final class MatrixScreenSaverView: ScreenSaverView {
         let textInsetY: CGFloat
         let palette: [TerminalColor]
         let scalars: [UnicodeScalar]
+        /// Selected rain font families the rasters were built for.
+        let rainFonts: [String]
     }
     /// Inputs used by the current regular and bold rasters.
     private var nativeGlyphCacheKey: GlyphCacheKey?
@@ -479,6 +492,7 @@ final class MatrixScreenSaverView: ScreenSaverView {
         let fontSize = fittedTerminalFontSize(forCellWidth: cellWidth, cellHeight: lineHeight)
         regularFont = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .medium)
         boldFont = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .semibold)
+        rainFonts = Self.makeRainFonts(names: nativeRenderer.activeRainFonts, size: fontSize)
 
         textInsetY = max(0, floor((lineHeight - regularFont.pointSize) / 2) - 1)
         rebuildNativeGlyphCache()
@@ -932,10 +946,11 @@ final class MatrixScreenSaverView: ScreenSaverView {
         let palette = nativeRenderer.levelColors
         let key = GlyphCacheKey(cellSize: CGSize(width: cellWidth, height: lineHeight),
                                 regularFont: regularFont, boldFont: boldFont, textInsetY: textInsetY,
-                                palette: palette, scalars: nativeRenderer.supportedScalars)
+                                palette: palette, scalars: nativeRenderer.supportedScalars,
+                                rainFonts: nativeRenderer.activeRainFonts)
         guard nativeGlyphCacheKey != key else { return }
-        nativeRegularGlyphsByLevel = makeNativeGlyphCaches(palette: palette, font: regularFont)
-        nativeBoldGlyphsByLevel = makeNativeGlyphCaches(palette: palette, font: boldFont)
+        nativeRegularGlyphsByLevel = makeNativeGlyphCaches(palette: palette, font: regularFont, rainFonts: rainFonts)
+        nativeBoldGlyphsByLevel = makeNativeGlyphCaches(palette: palette, font: boldFont, rainFonts: rainFonts)
         nativeGlyphCacheKey = key
     }
 
@@ -953,7 +968,8 @@ final class MatrixScreenSaverView: ScreenSaverView {
     /// Builds per-level glyph images for all supported scalar values.
     private func makeNativeGlyphCaches(
         palette: [TerminalColor],
-        font: NSFont
+        font: NSFont,
+        rainFonts: [String: NSFont]
     ) -> [[UnicodeScalar: CGImage]] {
         var caches: [[UnicodeScalar: CGImage]] = Array(repeating: [:], count: palette.count)
         let scalars = nativeRenderer.supportedScalars
@@ -964,7 +980,11 @@ final class MatrixScreenSaverView: ScreenSaverView {
             ]
             caches[level].reserveCapacity(scalars.count)
             for scalar in scalars {
-                guard let image = makeNativeGlyphImage(for: scalar, attributes: attributes) else {
+                var glyphAttributes = attributes
+                if let name = nativeRenderer.rainFontByScalar[scalar], let rf = rainFonts[name] {
+                    glyphAttributes[.font] = rf
+                }
+                guard let image = makeNativeGlyphImage(for: scalar, drawing: nativeRenderer.rainSourceByScalar[scalar], attributes: glyphAttributes) else {
                     continue
                 }
                 caches[level][scalar] = image
@@ -976,6 +996,7 @@ final class MatrixScreenSaverView: ScreenSaverView {
     /// Rasterizes a single glyph into a native Core Graphics image.
     private func makeNativeGlyphImage(
         for scalar: UnicodeScalar,
+        drawing: UnicodeScalar? = nil,
         attributes: [NSAttributedString.Key: Any]
     ) -> CGImage? {
         let pixelWidth = max(Int(ceil(cellWidth)), 1)
@@ -999,7 +1020,7 @@ final class MatrixScreenSaverView: ScreenSaverView {
             return glyphContext.makeImage()
         }
 
-        let text = String(scalar)
+        let text = String(drawing ?? scalar)
         let textSize = (text as NSString).size(withAttributes: attributes)
         let point = NSPoint(
             x: max(0, floor((cellWidth - textSize.width) / 2)),

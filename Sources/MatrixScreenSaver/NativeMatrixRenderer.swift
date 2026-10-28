@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 final class NativeMatrixRenderer {
@@ -13,6 +14,8 @@ final class NativeMatrixRenderer {
          var frameRate = 25.0
         var errorRate = 1.0
         var characters = ""
+        /// Installed font families used for the rain glyphs. Empty keeps the built-in glyphs and system font.
+        var rainFonts: [String] = []
         var neoMessageLines: [String] = NeoMessageScene.defaultLines
         /// When true the 10-second multi-screen sync delay is skipped so scenes
         /// start within one second of launch. Set for preview contexts where
@@ -33,6 +36,7 @@ final class NativeMatrixRenderer {
                  frameRate: min(max(frameRate, MatrixRendererLimits.minimumFrameRate), MatrixRendererLimits.maximumFrameRate),
                 errorRate: max(errorRate, MatrixRendererLimits.minimumErrorRate),
                 characters: characters,
+                rainFonts: rainFonts,
                 neoMessageLines: neoMessageLines.isEmpty ? NeoMessageScene.defaultLines : neoMessageLines,
                 skipSyncDelay: skipSyncDelay
             )
@@ -214,13 +218,64 @@ final class NativeMatrixRenderer {
         glyphs.append(UnicodeScalar(0x2588)!)
         return glyphs
     }()
+    /// Glyph tables derived from the rain fonts the user selected.
+    struct RainFontTables {
+        /// Glyph keys per font, picked 50/50 across fonts when more than one is selected.
+        var pools: [[UnicodeScalar]] = []
+        /// Font family each glyph key is drawn with.
+        var fontByScalar: [UnicodeScalar: String] = [:]
+        /// Alias scalar -> character actually drawn (only for aliased ASCII glyphs).
+        var sourceByScalar: [UnicodeScalar: UnicodeScalar] = [:]
+        /// Upper bound on glyphs taken from one font, sampled evenly, to keep the glyph cache small.
+        static let maximumGlyphsPerFont = 512
+    }
+
+    /// Glyphs a rain font really has. ASCII glyphs are keyed by a private-use alias (U+F000 + code)
+    /// so they render in the rain font without colliding with the system-font intro/terminal text.
+    static func glyphEntries(forFont name: String) -> [(key: UnicodeScalar, source: UnicodeScalar)] {
+        guard let font = RainFontCatalog.font(named: name, size: 16) else { return [] }
+        let cs = CTFontCopyCharacterSet(font) as CharacterSet
+        var out = [(key: UnicodeScalar, source: UnicodeScalar)]()
+        for v in UInt32(0x21)...UInt32(0xFFFF) {
+            guard let sc = UnicodeScalar(v), cs.contains(sc),
+                  v != 0xA0, v != 0x2028, v != 0x2029, v != 0x2588,
+                  !CharacterSet.whitespacesAndNewlines.contains(sc),
+                  !CharacterSet.controlCharacters.contains(sc) else { continue }
+            if v < 0x80, let alias = UnicodeScalar(0xF000 + v) {
+                out.append((alias, sc))
+            } else {
+                out.append((sc, sc))
+            }
+        }
+        let limit = RainFontTables.maximumGlyphsPerFont
+        guard out.count > limit else { return out }
+        let step = Double(out.count) / Double(limit)
+        return (0..<limit).map { out[Int(Double($0) * step)] }
+    }
+
+    /// Builds the glyph tables for the selected rain fonts, skipping fonts that are not installed.
+    static func makeRainTables(fonts: [String]) -> RainFontTables {
+        var tables = RainFontTables()
+        var seen = Set<UnicodeScalar>()
+        for name in fonts {
+            var pool = [UnicodeScalar]()
+            for entry in glyphEntries(forFont: name) where seen.insert(entry.key).inserted {
+                pool.append(entry.key)
+                tables.fontByScalar[entry.key] = name
+                if entry.key != entry.source { tables.sourceByScalar[entry.key] = entry.source }
+            }
+            if !pool.isEmpty { tables.pools.append(pool) }
+        }
+        return tables
+    }
+
     private static let palette = makePalette()
 
     /// Returns the glyph pool for the given characters string, deduplicating and falling back to the default pool when empty.
-    private static func resolveGlyphPool(characters: String) -> [UnicodeScalar] {
+    private static func resolveGlyphPool(characters: String, fallback: [UnicodeScalar]) -> [UnicodeScalar] {
         let trimmed = characters.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            return defaultGlyphPool
+            return fallback
         }
         var seen = Set<UnicodeScalar>()
         var pool = [UnicodeScalar]()
@@ -232,7 +287,7 @@ final class NativeMatrixRenderer {
                 pool.append(scalar)
             }
         }
-        return pool.isEmpty ? defaultGlyphPool : pool
+        return pool.isEmpty ? fallback : pool
     }
 
     /// The content margin (in cells) used for the text row and columns in number/neo scenes.
@@ -258,6 +313,16 @@ final class NativeMatrixRenderer {
 
     private var configuration = Configuration()
     private var activeGlyphPool: [UnicodeScalar] = NativeMatrixRenderer.defaultGlyphPool
+    /// When set, each rain glyph picks a selected font at random, then a glyph within it.
+    private var activeMixPools: [[UnicodeScalar]]? = nil
+    /// Glyph tables for the current `activeRainFonts`.
+    private var rainTables = RainFontTables()
+    /// Rain font families the glyph tables were built for.
+    private(set) var activeRainFonts: [String] = []
+    /// Font family to draw each rain glyph key with.
+    private(set) var rainFontByScalar: [UnicodeScalar: String] = [:]
+    /// Character actually drawn for aliased glyph keys.
+    private(set) var rainSourceByScalar: [UnicodeScalar: UnicodeScalar] = [:]
 
     var supportedScalars: [UnicodeScalar] {
         let defaultSet = Set(Self.defaultGlyphPool)
@@ -459,7 +524,19 @@ final class NativeMatrixRenderer {
             pendingSimulationSteps = 0.0
         }
 
-        activeGlyphPool = Self.resolveGlyphPool(characters: sanitizedConfiguration.characters)
+        if sanitizedConfiguration.rainFonts != activeRainFonts {
+            activeRainFonts = sanitizedConfiguration.rainFonts
+            rainTables = Self.makeRainTables(fonts: activeRainFonts)
+            rainFontByScalar = rainTables.fontByScalar
+            rainSourceByScalar = rainTables.sourceByScalar
+        }
+        let fontPoolUnion = rainTables.pools.flatMap { $0 }
+        activeGlyphPool = Self.resolveGlyphPool(
+            characters: sanitizedConfiguration.characters,
+            fallback: fontPoolUnion.isEmpty ? Self.defaultGlyphPool : fontPoolUnion
+        )
+        let customChars = !sanitizedConfiguration.characters.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        activeMixPools = (!customChars && rainTables.pools.count > 1) ? rainTables.pools : nil
 
         let shouldResetSceneSequence =
             columns > 0 &&
@@ -1114,7 +1191,12 @@ final class NativeMatrixRenderer {
 
     /// Returns a random glyph from the supported rain character pool.
     private func randomGlyph() -> UnicodeScalar {
-        activeGlyphPool.randomElement(using: &rainRNG) ?? UnicodeScalar("0")
+        if let pools = activeMixPools,
+           let pool = pools.randomElement(using: &rainRNG),
+           let glyph = pool.randomElement(using: &rainRNG) {
+            return glyph
+        }
+        return activeGlyphPool.randomElement(using: &rainRNG) ?? UnicodeScalar("0")
     }
 
     /// Returns a random ASCII numeral for the startup number scene.
@@ -1342,5 +1424,43 @@ final class NativeMatrixRenderer {
         result.insert(TerminalColor(red: 0, green: 63, blue: 0), at: 1)
         result.insert(TerminalColor(red: 0, green: 32, blue: 0), at: 1)
         return result
+    }
+}
+
+/// Lists installed font families and resolves them for rain rendering.
+enum RainFontCatalog {
+    /// Resolves a family, PostScript or full font name to a font.
+    static func font(named name: String, size: CGFloat) -> NSFont? {
+        NSFont(name: name, size: size)
+            ?? NSFontManager.shared.font(withFamily: name, traits: [], weight: 5, size: size)
+    }
+
+    /// Families that look useful for rain: katakana-capable fonts and anything named "matrix".
+    private static let suitableFamilies: Set<String> = {
+        var result = Set<String>()
+        for family in NSFontManager.shared.availableFontFamilies {
+            if family.lowercased().contains("matrix") { result.insert(family); continue }
+            guard let font = font(named: family, size: 16) else { continue }
+            let cs = CTFontCopyCharacterSet(font) as CharacterSet
+            var count = 0
+            for v in Array(0x30A0...0x30FF) + Array(0xFF61...0xFF9F) {
+                if let sc = UnicodeScalar(UInt32(v)), cs.contains(sc) { count += 1 }
+            }
+            if count >= 20 { result.insert(family) }
+        }
+        return result
+    }()
+
+    /// Scans the installed fonts on a background queue so the first open of the font list does not stall the main thread.
+    static func prefetch() {
+        DispatchQueue.global(qos: .utility).async { _ = suitableFamilies }
+    }
+
+    /// Sorted font families, optionally limited to rain-suitable ones (selected fonts always stay listed).
+    static func families(showAll: Bool, alwaysInclude: [String]) -> [String] {
+        let all = NSFontManager.shared.availableFontFamilies
+        var names = showAll ? Set(all) : suitableFamilies
+        names.formUnion(alwaysInclude)
+        return names.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
     }
 }

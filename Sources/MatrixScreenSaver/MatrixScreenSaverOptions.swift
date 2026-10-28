@@ -17,6 +17,8 @@ struct MatrixScreenSaverOptions: Equatable {
          static let frameRate = "FrameRate"
         static let errorRate = "ErrorRate"
         static let characters = "Characters"
+        /// Defaults key for the selected rain font families.
+        static let rainFonts = "RainFonts"
         static let scanLinesIntensity = "ScanLinesIntensity"
         static let scanLinesVertical = "ScanLinesVertical"
     }
@@ -69,6 +71,12 @@ struct MatrixScreenSaverOptions: Equatable {
      static let frameRateDescription = "Target frame rate in fps, 1–1000. Default: 25."
     static let errorRateDescription = "Character change rate factor. Default: 1.0."
     static let charactersDescription = "Custom glyph set (e.g. ATGC). Empty = default."
+    /// Help text shown under the Fonts picker.
+    static let rainFontsDescription = "Fonts for the falling glyphs. Pick several to mix them. None keeps the built-in glyphs. Intro text always uses the system font."
+    /// Default selection: no fonts, which keeps the built-in glyphs and system font.
+    static let defaultRainFonts: [String] = []
+    /// Maximum number of rain fonts that can be mixed.
+    static let maximumRainFonts = 8
     static let scanLinesDescription = "CRT scan line intensity (0–100%). Default: 25%."
 
     var neoMessageSceneEnabled = defaultNeoMessageSceneEnabled
@@ -85,6 +93,8 @@ struct MatrixScreenSaverOptions: Equatable {
      var frameRate = defaultFrameRate
     var errorRate = defaultErrorRate
     var characters = defaultCharacters
+    /// Installed font families used for the rain glyphs. Empty keeps the built-in glyphs.
+    var rainFonts = defaultRainFonts
     var scanLinesIntensity = defaultScanLinesIntensity
     var scanLinesVertical = defaultScanLinesVertical
 
@@ -114,6 +124,7 @@ struct MatrixScreenSaverOptions: Equatable {
              frameRate: frameRate,
             errorRate: errorRate,
             characters: characters,
+            rainFonts: rainFonts,
             neoMessageLines: neoMessageLines,
             skipSyncDelay: isPreview
         )
@@ -157,6 +168,14 @@ struct MatrixScreenSaverOptions: Equatable {
                     .map { String($0) }
                     .joined()
             }(),
+            rainFonts: {
+                var seen = Set<String>()
+                return rainFonts
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty && seen.insert($0).inserted }
+                    .prefix(Self.maximumRainFonts)
+                    .map { $0 }
+            }(),
             scanLinesIntensity: max(0, min(1, scanLinesIntensity)),
             scanLinesVertical: scanLinesVertical
         )
@@ -179,6 +198,7 @@ struct MatrixScreenSaverOptions: Equatable {
              Keys.frameRate: defaultFrameRate,
             Keys.errorRate: defaultErrorRate,
             Keys.characters: defaultCharacters,
+            Keys.rainFonts: defaultRainFonts,
             Keys.scanLinesIntensity: defaultScanLinesIntensity,
             Keys.scanLinesVertical: defaultScanLinesVertical,
         ])
@@ -201,6 +221,7 @@ struct MatrixScreenSaverOptions: Equatable {
              frameRate: defaults.double(forKey: Keys.frameRate),
             errorRate: defaults.double(forKey: Keys.errorRate),
             characters: defaults.string(forKey: Keys.characters) ?? defaultCharacters,
+            rainFonts: (defaults.array(forKey: Keys.rainFonts) as? [String]) ?? defaultRainFonts,
             scanLinesIntensity: defaults.double(forKey: Keys.scanLinesIntensity),
             scanLinesVertical: defaults.bool(forKey: Keys.scanLinesVertical)
         ).sanitized()
@@ -223,6 +244,7 @@ struct MatrixScreenSaverOptions: Equatable {
          defaults.set(options.frameRate, forKey: Keys.frameRate)
         defaults.set(options.errorRate, forKey: Keys.errorRate)
         defaults.set(options.characters, forKey: Keys.characters)
+        defaults.set(options.rainFonts, forKey: Keys.rainFonts)
         defaults.set(options.scanLinesIntensity, forKey: Keys.scanLinesIntensity)
         defaults.set(options.scanLinesVertical, forKey: Keys.scanLinesVertical)
         defaults.synchronize()
@@ -312,6 +334,12 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
      private let frameRateField = NSTextField(string: "")
     private let errorRateField = NSTextField(string: "")
     private let charactersField = NSTextField(string: "")
+    /// Pull-down listing installed fonts; ticked entries are the selection.
+    private let rainFontsButton = NSPopUpButton(frame: .zero, pullsDown: true)
+    /// Lists every installed family instead of only rain-suitable ones.
+    private let showAllFontsCheckbox = NSButton(checkboxWithTitle: "Show all fonts", target: nil, action: nil)
+    /// Fonts currently ticked in the pull-down, in selection order.
+    private var selectedRainFonts: [String] = []
     private var didClose = false
 
     /// Creates native options UI with a host-owned apply action.
@@ -326,6 +354,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
             defer: false
         )
         super.init()
+        RainFontCatalog.prefetch()
         buildWindow()
     }
 
@@ -353,6 +382,8 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         frameRateField.stringValue = Self.format(options.frameRate)
         errorRateField.stringValue = Self.format(options.errorRate)
         charactersField.stringValue = options.characters
+        selectedRainFonts = options.rainFonts
+        rebuildRainFontsMenu()
         sizeWindowToFitContent()
     }
 
@@ -448,6 +479,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
              makeCheckboxSection(checkbox: diffuseCheckbox, description: MatrixScreenSaverOptions.diffuseDescription),
              makeNumericSection(title: "Density", field: rainDensityField, description: MatrixScreenSaverOptions.rainDensityDescription),
              makeRainDurationSection(),
+             makeRainFontsSection(),
              makeTextSection(title: "Characters", field: charactersField, description: MatrixScreenSaverOptions.charactersDescription, fieldWidth: Self.textFieldWidth / 2),
              makeNumericSection(title: "Error rate", field: errorRateField, description: MatrixScreenSaverOptions.errorRateDescription),
         ]))
@@ -457,7 +489,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         // Keep every page the same size so switching tabs never moves the dialog buttons.
         NSLayoutConstraint.activate([
             tabs.widthAnchor.constraint(equalToConstant: 520),
-            tabs.heightAnchor.constraint(equalToConstant: 460),
+            tabs.heightAnchor.constraint(equalToConstant: 550),
             tabs.widthAnchor.constraint(equalTo: rootStack.widthAnchor, constant: groupWidth),
         ])
 
@@ -944,6 +976,80 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         return stack
     }
 
+    /// Builds the rain fonts picker: heading, description, "show all" checkbox, then a pull-down of installed fonts.
+    private func makeRainFontsSection() -> NSView {
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 4
+        stack.setHuggingPriority(.required, for: .vertical)
+
+        let heading = NSTextField(labelWithString: "Fonts")
+        heading.font = .systemFont(ofSize: 13, weight: .semibold)
+
+        rainFontsButton.setAccessibilityLabel("Fonts")
+        rainFontsButton.translatesAutoresizingMaskIntoConstraints = false
+        rainFontsButton.widthAnchor.constraint(equalToConstant: Self.textFieldWidth).isActive = true
+        (rainFontsButton.cell as? NSPopUpButtonCell)?.lineBreakMode = .byTruncatingTail
+
+        showAllFontsCheckbox.target = self
+        showAllFontsCheckbox.action = #selector(showAllFontsToggled(_:))
+
+        stack.addArrangedSubview(heading)
+        stack.addArrangedSubview(makeDescriptionLabel(MatrixScreenSaverOptions.rainFontsDescription))
+        stack.addArrangedSubview(showAllFontsCheckbox)
+        stack.addArrangedSubview(rainFontsButton)
+        stack.setCustomSpacing(8, after: stack.arrangedSubviews[1])
+        stack.setCustomSpacing(8, after: showAllFontsCheckbox)
+        return stack
+    }
+
+    /// Rebuilds the font menu so it reflects the current selection and "show all" state.
+    private func rebuildRainFontsMenu() {
+        let menu = NSMenu()
+        let summary = selectedRainFonts.isEmpty ? "Default (system font)" : selectedRainFonts.joined(separator: ", ")
+        menu.addItem(NSMenuItem(title: summary, action: nil, keyEquivalent: ""))
+
+        let defaultItem = NSMenuItem(title: "Default (system font)", action: #selector(clearRainFonts(_:)), keyEquivalent: "")
+        defaultItem.target = self
+        defaultItem.state = selectedRainFonts.isEmpty ? .on : .off
+        menu.addItem(defaultItem)
+        menu.addItem(.separator())
+
+        let families = RainFontCatalog.families(showAll: showAllFontsCheckbox.state == .on, alwaysInclude: selectedRainFonts)
+        for family in families {
+            let item = NSMenuItem(title: family, action: #selector(toggleRainFont(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = family
+            item.state = selectedRainFonts.contains(family) ? .on : .off
+            menu.addItem(item)
+        }
+        rainFontsButton.menu = menu
+        rainFontsButton.selectItem(at: 0)
+    }
+
+    /// Adds or removes the chosen family, ignoring additions beyond the maximum.
+    @objc private func toggleRainFont(_ sender: NSMenuItem) {
+        guard let family = sender.representedObject as? String else { return }
+        if let index = selectedRainFonts.firstIndex(of: family) {
+            selectedRainFonts.remove(at: index)
+        } else if selectedRainFonts.count < MatrixScreenSaverOptions.maximumRainFonts {
+            selectedRainFonts.append(family)
+        }
+        rebuildRainFontsMenu()
+    }
+
+    /// Clears the selection so the built-in glyphs and system font are used.
+    @objc private func clearRainFonts(_ sender: Any?) {
+        selectedRainFonts = []
+        rebuildRainFontsMenu()
+    }
+
+    /// Refreshes the font list after the "Show all fonts" checkbox changes.
+    @objc private func showAllFontsToggled(_ sender: Any?) {
+        rebuildRainFontsMenu()
+    }
+
     /// Builds a labeled text input row with its description.
     private func makeTextSection(title: String, field: NSTextField, description: String, fieldWidth: CGFloat? = nil) -> NSView {
         let stack = NSStackView()
@@ -1143,6 +1249,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
              frameRate: frameRate,
             errorRate: errorRate,
             characters: charactersField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines),
+            rainFonts: selectedRainFonts,
             scanLinesIntensity: scanLinesSlider.doubleValue / 100,
             scanLinesVertical: scanLinesDirectionPopup.indexOfSelectedItem == 0
         ).sanitized()
