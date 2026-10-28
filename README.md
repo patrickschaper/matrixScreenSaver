@@ -40,11 +40,18 @@ The saver exposes a native **Options…** sheet. The values are stored with `Scr
 | Frame rate | Set the frame rate per second. A positive number less than or equal to 1000. | 25 |
 | Error rate | Set the factor for the rate of character changes. A non-negative number. | 1.0 |
 | Characters | Restrict rain glyphs to a custom set (e.g. ATGC). Leave empty for the default. | *(empty)* |
+| Fonts | Pick installed fonts for the rain glyphs (up to 8, mixed evenly). Intro text stays in the system font. See [Matrix fonts](#matrix-fonts). | *(system font)* |
 | Neo message scene | Show the Neo message intro before the main scene. | On |
 | Neo message speed | Typing and pause speed multiplier for the Neo message intro. A positive number. | 1.0 |
 | Neo message lines | Lines typed during the Neo message intro. Between 1 and 10 lines, up to 256 characters each. | The 4 classic lines |
 | Scan lines intensity | Opacity of the CRT scan line overlay (0 = off, 100 = fully opaque). | 25 |
 | Scan lines vertical | Orientation of the scan line overlay (vertical or horizontal). | On (vertical) |
+
+### Matrix fonts
+
+The **Fonts** option lists installed fonts that look suited to rain, so the glyphs can match the film. Tick **Show all fonts** to list every family. No fonts are bundled, so install them yourself first.
+
+The free [Matrix Code](https://github.com/Rezmason/matrix/raw/master/assets/Matrix-Code.ttf) and [Matrix Resurrected](https://github.com/Rezmason/matrix/raw/master/assets/Matrix-Resurrected.ttf) fonts are published in [Rezmason/matrix](https://github.com/Rezmason/matrix) (MIT, © Rezmason 2018), which recreate the glyphs from the films. Thanks to Rezmason for making them available.
 
 ### Wallpaper menubar menu
 
@@ -57,7 +64,7 @@ The saver exposes a native **Options…** sheet. The values are stored with `Scr
 - Native Swift/AppKit screen saver bundle
 - Edge-to-edge full-screen saver output, with terminal-style chrome kept in the preview host
 - In-process renderer for `rain-forever` with an optional upstream `number` intro
-- Native **Options…** sheet for Number scene, Twinkle, Diffuse, Character size, Rain density, Frame rate, Error rate, Characters, Neo message scene/speed/lines, and Scan lines
+- Native **Options…** sheet for Number scene, Twinkle, Diffuse, Character size, Rain density, Frame rate, Error rate, Characters, Fonts, Neo message scene/speed/lines, and Scan lines
 - Preview app for fast iteration without reinstalling
 
 ### Repository layout
