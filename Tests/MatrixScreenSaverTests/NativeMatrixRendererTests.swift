@@ -1,6 +1,9 @@
+import AppKit
 import Foundation
 
 func nativeMatrixRendererTests() {
+    rainFontTests()
+
     ok(NativeMatrixRenderer().seedOffset == 0,
        "NativeMatrixRenderer: seedOffset defaults to 0")
 
@@ -122,4 +125,47 @@ func nativeMatrixRendererTests() {
     ok(String(String.UnicodeScalarView(earlyText)).contains(expectedText) && earlyText == lateText,
        "NativeMatrixRenderer: pause between display phase advances preserves identical Number-scene timestamps")
     ok(earlyText == startupText, "NativeMatrixRenderer: a display starting after resume keeps the same scripted content and seed")
+}
+
+/// Covers the rain font tables and catalog using Menlo, which ships with every macOS install.
+private func rainFontTests() {
+    let tables = NativeMatrixRenderer.makeRainTables(fonts: ["Menlo"])
+    // Menlo has more glyphs than the per-font limit, so pick an alias that survived the sampling.
+    let aliasPool = (tables.pools.first ?? []).filter { (0xF021...0xF07E).contains($0.value) }
+    let alias = aliasPool.first ?? UnicodeScalar(0xF041)!
+    ok(tables.pools.count == 1 && !(tables.pools.first ?? []).isEmpty,
+       "RainFont: an installed font yields one non-empty glyph pool")
+    ok((tables.pools.first ?? []).count <= NativeMatrixRenderer.RainFontTables.maximumGlyphsPerFont,
+       "RainFont: a pool never exceeds the per-font glyph limit")
+    ok(!aliasPool.isEmpty && tables.sourceByScalar[alias]?.value == alias.value - 0xF000 && tables.fontByScalar[alias] == "Menlo",
+       "RainFont: ASCII glyphs are keyed by a private-use alias that draws the real character in the rain font")
+    ok(!(tables.pools.first ?? []).contains { $0.value < 0x80 },
+       "RainFont: plain ASCII scalars stay out of the pool so intro text keeps the system font")
+
+    ok(NativeMatrixRenderer.makeRainTables(fonts: ["No Such Font 9F3A"]).pools.isEmpty,
+       "RainFont: fonts that are not installed are skipped")
+    ok(NativeMatrixRenderer.makeRainTables(fonts: ["Menlo", "Menlo"]).pools.count == 1,
+       "RainFont: a duplicate font adds no second pool")
+
+    ok(RainFontCatalog.font(named: "Menlo", size: 12) != nil && RainFontCatalog.font(named: "No Such Font 9F3A", size: 12) == nil,
+       "RainFontCatalog: resolves installed fonts and rejects missing ones")
+    let everything = RainFontCatalog.families(showAll: true, alwaysInclude: [])
+    ok(everything.contains("Menlo") && everything == everything.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending },
+       "RainFontCatalog: showing all fonts lists installed families in sorted order")
+    ok(RainFontCatalog.families(showAll: false, alwaysInclude: ["Chosen Font"]).contains("Chosen Font"),
+       "RainFontCatalog: a selected font stays listed even when it is filtered out")
+
+    let renderer = NativeMatrixRenderer()
+    var config = NativeMatrixRenderer.Configuration()
+    config.rainFonts = ["Menlo"]
+    ok(config.sanitized().rainFonts == ["Menlo"], "RainFont: configuration sanitizing keeps the selected fonts")
+    renderer.updateConfiguration(config)
+    ok(renderer.activeRainFonts == ["Menlo"] && !renderer.rainSourceByScalar.isEmpty && renderer.rainFontByScalar.values.allSatisfy { $0 == "Menlo" },
+       "RainFont: the renderer builds glyph tables for the selected fonts")
+    ok(renderer.rainSourceByScalar.keys.allSatisfy { renderer.supportedScalars.contains($0) },
+       "RainFont: the renderer supports the aliased rain glyphs")
+    config.rainFonts = []
+    renderer.updateConfiguration(config)
+    ok(renderer.activeRainFonts.isEmpty && renderer.rainFontByScalar.isEmpty,
+       "RainFont: clearing the selection drops the font glyph tables")
 }

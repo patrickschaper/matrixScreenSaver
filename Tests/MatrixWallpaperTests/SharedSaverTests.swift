@@ -90,6 +90,20 @@ func sharedSaverTests() {
     options.save(to: defaults)
     check(MatrixScreenSaverOptions.load(from: defaults).frameRate > 0, "shared persistence retains option sanitization")
 
+    var fontOptions = MatrixScreenSaverOptions()
+    check(fontOptions.rainFonts.isEmpty, "rain fonts default to none, keeping the built-in glyphs")
+    fontOptions.rainFonts = ["  Matrix-Code ", "Matrix-Code", "", "Matrix-Resurrected"] + (1...10).map { "Font \($0)" }
+    let cleanFonts = fontOptions.sanitized().rainFonts
+    check(cleanFonts.prefix(2) == ["Matrix-Code", "Matrix-Resurrected"] && Set(cleanFonts).count == cleanFonts.count,
+          "rain font sanitizing trims names and drops blanks and duplicates")
+    check(cleanFonts.count == MatrixScreenSaverOptions.maximumRainFonts, "rain font sanitizing caps the selection")
+    fontOptions.rainFonts = ["Matrix-Code", "Matrix-Resurrected"]
+    fontOptions.save(to: defaults)
+    check(MatrixScreenSaverOptions.load(from: defaults).rainFonts == ["Matrix-Code", "Matrix-Resurrected"],
+          "rain fonts persist through save and load")
+    check(fontOptions.rendererConfiguration(isPreview: false).rainFonts == ["Matrix-Code", "Matrix-Resurrected"],
+          "rain fonts reach the renderer configuration")
+
     let original = MatrixScreenSaverOptions()
     var live = original
     live.twinkleEnabled.toggle()
@@ -164,7 +178,8 @@ private func checkOptionsLayout(in window: NSWindow) {
     let content = window.contentView!
     content.layoutSubtreeIfNeeded()
     let size = content.bounds.size
-    check(size.width <= 600 && size.height <= 600,
+    // The Rain tab gained the Fonts section, so the sheet is taller than the original 600 point budget.
+    check(size.width <= 600 && size.height <= 650,
           "options fit in a compact window without screen-sized help text")
     guard let tabs = descendants(of: content).compactMap({ $0 as? NSTabView }).first else {
         check(false, "options organize settings into native tabs")
