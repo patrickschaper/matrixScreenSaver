@@ -1173,7 +1173,9 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
     private func makeOptionsTab(title: String, views: [NSView]) -> NSTabViewItem {
         let item = NSTabViewItem(identifier: title)
         item.label = title
-        let contentView = NSView()
+        // Start at the real page size so NSTabView never lays the page out at its 20pt placeholder width,
+        // which made the fixed-width rows report unsatisfiable constraints in the screen saver host.
+        let contentView = NSView(frame: NSRect(x: 0, y: 0, width: 520, height: 550))
         item.view = contentView
         let stack = NSStackView(views: views)
         stack.orientation = .vertical
