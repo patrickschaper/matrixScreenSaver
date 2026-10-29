@@ -13,6 +13,7 @@ swiftc \
   "$SRC/TerminalSupport.swift" \
   "$SRC/Xorshift64.swift" \
   "$SRC/NeoMessageScene.swift" \
+  "$SRC/CmdCaptureScene.swift" \
   "$SRC/MatrixRendererLimits.swift" \
   "$SRC/ScreenSyncCoordinator.swift" \
   "$SRC/SharedWallpaperFrame.swift" \
@@ -21,6 +22,7 @@ swiftc \
   "$ROOT/Sources/MatrixWallpaper/WallpaperPlaybackState.swift" \
   "$TESTS/Xorshift64Tests.swift" \
   "$TESTS/ScreenSyncCoordinatorTests.swift" \
+  "$TESTS/CmdCaptureSceneTests.swift" \
   "$TESTS/NativeMatrixRendererTests.swift" \
   "$TESTS/WallpaperPlaybackStateTests.swift" \
   "$TESTS/SharedWallpaperFrameTests.swift" \

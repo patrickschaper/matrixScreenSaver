@@ -95,6 +95,14 @@ final class MatrixScreenSaverView: ScreenSaverView {
     private var colorCache: [TerminalColor: NSColor] = [:]
     private var nativeRegularGlyphsByLevel: [[UnicodeScalar: CGImage]] = []
     private var nativeBoldGlyphsByLevel: [[UnicodeScalar: CGImage]] = []
+    /// Text from commands and names need not belong to the configured rain alphabet.
+    private struct SupplementalGlyphKey: Hashable {
+        let scalar: UnicodeScalar
+        let level: Int
+        let bold: Bool
+    }
+    /// Bounded fallback rasters, invalidated with the font and palette caches.
+    private var nativeSupplementalGlyphs: [SupplementalGlyphKey: CGImage] = [:]
     /// Glyph pixels depend on cell-derived font metrics and renderer content, not canvas size.
     private struct GlyphCacheKey: Equatable {
         let cellSize: CGSize
@@ -340,7 +348,8 @@ final class MatrixScreenSaverView: ScreenSaverView {
             } else {
                 startTime = ScreenSyncCoordinator.shared.resolvedStartTime()
             }
-            guard let time = startTime else {
+            // Neo waits internally, but custom commands and rain start as soon as the renderer does.
+            guard let time = startTime, Date.timeIntervalSinceReferenceDate >= time else {
                 sharedFrameBuffer?.refresh()
                 return
             }
@@ -391,6 +400,10 @@ final class MatrixScreenSaverView: ScreenSaverView {
             ScreenSyncCoordinator.shared.requestPhaseAdvance(ObjectIdentifier(self))
             pendingSceneAdvance = true
             NSLog("MatrixScreenSaver Neo scene complete — requesting phase advance")
+        } else if nativeRenderer.consumeCmdSceneDone() {
+            ScreenSyncCoordinator.shared.requestPhaseAdvance(ObjectIdentifier(self))
+            pendingSceneAdvance = true
+            NSLog("MatrixScreenSaver cmd capture scene complete — requesting phase advance")
         } else if nativeRenderer.consumeNumberSceneDone() {
             ScreenSyncCoordinator.shared.requestPhaseAdvance(ObjectIdentifier(self))
             pendingSceneAdvance = true
@@ -638,6 +651,7 @@ final class MatrixScreenSaverView: ScreenSaverView {
         nativeRegularGlyphsByLevel.removeAll(keepingCapacity: false)
         nativeGlyphCacheKey = nil
         nativeBoldGlyphsByLevel.removeAll(keepingCapacity: false)
+        nativeSupplementalGlyphs.removeAll(keepingCapacity: false)
         nativeDiffuseColorsByLevel.removeAll(keepingCapacity: false)
         colorCache.removeAll(keepingCapacity: false)
         optionsSheetController = nil
@@ -934,6 +948,7 @@ final class MatrixScreenSaverView: ScreenSaverView {
                                 regularFont: regularFont, boldFont: boldFont, textInsetY: textInsetY,
                                 palette: palette, scalars: nativeRenderer.supportedScalars)
         guard nativeGlyphCacheKey != key else { return }
+        nativeSupplementalGlyphs.removeAll(keepingCapacity: true)
         nativeRegularGlyphsByLevel = makeNativeGlyphCaches(palette: palette, font: regularFont)
         nativeBoldGlyphsByLevel = makeNativeGlyphCaches(palette: palette, font: boldFont)
         nativeGlyphCacheKey = key
@@ -1022,7 +1037,18 @@ final class MatrixScreenSaverView: ScreenSaverView {
         }
 
         let level = min(max(cell.foregroundLevel, 0), caches.count - 1)
-        return caches[level][cell.scalar]
+        if let image = caches[level][cell.scalar] { return image }
+        let key = SupplementalGlyphKey(scalar: cell.scalar, level: level, bold: cell.bold)
+        if let image = nativeSupplementalGlyphs[key] { return image }
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: cell.bold ? boldFont : regularFont,
+            .foregroundColor: color(for: nativeRenderer.levelColors[level]),
+        ]
+        guard let image = makeNativeGlyphImage(for: cell.scalar, attributes: attributes) else { return nil }
+        // Bound cached text across command restarts, not just within a single capture.
+        if nativeSupplementalGlyphs.count >= 256 { nativeSupplementalGlyphs.removeAll(keepingCapacity: true) }
+        nativeSupplementalGlyphs[key] = image
+        return image
     }
 
     /// Recreates the persistent frame buffer when the terminal grid size changes.
