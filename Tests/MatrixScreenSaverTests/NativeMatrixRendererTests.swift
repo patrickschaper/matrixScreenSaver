@@ -1,6 +1,10 @@
+import AppKit
 import Foundation
 
 func nativeMatrixRendererTests() {
+    rainFontTests()
+    rainGlyphPresetTests()
+
     commandCaptureLifecycleTests()
     customTraceHandoffTests()
     customShellCommandSequenceTests()
@@ -133,6 +137,144 @@ func nativeMatrixRendererTests() {
     ok(String(String.UnicodeScalarView(earlyText)).contains(expectedText) && earlyText == lateText,
        "NativeMatrixRenderer: pause between display phase advances preserves identical Number-scene timestamps")
     ok(earlyText == startupText, "NativeMatrixRenderer: a display starting after resume keeps the same scripted content and seed")
+}
+
+/// Covers the rain font tables and catalog using Menlo, which ships with every macOS install.
+private func rainFontTests() {
+    let tables = NativeMatrixRenderer.makeRainTables(fonts: ["Menlo"])
+    ok(tables.pools.count == 1 && !(tables.pools.first ?? []).isEmpty,
+       "RainFont: an installed font yields one non-empty glyph pool")
+    ok((tables.pools.first ?? []).count <= NativeMatrixRenderer.RainFontTables.maximumGlyphsPerFont,
+       "RainFont: a pool never exceeds the per-font glyph limit")
+    ok(tables.pools.flatMap { $0 }.allSatisfy { $0.value >= 0xF0000 && tables.sourceByScalar[$0] != nil },
+       "RainFont: every glyph is aliased so Unicode intro text keeps the system font")
+    let mixed = NativeMatrixRenderer.makeRainTables(fonts: ["Menlo", "Monaco"], characters: "ABé")
+    ok(mixed.pools.count == 2 && mixed.pools.allSatisfy { pool in
+        Set(pool.compactMap { mixed.sourceByScalar[$0] }) == Set("ABé".unicodeScalars)
+    } && Set(mixed.pools.flatMap { $0 }).count == 6,
+       "RainFont: overlapping ASCII and Unicode characters remain available in every selected font")
+
+    ok(NativeMatrixRenderer.makeRainTables(fonts: ["No Such Font 9F3A"]).pools.isEmpty,
+       "RainFont: fonts that are not installed are skipped")
+    ok(NativeMatrixRenderer.makeRainTables(fonts: ["Menlo", "Menlo"]).pools.count == 1,
+       "RainFont: a duplicate font adds no second pool")
+
+    ok(RainFontCatalog.font(named: "Menlo", size: 12) != nil && RainFontCatalog.font(named: "No Such Font 9F3A", size: 12) == nil,
+       "RainFontCatalog: resolves installed fonts and rejects missing ones")
+    let everything = RainFontCatalog.families(alwaysInclude: [])
+    ok(Set(NSFontManager.shared.availableFontFamilies).isSubset(of: Set(everything)) && everything == everything.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending },
+       "RainFontCatalog: always lists every installed family in sorted order")
+    let systemFiles = FileManager.default.enumerator(at: URL(fileURLWithPath: "/System/Library/Fonts"), includingPropertiesForKeys: nil)!
+    var checkedHiddenFont = false
+    for case let url as URL in systemFiles {
+        guard let descriptors = CTFontManagerCreateFontDescriptorsFromURL(url as CFURL) as? [CTFontDescriptor] else { continue }
+        for descriptor in descriptors {
+            guard let family = CTFontDescriptorCopyAttribute(descriptor, kCTFontFamilyNameAttribute) as? String,
+                  !NSFontManager.shared.availableFontFamilies.contains(family),
+                  let resolved = RainFontCatalog.font(named: family, size: 16) else { continue }
+            let actualFamily = CTFontCopyFamilyName(resolved) as String
+            ok(everything.contains(family) && actualFamily == family,
+               "RainFontCatalog: automatically discovers hidden file-backed families and resolves their actual font")
+            checkedHiddenFont = true
+            break
+        }
+        if checkedHiddenFont { break }
+    }
+    ok(checkedHiddenFont, "RainFontCatalog: exercises an installed hidden system font")
+    ok(RainFontCatalog.families(alwaysInclude: ["Chosen Font"]).contains("Chosen Font"),
+       "RainFontCatalog: a missing selected font stays available for deselection")
+    let defaultKatakana = Set((UInt32(0xFF70)...UInt32(0xFF9D)).compactMap(UnicodeScalar.init))
+    let menlo = RainFontCatalog.font(named: "Menlo", size: 16)!
+    let menloCoverage = CTFontCopyCharacterSet(menlo) as CharacterSet
+    ok(!defaultKatakana.allSatisfy { menloCoverage.contains($0) } &&
+       defaultKatakana.isSubset(of: Set(tables.sourceByScalar.values)),
+       "RainFont: default katakana missing from the selected font stay in the pool for fallback")
+    let customFallback = NativeMatrixRenderer.makeRainTables(fonts: ["Menlo"], characters: "Aｱ")
+    ok(Set(customFallback.sourceByScalar.values) == Set("Aｱ".unicodeScalars),
+       "RainFont: custom characters missing from the selected font stay in the pool for fallback")
+
+    let renderer = NativeMatrixRenderer()
+    var config = NativeMatrixRenderer.Configuration()
+    config.rainFonts = ["Menlo"]
+    ok(config.sanitized().rainFonts == ["Menlo"], "RainFont: configuration sanitizing keeps the selected fonts")
+    renderer.updateConfiguration(config)
+    ok(renderer.activeRainFonts == ["Menlo"] && !renderer.rainSourceByScalar.isEmpty && renderer.rainFontByScalar.values.allSatisfy { $0 == "Menlo" },
+       "RainFont: the renderer builds glyph tables for the selected fonts")
+    ok(renderer.rainSourceByScalar.keys.allSatisfy { renderer.supportedScalars.contains($0) },
+       "RainFont: the renderer supports the aliased rain glyphs")
+    config.characters = "A"
+    renderer.updateConfiguration(config)
+    ok(Set(renderer.rainSourceByScalar.values) == Set("A".unicodeScalars),
+       "RainFont: custom characters use the selected font")
+    config.characters = "B"
+    renderer.updateConfiguration(config)
+    ok(Set(renderer.rainSourceByScalar.values) == Set("B".unicodeScalars),
+       "RainFont: editing characters rebuilds the font table without changing fonts")
+    config.rainFonts = []
+    renderer.updateConfiguration(config)
+    ok(renderer.activeRainFonts.isEmpty && renderer.rainFontByScalar.isEmpty,
+       "RainFont: clearing the selection drops the font glyph tables")
+
+    config.rainFonts = ["Menlo", "Hiragino Sans"]
+    config.characters = "A" + String(String.UnicodeScalarView((0x30A1...0x30FA).compactMap { UnicodeScalar($0) }))
+    config.neoMessageSceneEnabled = false
+    config.numberSceneEnabled = false
+    config.cmdSceneEnabled = false
+    config.twinkleEnabled = false
+    let mixedFallback = NativeMatrixRenderer.makeRainTables(fonts: config.rainFonts, characters: config.characters)
+    ok(mixedFallback.pools.count == 2 && mixedFallback.pools.allSatisfy { pool in
+        Set(pool.compactMap { mixedFallback.sourceByScalar[$0] }) == Set(config.characters.unicodeScalars)
+    }, "RainFont: every selected font retains the full custom set regardless of native coverage")
+    renderer.updateConfiguration(config)
+    renderer.resize(to: TerminalSize(columns: 80, rows: 24))
+    renderer.overrideSceneStartTime = 1_000
+    renderer.start()
+    defer { renderer.stop() }
+    var counts: [String: Int] = [:]
+    for _ in 0..<120 {
+        renderer.shiftTimeline(by: -0.1)
+        renderer.advance()
+        for row in 0..<24 {
+            for column in 0..<80 {
+                let cell = renderer[row, column]
+                if cell.foregroundLevel > 0, let font = renderer.rainFontByScalar[cell.scalar] {
+                    counts[font, default: 0] += 1
+                }
+            }
+        }
+    }
+    let total = counts.values.reduce(0, +)
+    let menloShare = Double(counts["Menlo", default: 0]) / Double(max(total, 1))
+    ok(total > 1_000 && (0.35...0.65).contains(menloShare),
+       "RainFont: rendered rain mixes selected fonts evenly with fallback-enabled glyph pools")
+}
+
+/// Exercises bundled preset coverage and switching back to the retained custom rain settings.
+private func rainGlyphPresetTests() {
+    let renderer = NativeMatrixRenderer()
+    var config = NativeMatrixRenderer.Configuration()
+    config.rainFonts = ["Menlo"]
+    config.characters = "ATGC"
+    renderer.updateConfiguration(config)
+    let customSources = renderer.rainSourceByScalar
+    for (preset, count) in [(RainGlyphSet.classic, 57), (.resurrections, 135)] {
+        config.rainGlyphSet = preset
+        renderer.updateConfiguration(config)
+        ok(renderer.rainSourceByScalar.count == count && renderer.activeRainFonts == [preset.fontName!],
+           "Rain presets: \(preset.rawValue) uses its complete bundled glyph set instead of custom characters")
+        let font = RainFontCatalog.font(named: preset.fontName!, size: 16)
+        let loadedURL = font.flatMap { CTFontCopyAttribute($0, kCTFontURLAttribute) as? URL }
+        let bundledURL = Bundle(for: NativeMatrixRenderer.self).url(forResource: preset.fontName!, withExtension: "ttf", subdirectory: "Fonts")
+        let sources = Array(renderer.rainSourceByScalar.values)
+        let coverage = font.map { CTFontCopyCharacterSet($0) as CharacterSet }
+        ok(loadedURL != nil && loadedURL?.resolvingSymlinksInPath() == bundledURL?.resolvingSymlinksInPath() &&
+           sources.count == count && sources.allSatisfy { coverage?.contains($0) == true },
+           "Rain presets: \(preset.rawValue) resolves every glyph from its bundled font")
+    }
+    config.rainGlyphSet = .default
+    renderer.updateConfiguration(config)
+    ok(renderer.activeRainFonts == ["Menlo"] && renderer.rainSourceByScalar == customSources,
+       "Rain presets: Default restores the custom font and character pool")
 }
 
 /// Checks idle intro frames and cursor-only updates through the host's dirty-row contract.

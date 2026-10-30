@@ -90,6 +90,17 @@ final class MatrixScreenSaverView: ScreenSaverView {
     private var lineHeight: CGFloat = 22
     private var regularFont = NSFont.monospacedSystemFont(ofSize: 16, weight: .medium)
     private var boldFont = NSFont.monospacedSystemFont(ofSize: 16, weight: .semibold)
+    /// Resolved rain fonts by family name for the current cell size.
+    private var rainFonts: [String: NSFont] = [:]
+
+    /// Resolves each family name to a font at the given size, skipping fonts that are not installed.
+    private static func makeRainFonts(names: [String], size: CGFloat) -> [String: NSFont] {
+        var fonts = [String: NSFont]()
+        for name in names {
+            if let f = RainFontCatalog.font(named: name, size: size) { fonts[name] = f }
+        }
+        return fonts
+    }
     private var titleFont = NSFont.systemFont(ofSize: 13, weight: .medium)
     private var textInsetY: CGFloat = 2
     private var colorCache: [TerminalColor: NSColor] = [:]
@@ -111,6 +122,10 @@ final class MatrixScreenSaverView: ScreenSaverView {
         let textInsetY: CGFloat
         let palette: [TerminalColor]
         let scalars: [UnicodeScalar]
+        /// Selected rain font families the rasters were built for.
+        let rainFonts: [String]
+        /// Sources can change while private-use keys stay the same after editing Characters.
+        let rainSources: [UnicodeScalar: UnicodeScalar]
     }
     /// Inputs used by the current regular and bold rasters.
     private var nativeGlyphCacheKey: GlyphCacheKey?
@@ -492,6 +507,7 @@ final class MatrixScreenSaverView: ScreenSaverView {
         let fontSize = fittedTerminalFontSize(forCellWidth: cellWidth, cellHeight: lineHeight)
         regularFont = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .medium)
         boldFont = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .semibold)
+        rainFonts = Self.makeRainFonts(names: nativeRenderer.activeRainFonts, size: fontSize)
 
         textInsetY = max(0, floor((lineHeight - regularFont.pointSize) / 2) - 1)
         rebuildNativeGlyphCache()
@@ -946,11 +962,14 @@ final class MatrixScreenSaverView: ScreenSaverView {
         let palette = nativeRenderer.levelColors
         let key = GlyphCacheKey(cellSize: CGSize(width: cellWidth, height: lineHeight),
                                 regularFont: regularFont, boldFont: boldFont, textInsetY: textInsetY,
-                                palette: palette, scalars: nativeRenderer.supportedScalars)
+                                palette: palette, scalars: nativeRenderer.supportedScalars,
+                                rainFonts: nativeRenderer.activeRainFonts,
+                                rainSources: nativeRenderer.rainSourceByScalar)
         guard nativeGlyphCacheKey != key else { return }
         nativeSupplementalGlyphs.removeAll(keepingCapacity: true)
-        nativeRegularGlyphsByLevel = makeNativeGlyphCaches(palette: palette, font: regularFont)
-        nativeBoldGlyphsByLevel = makeNativeGlyphCaches(palette: palette, font: boldFont)
+        nativeRegularGlyphsByLevel = makeNativeGlyphCaches(palette: palette, font: regularFont, rainFonts: rainFonts)
+        nativeBoldGlyphsByLevel = makeNativeGlyphCaches(palette: palette, font: boldFont, rainFonts: rainFonts,
+                                                       sharingRainGlyphs: nativeRegularGlyphsByLevel)
         nativeGlyphCacheKey = key
     }
 
@@ -966,9 +985,18 @@ final class MatrixScreenSaverView: ScreenSaverView {
     }
 
     /// Builds per-level glyph images for all supported scalar values.
+    ///
+    /// - Parameters:
+    ///   - palette: Colors for the cache levels.
+    ///   - font: System font weight used for terminal text.
+    ///   - rainFonts: Selected faces used regardless of terminal text weight.
+    ///   - sharingRainGlyphs: Caches from the same palette and layout whose selected-font images can be reused.
+    /// - Returns: Glyph images indexed by palette level and renderer scalar.
     private func makeNativeGlyphCaches(
         palette: [TerminalColor],
-        font: NSFont
+        font: NSFont,
+        rainFonts: [String: NSFont],
+        sharingRainGlyphs: [[UnicodeScalar: CGImage]] = []
     ) -> [[UnicodeScalar: CGImage]] {
         var caches: [[UnicodeScalar: CGImage]] = Array(repeating: [:], count: palette.count)
         let scalars = nativeRenderer.supportedScalars
@@ -979,7 +1007,15 @@ final class MatrixScreenSaverView: ScreenSaverView {
             ]
             caches[level].reserveCapacity(scalars.count)
             for scalar in scalars {
-                guard let image = makeNativeGlyphImage(for: scalar, attributes: attributes) else {
+                var glyphAttributes = attributes
+                if let name = nativeRenderer.rainFontByScalar[scalar], let rf = rainFonts[name] {
+                    if sharingRainGlyphs.indices.contains(level), let image = sharingRainGlyphs[level][scalar] {
+                        caches[level][scalar] = image
+                        continue
+                    }
+                    glyphAttributes[.font] = rf
+                }
+                guard let image = makeNativeGlyphImage(for: scalar, drawing: nativeRenderer.rainSourceByScalar[scalar], attributes: glyphAttributes) else {
                     continue
                 }
                 caches[level][scalar] = image
@@ -989,8 +1025,15 @@ final class MatrixScreenSaverView: ScreenSaverView {
     }
 
     /// Rasterizes a single glyph into a native Core Graphics image.
+    ///
+    /// - Parameters:
+    ///   - scalar: Renderer cache key, which may be a private-use rain alias.
+    ///   - drawing: Selected-font source character, enabling fitted rendering; nil keeps terminal-text rendering.
+    ///   - attributes: Font and foreground color used to draw the glyph.
+    /// - Returns: The cell-sized raster, or nil if a bitmap context could not be created.
     private func makeNativeGlyphImage(
         for scalar: UnicodeScalar,
+        drawing: UnicodeScalar? = nil,
         attributes: [NSAttributedString.Key: Any]
     ) -> CGImage? {
         let pixelWidth = max(Int(ceil(cellWidth)), 1)
@@ -1014,7 +1057,20 @@ final class MatrixScreenSaverView: ScreenSaverView {
             return glyphContext.makeImage()
         }
 
-        let text = String(scalar)
+        let text = String(drawing ?? scalar)
+        if drawing != nil {
+            let line = CTLineCreateWithAttributedString(NSAttributedString(string: text, attributes: attributes))
+            let ink = CTLineGetImageBounds(line, glyphContext)
+            guard !ink.isEmpty, !ink.isNull else { return glyphContext.makeImage() }
+            // Selected fonts can be wider or taller than the system font used to size the grid.
+            let scale = min(1, max(cellWidth - 2, 1) / ink.width, max(lineHeight - 2, 1) / ink.height)
+            glyphContext.translateBy(x: (cellWidth - ink.width * scale) / 2 - ink.minX * scale,
+                                     y: (lineHeight - ink.height * scale) / 2 - ink.minY * scale)
+            glyphContext.scaleBy(x: scale, y: scale)
+            glyphContext.textPosition = .zero
+            CTLineDraw(line, glyphContext)
+            return glyphContext.makeImage()
+        }
         let textSize = (text as NSString).size(withAttributes: attributes)
         let point = NSPoint(
             x: max(0, floor((cellWidth - textSize.width) / 2)),
