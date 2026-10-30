@@ -968,7 +968,8 @@ final class MatrixScreenSaverView: ScreenSaverView {
         guard nativeGlyphCacheKey != key else { return }
         nativeSupplementalGlyphs.removeAll(keepingCapacity: true)
         nativeRegularGlyphsByLevel = makeNativeGlyphCaches(palette: palette, font: regularFont, rainFonts: rainFonts)
-        nativeBoldGlyphsByLevel = makeNativeGlyphCaches(palette: palette, font: boldFont, rainFonts: rainFonts)
+        nativeBoldGlyphsByLevel = makeNativeGlyphCaches(palette: palette, font: boldFont, rainFonts: rainFonts,
+                                                       sharingRainGlyphs: nativeRegularGlyphsByLevel)
         nativeGlyphCacheKey = key
     }
 
@@ -984,10 +985,18 @@ final class MatrixScreenSaverView: ScreenSaverView {
     }
 
     /// Builds per-level glyph images for all supported scalar values.
+    ///
+    /// - Parameters:
+    ///   - palette: Colors for the cache levels.
+    ///   - font: System font weight used for terminal text.
+    ///   - rainFonts: Selected faces used regardless of terminal text weight.
+    ///   - sharingRainGlyphs: Caches from the same palette and layout whose selected-font images can be reused.
+    /// - Returns: Glyph images indexed by palette level and renderer scalar.
     private func makeNativeGlyphCaches(
         palette: [TerminalColor],
         font: NSFont,
-        rainFonts: [String: NSFont]
+        rainFonts: [String: NSFont],
+        sharingRainGlyphs: [[UnicodeScalar: CGImage]] = []
     ) -> [[UnicodeScalar: CGImage]] {
         var caches: [[UnicodeScalar: CGImage]] = Array(repeating: [:], count: palette.count)
         let scalars = nativeRenderer.supportedScalars
@@ -1000,6 +1009,10 @@ final class MatrixScreenSaverView: ScreenSaverView {
             for scalar in scalars {
                 var glyphAttributes = attributes
                 if let name = nativeRenderer.rainFontByScalar[scalar], let rf = rainFonts[name] {
+                    if sharingRainGlyphs.indices.contains(level), let image = sharingRainGlyphs[level][scalar] {
+                        caches[level][scalar] = image
+                        continue
+                    }
                     glyphAttributes[.font] = rf
                 }
                 guard let image = makeNativeGlyphImage(for: scalar, drawing: nativeRenderer.rainSourceByScalar[scalar], attributes: glyphAttributes) else {
@@ -1012,6 +1025,12 @@ final class MatrixScreenSaverView: ScreenSaverView {
     }
 
     /// Rasterizes a single glyph into a native Core Graphics image.
+    ///
+    /// - Parameters:
+    ///   - scalar: Renderer cache key, which may be a private-use rain alias.
+    ///   - drawing: Selected-font source character, enabling fitted rendering; nil keeps terminal-text rendering.
+    ///   - attributes: Font and foreground color used to draw the glyph.
+    /// - Returns: The cell-sized raster, or nil if a bitmap context could not be created.
     private func makeNativeGlyphImage(
         for scalar: UnicodeScalar,
         drawing: UnicodeScalar? = nil,

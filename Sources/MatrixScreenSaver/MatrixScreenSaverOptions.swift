@@ -1,4 +1,5 @@
 import AppKit
+import CoreText
 import ScreenSaver
 
 struct MatrixScreenSaverOptions: Equatable {
@@ -91,13 +92,12 @@ struct MatrixScreenSaverOptions: Equatable {
     ]
     static let defaultCharacterSizeIndex = 8
      static let rainDensityDescription = "Rain density multiplier. Default: 1.0."
-     static let rainRunForeverDescription = "When enabled (default), rain continuously spawns new falling lines. When disabled, rain stops starting new lines after the specified duration; lines already falling finish and fade out, then the full scene sequence restarts."
      static let rainDurationSecondsDescription = "How long rain keeps starting new falling lines (1–9999 seconds) before it winds down. Default: 300 (5 minutes)."
      static let frameRateDescription = "Target frame rate in fps, 1–1000. Default: 25."
     static let errorRateDescription = "Character change rate factor. Default: 1.0."
     static let charactersDescription = "Custom glyph set (e.g. ATGC). Empty = default."
     /// Help text shown under the Fonts picker.
-    static let rainFontsDescription = "Fonts for the falling glyphs. Pick several to mix them. None keeps the built-in glyphs. Intro text always uses the system font."
+    static let rainFontsDescription = "Mix up to 8 fonts."
     /// Default selection: no fonts, which keeps the built-in glyphs and system font.
     static let defaultRainFonts: [String] = []
     /// Maximum number of rain fonts that can be mixed.
@@ -441,8 +441,6 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
     private let charactersField = NSTextField(string: "")
     /// Pull-down listing installed fonts; ticked entries are the selection.
     private let rainFontsButton = NSPopUpButton(frame: .zero, pullsDown: true)
-    /// Lists every installed family instead of only rain-suitable ones.
-    private let showAllFontsCheckbox = NSButton(checkboxWithTitle: "Show all fonts", target: nil, action: nil)
     /// Fonts currently ticked in the pull-down, in selection order.
     private var selectedRainFonts: [String] = []
     private var didClose = false
@@ -1234,7 +1232,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         return stack
     }
 
-    /// Builds the rain fonts picker: heading, description, "show all" checkbox, then a pull-down of installed fonts.
+    /// Builds the rain fonts picker with every discovered font family.
     private func makeRainFontsSection() -> NSView {
         let stack = NSStackView()
         stack.orientation = .vertical
@@ -1250,31 +1248,41 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         rainFontsButton.widthAnchor.constraint(equalToConstant: Self.textFieldWidth).isActive = true
         (rainFontsButton.cell as? NSPopUpButtonCell)?.lineBreakMode = .byTruncatingTail
 
-        showAllFontsCheckbox.target = self
-        showAllFontsCheckbox.action = #selector(showAllFontsToggled(_:))
+        let resetButton = NSButton(title: "Reset", target: self, action: #selector(clearRainFonts(_:)))
+        resetButton.bezelStyle = .rounded
+        resetButton.controlSize = .small
+        resetButton.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+        resetButton.setAccessibilityLabel("Reset fonts to system default")
+        resetButton.toolTip = "Use the default system font"
+        let row = NSStackView(views: [rainFontsButton, resetButton])
+        row.orientation = .horizontal
+        row.alignment = .centerY
+        row.spacing = 8
 
         stack.addArrangedSubview(heading)
         stack.addArrangedSubview(makeDescriptionLabel(MatrixScreenSaverOptions.rainFontsDescription))
-        stack.addArrangedSubview(showAllFontsCheckbox)
-        stack.addArrangedSubview(rainFontsButton)
+        stack.addArrangedSubview(row)
         stack.setCustomSpacing(8, after: stack.arrangedSubviews[1])
-        stack.setCustomSpacing(8, after: showAllFontsCheckbox)
         return stack
     }
 
-    /// Rebuilds the font menu so it reflects the current selection and "show all" state.
+    /// Rebuilds the full font menu with the current selection.
     private func rebuildRainFontsMenu() {
         let menu = NSMenu()
-        let summary = selectedRainFonts.isEmpty ? "Default (system font)" : selectedRainFonts.joined(separator: ", ")
+        let systemFont = NSFont.monospacedSystemFont(ofSize: 16, weight: .medium)
+        // Resolve the backing family instead of exposing the system alias or face weights.
+        let backingFont = CTFontCreateWithGraphicsFont(CTFontCopyGraphicsFont(systemFont, nil), 16, nil, nil)
+        let defaultTitle = "Default - \(CTFontCopyFamilyName(backingFont))"
+        let summary = selectedRainFonts.isEmpty ? defaultTitle : selectedRainFonts.joined(separator: ", ")
         menu.addItem(NSMenuItem(title: summary, action: nil, keyEquivalent: ""))
 
-        let defaultItem = NSMenuItem(title: "Default (system font)", action: #selector(clearRainFonts(_:)), keyEquivalent: "")
+        let defaultItem = NSMenuItem(title: defaultTitle, action: #selector(clearRainFonts(_:)), keyEquivalent: "")
         defaultItem.target = self
         defaultItem.state = selectedRainFonts.isEmpty ? .on : .off
         menu.addItem(defaultItem)
         menu.addItem(.separator())
 
-        let families = RainFontCatalog.families(showAll: showAllFontsCheckbox.state == .on, alwaysInclude: selectedRainFonts)
+        let families = RainFontCatalog.families(alwaysInclude: selectedRainFonts)
         for family in families {
             let item = NSMenuItem(title: family, action: #selector(toggleRainFont(_:)), keyEquivalent: "")
             item.target = self
@@ -1300,11 +1308,6 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
     /// Clears the selection so the built-in glyphs and system font are used.
     @objc private func clearRainFonts(_ sender: Any?) {
         selectedRainFonts = []
-        rebuildRainFontsMenu()
-    }
-
-    /// Refreshes the font list after the "Show all fonts" checkbox changes.
-    @objc private func showAllFontsToggled(_ sender: Any?) {
         rebuildRainFontsMenu()
     }
 
@@ -1376,7 +1379,6 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
 
          stack.addArrangedSubview(checkboxRow)
          stack.addArrangedSubview(secondsRow)
-         stack.addArrangedSubview(makeDescriptionLabel(MatrixScreenSaverOptions.rainRunForeverDescription))
          stack.addArrangedSubview(makeDescriptionLabel(MatrixScreenSaverOptions.rainDurationSecondsDescription))
          return stack
     }

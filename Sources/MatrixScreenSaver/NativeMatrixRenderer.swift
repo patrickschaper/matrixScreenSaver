@@ -233,9 +233,12 @@ final class NativeMatrixRenderer {
     private static let maxSimulationStepsPerTick = 2
     private static let disableBoldFlag: UInt32 = 0x1
     private static let blankRenderCell = RenderCell()
+    /// Half-width katakana characters used by the built-in rain.
+    private static let defaultKatakanaGlyphs = (0..<46).compactMap { UnicodeScalar(0xFF70 + $0) }
+
     private static let defaultGlyphPool: [UnicodeScalar] = {
         var glyphs = Array("0123456789".unicodeScalars)
-        glyphs.append(contentsOf: (0..<46).compactMap { UnicodeScalar(0xFF70 + $0) })
+        glyphs.append(contentsOf: defaultKatakanaGlyphs)
         glyphs.append(contentsOf: "<>*+.:=_|".unicodeScalars)
         // Printable ASCII for terminal text lines
         glyphs.append(contentsOf: (0x20..<0x7F).compactMap { UnicodeScalar($0) })
@@ -255,20 +258,21 @@ final class NativeMatrixRenderer {
         static let maximumGlyphsPerFont = 512
     }
 
-    /// Samples visible glyphs supported by a font, optionally restricted to the custom character set.
+    /// Samples a font's repertoire while retaining default or custom characters for macOS fallback.
     /// - Parameters:
     ///   - name: Installed font family or font name.
     ///   - characters: Custom rain characters; empty uses the font's BMP repertoire.
-    /// - Returns: At most `maximumGlyphsPerFont` supported characters.
+    /// - Returns: At most `maximumGlyphsPerFont` characters; missing glyphs are resolved at rasterization.
     static func glyphEntries(forFont name: String, characters: String = "") -> [UnicodeScalar] {
         guard let font = RainFontCatalog.font(named: name, size: 16) else { return [] }
         let cs = CTFontCopyCharacterSet(font) as CharacterSet
+        let defaults = Set(defaultGlyphPool)
         var out = [UnicodeScalar]()
         let values = characters.isEmpty
             ? Array(UInt32(0x21)...UInt32(0xFFFF))
             : Array(Set(characters.unicodeScalars.map(\.value))).sorted()
         for v in values {
-            guard let sc = UnicodeScalar(v), cs.contains(sc),
+            guard let sc = UnicodeScalar(v), cs.contains(sc) || !characters.isEmpty || defaults.contains(sc),
                   v != 0xA0, v != 0x2028, v != 0x2029, v != 0x2588,
                   !CharacterSet.whitespacesAndNewlines.contains(sc),
                   !CharacterSet.controlCharacters.contains(sc) else { continue }
@@ -276,8 +280,13 @@ final class NativeMatrixRenderer {
         }
         let limit = RainFontTables.maximumGlyphsPerFont
         guard out.count > limit else { return out }
-        let step = Double(out.count) / Double(limit)
-        return (0..<limit).map { out[Int(Double($0) * step)] }
+        // Keep the default repertoire intact instead of sampling away characters that need fallback.
+        let required = characters.isEmpty ? out.filter { defaults.contains($0) } : []
+        let requiredSet = Set(required)
+        let remaining = out.filter { !requiredSet.contains($0) }
+        let count = limit - required.count
+        let step = Double(remaining.count) / Double(count)
+        return required + (0..<count).map { remaining[Int(Double($0) * step)] }
     }
 
     /// Builds the glyph tables for the selected rain fonts, skipping fonts that are not installed.
@@ -1656,32 +1665,69 @@ final class NativeMatrixRenderer {
 
 /// Lists installed font families and resolves them for rain rendering.
 enum RainFontCatalog {
+    /// File-backed families omitted by the system's selectable-font enumeration.
+    private static var hiddenFonts: [String: NSFontDescriptor] = [:]
+    /// Modification dates avoid reparsing font files on every menu click.
+    private static var fontFileInventory: [URL: Date]?
+
+    /// Discovers font metadata in the standard system, local, network, and user font folders.
+    private static func refreshHiddenFonts() {
+        let manager = FileManager.default
+        let roots = manager.urls(for: .libraryDirectory, in: .allDomainsMask).map { $0.appendingPathComponent("Fonts") }
+        let keys: [URLResourceKey] = [.isRegularFileKey, .contentModificationDateKey]
+        var inventory: [URL: Date] = [:]
+        for root in roots {
+            guard let files = manager.enumerator(at: root, includingPropertiesForKeys: keys, options: [.skipsPackageDescendants]) else { continue }
+            for case let url as URL in files {
+                guard ["ttf", "otf", "ttc", "otc", "dfont", "suit"].contains(url.pathExtension.lowercased()),
+                      let values = try? url.resourceValues(forKeys: Set(keys)), values.isRegularFile == true else { continue }
+                inventory[url] = values.contentModificationDate ?? .distantPast
+            }
+        }
+        guard inventory != fontFileInventory else { return }
+        let publicFamilies = Set(NSFontManager.shared.availableFontFamilies)
+        var discovered: [String: NSFontDescriptor] = [:]
+        for url in inventory.keys.sorted(by: { $0.path < $1.path }) {
+            guard let descriptors = CTFontManagerCreateFontDescriptorsFromURL(url as CFURL) as? [CTFontDescriptor] else { continue }
+            for descriptor in descriptors {
+                guard let family = CTFontDescriptorCopyAttribute(descriptor, kCTFontFamilyNameAttribute) as? String,
+                      !publicFamilies.contains(family) else { continue }
+                let candidate = descriptor as NSFontDescriptor
+                if let current = discovered[family], fontStyleScore(current) <= fontStyleScore(candidate) { continue }
+                discovered[family] = candidate
+            }
+        }
+        hiddenFonts = discovered
+        fontFileInventory = inventory
+    }
+
+    /// Prefers upright faces with weight nearest regular when a file contains multiple styles.
+    /// - Parameter descriptor: File-backed face to rank.
+    /// - Returns: A lower score for a more neutral style.
+    private static func fontStyleScore(_ descriptor: NSFontDescriptor) -> Double {
+        let traits = descriptor.object(forKey: .traits) as? [NSFontDescriptor.TraitKey: Any]
+        let weight = (traits?[.weight] as? NSNumber)?.doubleValue ?? 0
+        return abs(weight) + (descriptor.symbolicTraits.contains(.italic) ? 10 : 0)
+    }
+
     /// Resolves a family, PostScript or full font name to a font.
     static func font(named name: String, size: CGFloat) -> NSFont? {
-        NSFont(name: name, size: size)
+        if fontFileInventory == nil { refreshHiddenFonts() }
+        if let descriptor = hiddenFonts[name] {
+            // A descriptor retains the file URL; resolving a hidden name alone may substitute Times.
+            return NSFont(descriptor: descriptor, size: size)
+        }
+        return NSFont(name: name, size: size)
             ?? NSFontManager.shared.font(withFamily: name, traits: [], weight: 5, size: size)
     }
 
-    /// Families that look useful for rain: katakana-capable fonts and anything named "matrix".
-    private static let suitableFamilies: Set<String> = {
-        var result = Set<String>()
-        for family in NSFontManager.shared.availableFontFamilies {
-            if family.lowercased().contains("matrix") { result.insert(family); continue }
-            guard let font = font(named: family, size: 16) else { continue }
-            let cs = CTFontCopyCharacterSet(font) as CharacterSet
-            var count = 0
-            for v in Array(0x30A0...0x30FF) + Array(0xFF61...0xFF9F) {
-                if let sc = UnicodeScalar(UInt32(v)), cs.contains(sc) { count += 1 }
-            }
-            if count >= 20 { result.insert(family) }
-        }
-        return result
-    }()
-
-    /// Sorted font families, optionally limited to rain-suitable ones (selected fonts always stay listed).
-    static func families(showAll: Bool, alwaysInclude: [String]) -> [String] {
-        let all = NSFontManager.shared.availableFontFamilies
-        var names = showAll ? Set(all) : suitableFamilies
+    /// Lists installed font families, retaining selected names for deselection.
+    /// - Parameter alwaysInclude: Selected families to keep available for deselection.
+    /// - Returns: Unique family names in localized alphabetical order.
+    static func families(alwaysInclude: [String]) -> [String] {
+        refreshHiddenFonts()
+        let all = Set(NSFontManager.shared.availableFontFamilies).union(hiddenFonts.keys)
+        var names = all
         names.formUnion(alwaysInclude)
         return names.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
     }

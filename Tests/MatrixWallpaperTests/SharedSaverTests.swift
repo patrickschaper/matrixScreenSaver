@@ -4,6 +4,7 @@ import ScreenSaver
 /// Exercises the shared view and options controller through their hosting boundaries.
 func sharedSaverTests() {
     glyphCacheTests()
+    rainFontResetTests()
     firstSceneSynchronizationTests()
     guard let screen = NSScreen.main,
           let first = MatrixScreenSaverView(frame: screen.frame, isPreview: false),
@@ -243,6 +244,32 @@ private func firstSceneSynchronizationTests() {
     }
 }
 
+/// Checks that the font reset updates the menu and accepted options without resetting other settings.
+private func rainFontResetTests() {
+    var applied: MatrixScreenSaverOptions?
+    let controller = MatrixScreenSaverOptionsSheetController { applied = $0 }
+    var options = MatrixScreenSaverOptions()
+    options.rainFonts = ["Menlo", "Hiragino Sans"]
+    options.characters = "ATGC"
+    options.frameRate = 42
+    controller.prepare(using: options)
+    let window = controller.configureSheet()
+    let tabs = descendants(of: window.contentView!).compactMap { $0 as? NSTabView }.first!
+    tabs.selectTabViewItem(tabs.tabViewItems.first { $0.label == "Rain" }!)
+    window.contentView!.layoutSubtreeIfNeeded()
+    let picker: NSPopUpButton? = stored("rainFontsButton", in: controller)
+    let reset = buttons(in: window.contentView!).first { $0.title == "Reset" }
+    check(reset?.controlSize == .small && picker?.title.contains("Menlo") == true,
+          "font picker exposes a small reset button beside a custom selection")
+    reset?.performClick(nil)
+    check(picker?.title.hasPrefix("Default - ") == true && picker?.menu?.items[1].state == .on &&
+          picker?.menu?.items.dropFirst(3).allSatisfy { $0.state == .off } == true,
+          "font reset restores the system-font summary and clears custom-font checkmarks")
+    buttons(in: window.contentView!).first { $0.title == "OK" }?.performClick(nil)
+    check(applied?.rainFonts.isEmpty == true && applied?.characters == "ATGC" && applied?.frameRate == 42,
+          "font reset applies the default font without changing other options")
+}
+
 /// Checks raster reuse through layout and option updates, retaining images to compare identity safely.
 private func glyphCacheTests() {
     let view = MatrixScreenSaverView(frame: NSRect(x: 0, y: 0, width: 640, height: 360), isPreview: true)!
@@ -262,6 +289,8 @@ private func glyphCacheTests() {
     options.frameRate = 42
     view.applyWallpaperOptions(options)
     check(original === glyph("A"), "frame-rate changes preserve glyph rasters")
+    // These checks exercise plain scalar keys, independent of the user's saved font selection.
+    options.rainFonts = []
     options.characters = "☃"
     view.applyWallpaperOptions(options)
     check(glyph("☃") != nil && glyph("☃", bold: true) != nil,
@@ -287,10 +316,39 @@ private func glyphCacheTests() {
     view.applyWallpaperOptions(options)
     let rainKey = UnicodeScalar(0xF0000)!
     let rainA = glyph(rainKey)
+    let regularLevels: [[UnicodeScalar: CGImage]] = stored("nativeRegularGlyphsByLevel", in: view) ?? []
+    let boldLevels: [[UnicodeScalar: CGImage]] = stored("nativeBoldGlyphsByLevel", in: view) ?? []
+    check(!regularLevels.isEmpty && regularLevels.count == boldLevels.count &&
+          zip(regularLevels, boldLevels).allSatisfy { regular, bold in
+              regular[rainKey] != nil && regular[rainKey] === bold[rainKey] &&
+              regular["A"] != nil && bold["A"] != nil && regular["A"] !== bold["A"]
+          }, "selected-font rasters share every weight-cache level while system bold stays separate")
     options.characters = "B"
     view.applyWallpaperOptions(options)
     check(rainA != nil && glyph(rainKey) != nil && rainA !== glyph(rainKey),
           "editing custom rain characters refreshes rasters even when alias keys stay unchanged")
+    options.characters = "ｱ"
+    view.applyWallpaperOptions(options)
+    let fallbackImage = glyph(rainKey)
+    let selectedFonts: [String: NSFont] = stored("rainFonts", in: view) ?? [:]
+    let selectedFont = selectedFonts["Menlo"]!
+    let line = CTLineCreateWithAttributedString(NSAttributedString(string: "ｱ", attributes: [.font: selectedFont]))
+    let runs = CTLineGetGlyphRuns(line) as! [CTRun]
+    let usesFallback = runs.contains { run in
+        let font = (CTRunGetAttributes(run) as NSDictionary)[kCTFontAttributeName] as! CTFont
+        var glyphID: CGGlyph = 0
+        CTRunGetGlyphs(run, CFRange(location: 0, length: 1), &glyphID)
+        return CTFontCopyFamilyName(font) != CTFontCopyFamilyName(selectedFont) && glyphID != 0
+    }
+    let hasFallbackInk = fallbackImage.map { image in
+        let bitmap = NSBitmapImageRep(cgImage: image)
+        return (0..<bitmap.pixelsHigh).contains { y in
+            (0..<bitmap.pixelsWide).contains { x in (bitmap.colorAt(x: x, y: y)?.alphaComponent ?? 0) > 0 }
+        }
+    } ?? false
+    check(usesFallback && hasFallbackInk, "missing selected-font katakana resolves to a real fallback glyph and a visible cached raster")
+    view.applyWallpaperOptions(options)
+    check(fallbackImage != nil && fallbackImage === glyph(rainKey), "unchanged options reuse the fallback raster without resolving fonts again")
     options.rainFonts = ["Hiragino Sans"]
     options.characters = "カ"
     options.characterWidth = 16

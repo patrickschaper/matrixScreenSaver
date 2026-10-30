@@ -59,7 +59,7 @@ cancels its command. The sandboxed screen saver may not have the same access as 
 
 ### Matrix fonts
 
-The **Fonts** option lists installed fonts that look suited to rain, so the glyphs can match the film. Tick **Show all fonts** to list every family. No fonts are bundled, so install them yourself first.
+The **Fonts** option lists installed font families, including hidden fonts discovered in the standard system and user font folders. Mix up to 8 fonts. Default and custom characters missing from a selected font use macOS font fallback when glyph images are cached, with no extra font lookup during playback. No fonts are bundled, so install them yourself first.
 
 The free [Matrix Code](https://github.com/Rezmason/matrix/raw/master/assets/Matrix-Code.ttf) and [Matrix Resurrected](https://github.com/Rezmason/matrix/raw/master/assets/Matrix-Resurrected.ttf) fonts are published in [Rezmason/matrix](https://github.com/Rezmason/matrix) (MIT, © Rezmason 2018), which recreate the glyphs from the films. Thanks to Rezmason for making them available.
 
