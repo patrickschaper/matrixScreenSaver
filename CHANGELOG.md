@@ -10,6 +10,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+
+## [0.4.3] - 2026-10-30
+
+### Features
+
+- add Fonts option to pick installed fonts for the rain glyphs (#117)
+- add command capture scene and customizable Neo intro name (#106)
+- sign and notarize GitHub releases (#111)
+
+### Bug Fixes
+
+- select the highest release version tag (#113)
+
 ## [0.4.2] - 2026-10-30
 
 ### Features
