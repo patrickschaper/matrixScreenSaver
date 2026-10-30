@@ -4,7 +4,13 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 SRC="$ROOT/Sources/MatrixScreenSaver"
 TESTS="$ROOT/Tests/MatrixScreenSaverTests"
-TEST_BIN=/tmp/matrix_screensaver_tests
+# A bundle exercises the same font-resource lookup used by both shipping products.
+TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/matrix-screensaver-tests.XXXXXX")"
+trap 'rm -rf "$TEST_ROOT"' EXIT
+TEST_CONTENTS="$TEST_ROOT/Tests.app/Contents"
+TEST_BIN="$TEST_CONTENTS/MacOS/matrix_screensaver_tests"
+mkdir -p "$TEST_CONTENTS/MacOS" "$TEST_CONTENTS/Resources"
+cp -R "$ROOT/Resources/Fonts" "$TEST_CONTENTS/Resources/Fonts"
 
 swiftc \
   -framework Foundation \

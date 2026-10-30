@@ -40,7 +40,7 @@ The saver exposes a native **Options…** sheet. The values are stored with `Scr
 | Frame rate | Set the frame rate per second. A positive number less than or equal to 1000. | 25 |
 | Error rate | Set the factor for the rate of character changes. A non-negative number. | 1.0 |
 | Characters | Restrict rain glyphs to a custom set (e.g. ATGC). Leave empty for the default. | *(empty)* |
-| Fonts | Pick installed fonts for the rain glyphs (up to 8, mixed evenly). Intro text stays in the system font. See [Matrix fonts](#matrix-fonts). | *(system font)* |
+| Font | Pick one installed font for the rain glyphs. Intro text stays in the system font. See [Matrix fonts](#matrix-fonts). | *(system font)* |
 | Neo message scene | Show the Neo message intro before the main scene. | On |
 | Typing speed | Typing speed multiplier for Neo messages, custom command entry and the trace program. A positive number; pauses keep their natural duration. Output is not typed. | 1.0 |
 | Name | Name used in the intro message ("Wake up, {name}..."). Only applies when Neo message lines is empty. | *(empty — uses "Neo")* |
@@ -59,9 +59,11 @@ cancels its command. The sandboxed screen saver may not have the same access as 
 
 ### Matrix fonts
 
-The **Fonts** option lists installed font families, including hidden fonts discovered in the standard system and user font folders. Mix up to 8 fonts. Default and custom characters missing from a selected font use macOS font fallback when glyph images are cached, with no extra font lookup during playback. No fonts are bundled, so install them yourself first.
+The **Glyph set** radio buttons in **Rain** select **Default**, **Classic**, or **Resurrections**. Classic and Resurrections use their original bundled fonts and glyph artwork. Default keeps the existing configurable rain. Switching presets preserves your custom font and character settings; these controls are editable when Default is selected.
 
-The free [Matrix Code](https://github.com/Rezmason/matrix/raw/master/assets/Matrix-Code.ttf) and [Matrix Resurrected](https://github.com/Rezmason/matrix/raw/master/assets/Matrix-Resurrected.ttf) fonts are published in [Rezmason/matrix](https://github.com/Rezmason/matrix) (MIT, © Rezmason 2018), which recreate the glyphs from the films. Thanks to Rezmason for making them available.
+The **Font** option selects one installed font family, including hidden fonts discovered in the standard system and user font folders. Choosing another font replaces the selection; Reset restores the system font. Existing multi-font settings retain only the first font. Default and custom characters missing from the selected font use macOS font fallback when glyph images are cached, with no extra font lookup during playback. Install any additional fonts yourself.
+
+The bundled [Matrix Code](https://github.com/Rezmason/matrix/raw/master/assets/Matrix-Code.ttf) and [Matrix Resurrected](https://github.com/Rezmason/matrix/raw/master/assets/Matrix-Resurrected.ttf) fonts are published in [Rezmason/matrix](https://github.com/Rezmason/matrix) (MIT, © Rezmason 2018), which recreate the glyphs from the films. Thanks to Rezmason for making them available. See [font provenance](Resources/Fonts/README.md) and the [included license](Resources/Fonts/LICENSE.txt).
 
 ### Wallpaper menubar menu
 

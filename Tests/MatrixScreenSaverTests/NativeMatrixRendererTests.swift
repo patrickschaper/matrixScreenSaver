@@ -3,6 +3,7 @@ import Foundation
 
 func nativeMatrixRendererTests() {
     rainFontTests()
+    rainGlyphPresetTests()
 
     commandCaptureLifecycleTests()
     customTraceHandoffTests()
@@ -246,6 +247,34 @@ private func rainFontTests() {
     let menloShare = Double(counts["Menlo", default: 0]) / Double(max(total, 1))
     ok(total > 1_000 && (0.35...0.65).contains(menloShare),
        "RainFont: rendered rain mixes selected fonts evenly with fallback-enabled glyph pools")
+}
+
+/// Exercises bundled preset coverage and switching back to the retained custom rain settings.
+private func rainGlyphPresetTests() {
+    let renderer = NativeMatrixRenderer()
+    var config = NativeMatrixRenderer.Configuration()
+    config.rainFonts = ["Menlo"]
+    config.characters = "ATGC"
+    renderer.updateConfiguration(config)
+    let customSources = renderer.rainSourceByScalar
+    for (preset, count) in [(RainGlyphSet.classic, 57), (.resurrections, 135)] {
+        config.rainGlyphSet = preset
+        renderer.updateConfiguration(config)
+        ok(renderer.rainSourceByScalar.count == count && renderer.activeRainFonts == [preset.fontName!],
+           "Rain presets: \(preset.rawValue) uses its complete bundled glyph set instead of custom characters")
+        let font = RainFontCatalog.font(named: preset.fontName!, size: 16)
+        let loadedURL = font.flatMap { CTFontCopyAttribute($0, kCTFontURLAttribute) as? URL }
+        let bundledURL = Bundle(for: NativeMatrixRenderer.self).url(forResource: preset.fontName!, withExtension: "ttf", subdirectory: "Fonts")
+        let sources = Array(renderer.rainSourceByScalar.values)
+        let coverage = font.map { CTFontCopyCharacterSet($0) as CharacterSet }
+        ok(loadedURL != nil && loadedURL?.resolvingSymlinksInPath() == bundledURL?.resolvingSymlinksInPath() &&
+           sources.count == count && sources.allSatisfy { coverage?.contains($0) == true },
+           "Rain presets: \(preset.rawValue) resolves every glyph from its bundled font")
+    }
+    config.rainGlyphSet = .default
+    renderer.updateConfiguration(config)
+    ok(renderer.activeRainFonts == ["Menlo"] && renderer.rainSourceByScalar == customSources,
+       "Rain presets: Default restores the custom font and character pool")
 }
 
 /// Checks idle intro frames and cursor-only updates through the host's dirty-row contract.

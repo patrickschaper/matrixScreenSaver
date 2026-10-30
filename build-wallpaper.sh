@@ -36,6 +36,8 @@ swiftc -O -module-name MatrixWallpaper \
   -o "$BUNDLE_DIR/Contents/MacOS/MatrixWallpaper"
 
 cp "$ROOT_DIR/Resources/Wallpaper-Info.plist" "$BUNDLE_DIR/Contents/Info.plist"
+mkdir -p "$BUNDLE_DIR/Contents/Resources/Fonts"
+cp "$ROOT_DIR/Resources/Fonts/"* "$BUNDLE_DIR/Contents/Resources/Fonts/"
 cp "$ROOT_DIR/Resources/WallpaperIcon.icns" "$ROOT_DIR/Resources/MenuBarIcon.pdf" "$BUNDLE_DIR/Contents/Resources/"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $BUNDLE_VERSION" "$BUNDLE_DIR/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUNDLE_VERSION" "$BUNDLE_DIR/Contents/Info.plist"
