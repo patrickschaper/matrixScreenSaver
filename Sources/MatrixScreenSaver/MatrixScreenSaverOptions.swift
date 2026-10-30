@@ -1362,15 +1362,18 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         defaultItem.target = self
         defaultItem.state = selectedRainFonts.isEmpty ? .on : .off
         menu.addItem(defaultItem)
-        menu.addItem(.separator())
 
-        let families = RainFontCatalog.families(alwaysInclude: selectedRainFonts)
-        for family in families {
-            let item = NSMenuItem(title: family, action: #selector(selectRainFont(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = family
-            item.state = selectedRainFonts.contains(family) ? .on : .off
-            menu.addItem(item)
+        let bundledFonts = RainGlyphSet.allCases.compactMap(\.fontName)
+        let families = RainFontCatalog.families(alwaysInclude: selectedRainFonts).filter { !bundledFonts.contains($0) }
+        for (index, group) in [bundledFonts, families].enumerated() {
+            if index == 1 { menu.addItem(.separator()) }
+            for family in group {
+                let item = NSMenuItem(title: family, action: #selector(selectRainFont(_:)), keyEquivalent: "")
+                item.target = self
+                item.representedObject = family
+                item.state = selectedRainFonts.contains(family) ? .on : .off
+                menu.addItem(item)
+            }
         }
         rainFontsButton.menu = menu
         rainFontsButton.selectItem(at: 0)

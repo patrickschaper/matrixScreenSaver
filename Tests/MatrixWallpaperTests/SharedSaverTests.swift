@@ -261,6 +261,11 @@ private func rainFontResetTests() {
     window.contentView!.layoutSubtreeIfNeeded()
     let picker: NSPopUpButton? = stored("rainFontsButton", in: controller)
     let reset = buttons(in: window.contentView!).first { $0.title == "Reset" }
+    let bundledNames = ["Matrix-Code", "Matrix-Resurrected"]
+    let items = picker?.menu?.items ?? []
+    check(items.count > 4 && Array(items.dropFirst(2).prefix(2).map(\.title)) == bundledNames && items[4].isSeparatorItem &&
+          bundledNames.allSatisfy { name in items.filter { $0.representedObject as? String == name }.count == 1 },
+          "bundled fonts appear once directly after Default and before the divider")
     check(reset?.controlSize == .small && picker?.title == "Menlo" &&
           picker?.menu?.items.filter { $0.state == .on }.count == 1,
           "font picker exposes a small reset button beside a custom selection")
@@ -272,9 +277,16 @@ private func rainFontResetTests() {
               picker?.menu?.items.first { $0.title == "Menlo" }?.state == .off,
               "choosing a font replaces the previous selection and selecting it again keeps it selected")
     }
+    for name in bundledNames {
+        if let menu = picker?.menu, let index = menu.items.firstIndex(where: { $0.representedObject as? String == name }) {
+            menu.performActionForItem(at: index)
+        }
+        check(picker?.title == name && picker?.menu?.items.filter { $0.state == .on }.count == 1,
+              "bundled font \(name) can be selected from the dropdown")
+    }
     reset?.performClick(nil)
     check(picker?.title.hasPrefix("Default - ") == true && picker?.menu?.items[1].state == .on &&
-          picker?.menu?.items.dropFirst(3).allSatisfy { $0.state == .off } == true,
+          picker?.menu?.items.filter { $0.representedObject is String }.allSatisfy { $0.state == .off } == true,
           "font reset restores the system-font summary and clears custom-font checkmarks")
     buttons(in: window.contentView!).first { $0.title == "OK" }?.performClick(nil)
     check(applied?.rainFonts.isEmpty == true && applied?.characters == "ATGC" && applied?.frameRate == 42,
