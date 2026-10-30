@@ -5,9 +5,14 @@ ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SOURCE_DIR="$ROOT_DIR/Sources/MatrixScreenSaver"
 WALLPAPER_DIR="$ROOT_DIR/Sources/MatrixWallpaper"
 TEST_DIR="$ROOT_DIR/Tests/MatrixWallpaperTests"
-TEST_BIN="$(mktemp "${TMPDIR:-/tmp}/matrix-wallpaper-tests.XXXXXX")"
-HOST_DIR="$(mktemp -d "${TMPDIR:-/tmp}/matrix-consumer-tests.XXXXXX")"
-trap 'rm -f "$TEST_BIN" "$HOST_DIR/ScreenSaverEngine"; rmdir "$HOST_DIR"' EXIT
+# Keep bundled font lookup identical in the app tests and the consumer-host copy.
+TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/matrix-wallpaper-tests.XXXXXX")"
+trap 'rm -rf "$TEST_ROOT"' EXIT
+TEST_CONTENTS="$TEST_ROOT/Tests.app/Contents"
+HOST_DIR="$TEST_CONTENTS/MacOS"
+TEST_BIN="$HOST_DIR/matrix-wallpaper-tests"
+mkdir -p "$HOST_DIR" "$TEST_CONTENTS/Resources"
+cp -R "$ROOT_DIR/Resources/Fonts" "$TEST_CONTENTS/Resources/Fonts"
 
 OPTIMIZATION="-Onone"
 if [[ "${1:-}" == "--gpu-composition-benchmark" || "${1:-}" == "--composition-benchmark" ]]; then

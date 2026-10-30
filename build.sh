@@ -46,6 +46,7 @@ swiftc \
   "$SOURCE_DIR/MatrixScreenSaverView.swift"
 
 cp "$INPUT_RESOURCES_DIR/Info.plist" "$CONTENTS_DIR/Info.plist"
+cp -R "$INPUT_RESOURCES_DIR/Fonts" "$RESOURCES_DIR/Fonts"
 for f in Preview.png "Preview@2x.png"; do
   if [[ -f "$INPUT_RESOURCES_DIR/$f" ]]; then
     cp "$INPUT_RESOURCES_DIR/$f" "$RESOURCES_DIR/$f"

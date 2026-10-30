@@ -4,6 +4,8 @@ import ScreenSaver
 /// Exercises the shared view and options controller through their hosting boundaries.
 func sharedSaverTests() {
     glyphCacheTests()
+    rainFontResetTests()
+    rainGlyphOptionsTests()
     firstSceneSynchronizationTests()
     guard let screen = NSScreen.main,
           let first = MatrixScreenSaverView(frame: screen.frame, isPreview: false),
@@ -134,6 +136,21 @@ func sharedSaverTests() {
     options.save(to: defaults)
     check(MatrixScreenSaverOptions.load(from: defaults).frameRate > 0, "shared persistence retains option sanitization")
 
+    var fontOptions = MatrixScreenSaverOptions()
+    check(fontOptions.rainFonts.isEmpty, "rain fonts default to none, keeping the built-in glyphs")
+    fontOptions.rainFonts = ["  Matrix-Code ", "Matrix-Code", "", "Matrix-Resurrected"] + (1...10).map { "Font \($0)" }
+    let cleanFonts = fontOptions.sanitized().rainFonts
+    check(cleanFonts == ["Matrix-Code"], "rain font sanitizing retains only the first nonempty trimmed name")
+    defaults.set(["", " Menlo ", "Hiragino Sans"], forKey: "RainFonts")
+    check(MatrixScreenSaverOptions.load(from: defaults).rainFonts == ["Menlo"],
+          "existing multi-font preferences migrate to the first nonempty font")
+    fontOptions.rainFonts = ["Matrix-Code", "Matrix-Resurrected"]
+    fontOptions.save(to: defaults)
+    check(MatrixScreenSaverOptions.load(from: defaults).rainFonts == ["Matrix-Code"],
+           "only one rain font persists through save and load")
+    check(fontOptions.rendererConfiguration(isPreview: false).rainFonts == ["Matrix-Code"],
+           "only one selected font reaches the renderer configuration")
+
     let original = MatrixScreenSaverOptions()
     var commandOptions = original
     commandOptions.commands = [String(repeating: "x", count: 513), "printf safe", "printf bad\0ignored"]
@@ -229,6 +246,135 @@ private func firstSceneSynchronizationTests() {
     }
 }
 
+/// Checks that the font reset updates the menu and accepted options without resetting other settings.
+private func rainFontResetTests() {
+    var applied: MatrixScreenSaverOptions?
+    let controller = MatrixScreenSaverOptionsSheetController { applied = $0 }
+    var options = MatrixScreenSaverOptions()
+    options.rainFonts = ["Menlo", "Hiragino Sans"]
+    options.characters = "ATGC"
+    options.frameRate = 42
+    controller.prepare(using: options)
+    let window = controller.configureSheet()
+    let tabs = descendants(of: window.contentView!).compactMap { $0 as? NSTabView }.first!
+    tabs.selectTabViewItem(tabs.tabViewItems.first { $0.label == "Rain" }!)
+    window.contentView!.layoutSubtreeIfNeeded()
+    let picker: NSPopUpButton? = stored("rainFontsButton", in: controller)
+    let reset = buttons(in: window.contentView!).first { $0.title == "Reset" }
+    let bundledNames = ["Matrix-Code", "Matrix-Resurrected"]
+    let items = picker?.menu?.items ?? []
+    check(items.count > 4 && Array(items.dropFirst(2).prefix(2).map(\.title)) == bundledNames && items[4].isSeparatorItem &&
+          bundledNames.allSatisfy { name in items.filter { $0.representedObject as? String == name }.count == 1 },
+          "bundled fonts appear once directly after Default and before the divider")
+    check(reset?.controlSize == .small && picker?.title == "Menlo" &&
+          picker?.menu?.items.filter { $0.state == .on }.count == 1,
+          "font picker exposes a small reset button beside a custom selection")
+    for _ in 0..<2 {
+        if let menu = picker?.menu, let index = menu.items.firstIndex(where: { $0.representedObject as? String == "Hiragino Sans" }) {
+            menu.performActionForItem(at: index)
+        }
+        check(picker?.title == "Hiragino Sans" && picker?.menu?.items.filter { $0.state == .on }.count == 1 &&
+              picker?.menu?.items.first { $0.title == "Menlo" }?.state == .off,
+              "choosing a font replaces the previous selection and selecting it again keeps it selected")
+    }
+    for name in bundledNames {
+        if let menu = picker?.menu, let index = menu.items.firstIndex(where: { $0.representedObject as? String == name }) {
+            menu.performActionForItem(at: index)
+        }
+        check(picker?.title == name && picker?.menu?.items.filter { $0.state == .on }.count == 1,
+              "bundled font \(name) can be selected from the dropdown")
+    }
+    reset?.performClick(nil)
+    check(picker?.title.hasPrefix("Default - ") == true && picker?.menu?.items[1].state == .on &&
+          picker?.menu?.items.filter { $0.representedObject is String }.allSatisfy { $0.state == .off } == true,
+          "font reset restores the system-font summary and clears custom-font checkmarks")
+    buttons(in: window.contentView!).first { $0.title == "OK" }?.performClick(nil)
+    check(applied?.rainFonts.isEmpty == true && applied?.characters == "ATGC" && applied?.frameRate == 42,
+          "font reset applies the default font without changing other options")
+}
+
+/// Exercises preset persistence, exclusive radio selection, cancellation and retained customization.
+private func rainGlyphOptionsTests() {
+    let domain = "dev.patsch.MatrixWallpaper.glyph-tests.\(UUID().uuidString)"
+    let defaults = ScreenSaverDefaults(forModuleWithName: domain)!
+    defer { defaults.removePersistentDomain(forName: domain); defaults.synchronize() }
+    MatrixScreenSaverOptions.registerDefaults(in: defaults)
+    check(MatrixScreenSaverOptions.load(from: defaults).rainGlyphSet == .default,
+          "existing installations keep the default glyph set")
+    defaults.set("unknown-preset", forKey: "RainGlyphSet")
+    check(MatrixScreenSaverOptions.load(from: defaults).rainGlyphSet == .default,
+          "unknown persisted glyph sets safely use Default")
+    var options = MatrixScreenSaverOptions()
+    options.characters = "ATGC"
+    options.rainFonts = ["Menlo"]
+    for preset in RainGlyphSet.allCases {
+        options.rainGlyphSet = preset
+        options.save(to: defaults)
+        let loaded = MatrixScreenSaverOptions.load(from: defaults)
+        check(loaded.rainGlyphSet == preset && loaded.rendererConfiguration().rainGlyphSet == preset &&
+              loaded.characters == "ATGC" && loaded.rainFonts == ["Menlo"],
+              "\(preset.title) persists and reaches the renderer without overwriting customization")
+    }
+    var applied: MatrixScreenSaverOptions?
+    let controller = MatrixScreenSaverOptionsSheetController { applied = $0 }
+    controller.prepare(using: options)
+    let window = controller.configureSheet()
+    let tabs = descendants(of: window.contentView!).compactMap { $0 as? NSTabView }.first!
+    let rainTab = tabs.tabViewItems.first { $0.label == "Rain" }!
+    tabs.selectTabViewItem(rainTab)
+    let controls = buttons(in: rainTab.view!)
+    let radios = RainGlyphSet.allCases.compactMap { preset in controls.first { $0.title == preset.title } }
+    let picker: NSPopUpButton? = stored("rainFontsButton", in: controller)
+    let characters: NSTextField? = stored("charactersField", in: controller)
+    let reset = controls.first { $0.title == "Reset" }
+    let preview: NSTextField? = stored("rainGlyphPreview", in: controller)
+    check(radios.count == 3 && radios.last?.state == .on && picker?.isEnabled == false,
+          "Rain restores the saved Resurrections radio with custom font controls inactive")
+    guard radios.count == 3 else { return }
+    for (index, radio) in radios.enumerated() {
+        radio.performClick(nil)
+        check(radios.enumerated().allSatisfy { $0.element.state == ($0.offset == index ? .on : .off) },
+              "\(radio.title) is mutually exclusive with the other glyph presets")
+        check(picker?.isEnabled == (index == 0) && characters?.isEnabled == (index == 0) && reset?.isEnabled == (index == 0),
+              "\(radio.title) enables custom settings only for Default")
+        let expectedCount = [4, 57, 135][index]
+        check(preview?.stringValue.unicodeScalars.count == expectedCount && preview?.drawsBackground == true &&
+              preview?.backgroundColor == .black && preview?.textColor == .green,
+              "\(radio.title) previews every active glyph in green on black")
+        let expectedFont = index == 0 ? "Menlo-Regular" : ["Matrix-Code", "Matrix-Resurrected"][index - 1]
+        check(preview?.font?.fontName == expectedFont, "\(radio.title) preview uses its current rendering font")
+    }
+    window.contentView!.layoutSubtreeIfNeeded()
+    check(preview != nil && preview!.frame.height > (preview!.font?.pointSize ?? 0) * 1.5 && (rainTab.view as? NSScrollView)?.hasVerticalScroller == true,
+          "long glyph sets wrap onto multiple lines in a scrollable Rain tab")
+    buttons(in: window.contentView!).first { $0.title == "OK" }?.performClick(nil)
+    check(applied?.rainGlyphSet == .resurrections && applied?.rainFonts == ["Menlo"] && applied?.characters == "ATGC",
+          "accepting a film preset keeps custom fonts and characters for switching back")
+    controller.prepare(using: applied!)
+    radios[0].performClick(nil)
+    check(characters?.stringValue == "ATGC" && picker?.title.contains("Menlo") == true,
+          "switching back to Default restores editable custom settings")
+    characters?.stringValue = "XYZ"
+    controller.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: characters))
+    check(preview?.stringValue == "XYZ", "editing custom characters refreshes the glyph preview immediately")
+    if let menu = picker?.menu, let index = menu.items.firstIndex(where: { $0.representedObject as? String == "Hiragino Sans" }) {
+        menu.performActionForItem(at: index)
+    }
+    check(preview?.font?.familyName == "Hiragino Sans", "choosing another font refreshes the preview typeface")
+    reset?.performClick(nil)
+    check(preview?.font?.fontName == NSFont.monospacedSystemFont(ofSize: 16, weight: .medium).fontName,
+          "font Reset restores the system typeface in the preview")
+    var cancelled = false
+    let cancelController = MatrixScreenSaverOptionsSheetController { _ in cancelled = true }
+    cancelController.prepare(using: options)
+    buttons(in: cancelController.configureSheet().contentView!).first { $0.title == "Reset to defaults" }?.performClick(nil)
+    let resetRadios: [NSButton] = stored("rainGlyphRadios", in: cancelController) ?? []
+    check(resetRadios.first?.state == .on, "Reset to defaults restores the default glyph set")
+    buttons(in: cancelController.configureSheet().contentView!).first { $0.title == "Cancel" }?.performClick(nil)
+    check(!cancelled && MatrixScreenSaverOptions.load(from: defaults).rainGlyphSet == .resurrections,
+          "Cancel does not persist a changed glyph preset")
+}
+
 /// Checks raster reuse through layout and option updates, retaining images to compare identity safely.
 private func glyphCacheTests() {
     let view = MatrixScreenSaverView(frame: NSRect(x: 0, y: 0, width: 640, height: 360), isPreview: true)!
@@ -248,6 +394,8 @@ private func glyphCacheTests() {
     options.frameRate = 42
     view.applyWallpaperOptions(options)
     check(original === glyph("A"), "frame-rate changes preserve glyph rasters")
+    // These checks exercise plain scalar keys, independent of the user's saved font selection.
+    options.rainFonts = []
     options.characters = "☃"
     view.applyWallpaperOptions(options)
     check(glyph("☃") != nil && glyph("☃", bold: true) != nil,
@@ -268,6 +416,83 @@ private func glyphCacheTests() {
     check(glyph("A") != nil && glyph("A", bold: true) != nil,
           "restarting after resource cleanup recreates usable glyph caches")
     view.stopAnimation()
+    options.rainFonts = ["Menlo"]
+    options.characters = "A"
+    view.applyWallpaperOptions(options)
+    let rainKey = UnicodeScalar(0xF0000)!
+    let rainA = glyph(rainKey)
+    let regularLevels: [[UnicodeScalar: CGImage]] = stored("nativeRegularGlyphsByLevel", in: view) ?? []
+    let boldLevels: [[UnicodeScalar: CGImage]] = stored("nativeBoldGlyphsByLevel", in: view) ?? []
+    check(!regularLevels.isEmpty && regularLevels.count == boldLevels.count &&
+          zip(regularLevels, boldLevels).allSatisfy { regular, bold in
+              regular[rainKey] != nil && regular[rainKey] === bold[rainKey] &&
+              regular["A"] != nil && bold["A"] != nil && regular["A"] !== bold["A"]
+          }, "selected-font rasters share every weight-cache level while system bold stays separate")
+    options.characters = "B"
+    view.applyWallpaperOptions(options)
+    check(rainA != nil && glyph(rainKey) != nil && rainA !== glyph(rainKey),
+          "editing custom rain characters refreshes rasters even when alias keys stay unchanged")
+    options.characters = "ｱ"
+    view.applyWallpaperOptions(options)
+    let fallbackImage = glyph(rainKey)
+    let selectedFonts: [String: NSFont] = stored("rainFonts", in: view) ?? [:]
+    let selectedFont = selectedFonts["Menlo"]!
+    let line = CTLineCreateWithAttributedString(NSAttributedString(string: "ｱ", attributes: [.font: selectedFont]))
+    let runs = CTLineGetGlyphRuns(line) as! [CTRun]
+    let usesFallback = runs.contains { run in
+        let font = (CTRunGetAttributes(run) as NSDictionary)[kCTFontAttributeName] as! CTFont
+        var glyphID: CGGlyph = 0
+        CTRunGetGlyphs(run, CFRange(location: 0, length: 1), &glyphID)
+        return CTFontCopyFamilyName(font) != CTFontCopyFamilyName(selectedFont) && glyphID != 0
+    }
+    let hasFallbackInk = fallbackImage.map { image in
+        let bitmap = NSBitmapImageRep(cgImage: image)
+        return (0..<bitmap.pixelsHigh).contains { y in
+            (0..<bitmap.pixelsWide).contains { x in (bitmap.colorAt(x: x, y: y)?.alphaComponent ?? 0) > 0 }
+        }
+    } ?? false
+    check(usesFallback && hasFallbackInk, "missing selected-font katakana resolves to a real fallback glyph and a visible cached raster")
+    view.applyWallpaperOptions(options)
+    check(fallbackImage != nil && fallbackImage === glyph(rainKey), "unchanged options reuse the fallback raster without resolving fonts again")
+    options.rainFonts = ["Hiragino Sans"]
+    options.characters = "カ"
+    options.characterWidth = 16
+    options.characterHeight = 30
+    view.applyWallpaperOptions(options)
+    if let image = glyph(rainKey) {
+        let bitmap = NSBitmapImageRep(cgImage: image)
+        // Core Text antialiasing can reach past its measured ink bounds; solid strokes must not.
+        let edgesHaveNoSolidInk = (0..<bitmap.pixelsHigh).allSatisfy { y in
+            (bitmap.colorAt(x: 0, y: y)?.alphaComponent ?? 0) < 0.5 &&
+            (bitmap.colorAt(x: bitmap.pixelsWide - 1, y: y)?.alphaComponent ?? 0) < 0.5
+        }
+        let hasInk = (0..<bitmap.pixelsHigh).contains { y in
+            (0..<bitmap.pixelsWide).contains { x in (bitmap.colorAt(x: x, y: y)?.alphaComponent ?? 0) > 0 }
+        }
+        check(edgesHaveNoSolidInk && hasInk, "wide selected-font glyphs fit inside the cell without cutting solid strokes")
+    } else {
+        check(false, "wide selected-font glyphs fit inside the cell without cutting solid strokes")
+    }
+    for (preset, count) in [(RainGlyphSet.classic, 57), (.resurrections, 135)] {
+        let previousRaster = glyph(rainKey)
+        options.rainGlyphSet = preset
+        view.applyWallpaperOptions(options)
+        let renderer: NativeMatrixRenderer = stored("nativeRenderer", in: view)!
+        let resolved: [String: NSFont] = stored("rainFonts", in: view) ?? [:]
+        let font = resolved[preset.fontName!]
+        let usesOriginalFont = font.map { CTFontCopyPostScriptName($0) as String == preset.fontName } ?? false
+        check(usesOriginalFont && renderer.rainSourceByScalar.count == count &&
+              renderer.rainSourceByScalar.keys.allSatisfy { glyph($0) != nil } && previousRaster !== glyph(rainKey),
+              "\(preset.title) rebuilds all preset rasters using the original bundled font")
+        let cached = glyph(rainKey)
+        view.applyWallpaperOptions(options)
+        check(cached != nil && cached === glyph(rainKey) && cached === glyph(rainKey, bold: true),
+              "\(preset.title) reuses cached artwork across unchanged options and font weights")
+    }
+    options.rainGlyphSet = .default
+    view.applyWallpaperOptions(options)
+    check(glyph(UnicodeScalar(0xF0001)!) == nil && glyph(rainKey) != nil,
+          "returning to custom rain removes stale film-preset glyphs")
     var capturedOptions = MatrixScreenSaverOptions()
     capturedOptions.neoMessageSceneEnabled = false
     capturedOptions.cmdSceneEnabled = true
@@ -275,6 +500,7 @@ private func glyphCacheTests() {
     capturedOptions.commands = ["printf '\\303\\251'"]
     capturedOptions.neoMessageSpeedFactor = 100
     capturedOptions.scanLinesIntensity = 0
+    capturedOptions.rainFonts = ["Menlo"]
     let container = NSView(frame: view.frame)
     container.addSubview(view)
     defer { view.removeFromSuperview() }
@@ -299,7 +525,8 @@ private func checkOptionsLayout(in window: NSWindow) {
     let content = window.contentView!
     content.layoutSubtreeIfNeeded()
     let size = content.bounds.size
-    check(size.width <= 600 && size.height <= 600,
+    // The Rain tab gained the Fonts section, so the sheet is taller than the original 600 point budget.
+    check(size.width <= 600 && size.height <= 650,
           "options fit in a compact window without screen-sized help text")
     guard let tabs = descendants(of: content).compactMap({ $0 as? NSTabView }).first else {
         check(false, "options organize settings into native tabs")
@@ -310,16 +537,20 @@ private func checkOptionsLayout(in window: NSWindow) {
     for item in tabs.tabViewItems {
         tabs.selectTabViewItem(item)
         content.layoutSubtreeIfNeeded()
-        let page = item.view!
+        let page = (item.view as? NSScrollView)?.documentView ?? item.view!
         let controls = descendants(of: page).compactMap { $0 as? NSControl }
         check(!controls.isEmpty && controls.allSatisfy { page.bounds.contains($0.convert($0.bounds, to: page)) },
               "\(item.label) keeps every control and help label inside its page")
         let sections = (page.subviews.first as? NSStackView)?.arrangedSubviews ?? []
-        let top = sections.map { $0.convert($0.bounds, to: page).maxY }.max() ?? 0
-        check((12...20).contains(page.bounds.maxY - top), "\(item.label) starts with a consistent small top margin")
+        let frames = sections.map { $0.convert($0.bounds, to: page) }
+        let topMargin = page.isFlipped ? (frames.map(\.minY).min() ?? 0) - page.bounds.minY
+            : page.bounds.maxY - (frames.map(\.maxY).max() ?? 0)
+        check((12...20).contains(topMargin), "\(item.label) starts with a consistent small top margin")
         if let stack = page.subviews.first as? NSStackView {
             let sections = stack.arrangedSubviews
-            check(zip(sections, sections.dropFirst()).allSatisfy { $0.frame.minY >= $1.frame.maxY },
+            check(zip(sections, sections.dropFirst()).allSatisfy {
+                stack.isFlipped ? $0.frame.maxY <= $1.frame.minY : $0.frame.minY >= $1.frame.maxY
+            },
                   "\(item.label) sections do not overlap")
         }
         if let forever = controls.compactMap({ $0 as? NSButton }).first(where: { $0.title == "Run forever" }),

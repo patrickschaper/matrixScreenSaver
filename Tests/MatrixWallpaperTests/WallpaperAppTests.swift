@@ -373,7 +373,13 @@ private func wallpaperTerminationRecoveryTests() {
     let controller = desktop.controller()
     let host = WallpaperApp(defaults: defaults, desktopWallpaper: controller)
     host.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
-    check(eventually { desktopWindowCount() == NSScreen.screens.count }, "recovery fixture awaits launch playback")
+    // Match the background-failure fixture's allowance for queued AppKit startup on CI.
+    let started = eventually(10) { desktopWindowCount() == NSScreen.screens.count }
+    check(started, "recovery fixture awaits launch playback")
+    guard started else {
+        host.applicationWillTerminate(Notification(name: NSApplication.willTerminateNotification))
+        return
+    }
     desktop.unreadable = ["first"]
     host.applicationWillTerminate(Notification(name: NSApplication.willTerminateNotification))
     check(NSApp.modalWindow == nil && desktopWindowCount() == 0,
@@ -385,12 +391,14 @@ private func wallpaperTerminationRecoveryTests() {
     desktop.images["first"] = .init(url: URL(fileURLWithPath: "/new-after-failed-quit.jpg"), options: [:])
     let relaunched = WallpaperApp(defaults: defaults, desktopWallpaper: desktop.controller())
     relaunched.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
-    check(eventually { desktopWindowCount() == NSScreen.screens.count }, "relaunch awaits recovery and playback")
+    defer { relaunched.applicationWillTerminate(Notification(name: NSApplication.willTerminateNotification)) }
+    let restarted = eventually(10) { desktopWindowCount() == NSScreen.screens.count }
+    check(restarted, "relaunch awaits recovery and playback")
+    guard restarted else { return }
     check(desktop.images.values.allSatisfy { $0.url == controller.blackImageURL }, "relaunch recovers stale entries and starts black")
     NSApp.sendAction(NSSelectorFromString("togglePlayback:"), to: relaunched, from: nil)
     check(desktop.images["first"]?.url.path == "/new-after-failed-quit.jpg",
           "relaunch captures a newer user choice instead of restoring a stale original")
-    relaunched.applicationWillTerminate(Notification(name: NSApplication.willTerminateNotification))
 }
 
 /// Exercises installation discovery and persistent menu state without touching real installations.

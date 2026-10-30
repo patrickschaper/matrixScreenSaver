@@ -1,4 +1,60 @@
+import AppKit
+import CoreText
 import Foundation
+
+/// Rain repertoires; film presets pair their original artwork with the matching bundled font.
+enum RainGlyphSet: String, CaseIterable {
+    /// Existing built-in or user-customized rain.
+    case `default`
+    /// Original trilogy glyph artwork.
+    case classic
+    /// Expanded Matrix Resurrections glyph artwork.
+    case resurrections
+
+    /// Display label in the Rain options radio group.
+    var title: String {
+        switch self {
+        case .default: return "Default"
+        case .classic: return "Classic"
+        case .resurrections: return "Resurrections"
+        }
+    }
+
+    /// Bundled font resource name, also used as the rain cache's font identity.
+    var fontName: String? {
+        switch self {
+        case .default: return nil
+        case .classic: return "Matrix-Code"
+        case .resurrections: return "Matrix-Resurrected"
+        }
+    }
+
+    /// Website atlas slots, including Classic's blank and repeated zero to preserve their probability.
+    /// Mapping provenance is recorded in Resources/Fonts/README.md; glyph order.txt is only approximate.
+    var scalars: [UnicodeScalar]? {
+        switch self {
+        case .default: return nil
+        case .classic:
+            return Array("ホア3ウ セ¦:\"\u{E937}ミラリ╌ツテニハソ▪ー<>0|+*コシマムメモエヤキオカ7ケサスz152ヨタワ4ネヌナ98ヒ0".unicodeScalars)
+        case .resurrections:
+            return (0xE900...0xE986).compactMap(UnicodeScalar.init)
+        }
+    }
+
+    /// File-backed descriptors avoid globally registering or depending on installed font versions.
+    static let fontDescriptors: [String: NSFontDescriptor] = {
+        var fonts: [String: NSFontDescriptor] = [:]
+        let bundle = Bundle(for: NativeMatrixRenderer.self)
+        for preset in allCases {
+            guard let name = preset.fontName,
+                  let url = bundle.url(forResource: name, withExtension: "ttf", subdirectory: "Fonts"),
+                  let descriptors = CTFontManagerCreateFontDescriptorsFromURL(url as CFURL) as? [CTFontDescriptor],
+                  let descriptor = descriptors.first else { continue }
+            fonts[name] = descriptor as NSFontDescriptor
+        }
+        return fonts
+    }()
+}
 
 final class NativeMatrixRenderer {
     struct Configuration: Equatable {
@@ -21,6 +77,10 @@ final class NativeMatrixRenderer {
          var frameRate = 25.0
         var errorRate = 1.0
         var characters = ""
+        /// Installed font families used for the rain glyphs. Empty keeps the built-in glyphs and system font.
+        var rainFonts: [String] = []
+        /// Film presets override rendering without discarding the user's custom fonts or characters.
+        var rainGlyphSet: RainGlyphSet = .default
         var neoMessageName = ""
         var neoMessageLines: [String] = []
         /// When true the 10-second multi-screen sync delay is skipped so scenes
@@ -49,6 +109,8 @@ final class NativeMatrixRenderer {
                  frameRate: min(max(frameRate, MatrixRendererLimits.minimumFrameRate), MatrixRendererLimits.maximumFrameRate),
                 errorRate: max(errorRate, MatrixRendererLimits.minimumErrorRate),
                 characters: characters,
+                rainFonts: rainFonts,
+                rainGlyphSet: rainGlyphSet,
                 neoMessageName: neoMessageName.trimmingCharacters(in: .whitespacesAndNewlines),
                 neoMessageLines: neoMessageLines.isEmpty ? NeoMessageScene.lines(forName: neoMessageName) : neoMessageLines,
                 skipSyncDelay: skipSyncDelay
@@ -229,9 +291,12 @@ final class NativeMatrixRenderer {
     private static let maxSimulationStepsPerTick = 2
     private static let disableBoldFlag: UInt32 = 0x1
     private static let blankRenderCell = RenderCell()
+    /// Half-width katakana characters used by the built-in rain.
+    private static let defaultKatakanaGlyphs = (0..<46).compactMap { UnicodeScalar(0xFF70 + $0) }
+
     private static let defaultGlyphPool: [UnicodeScalar] = {
         var glyphs = Array("0123456789".unicodeScalars)
-        glyphs.append(contentsOf: (0..<46).compactMap { UnicodeScalar(0xFF70 + $0) })
+        glyphs.append(contentsOf: defaultKatakanaGlyphs)
         glyphs.append(contentsOf: "<>*+.:=_|".unicodeScalars)
         // Printable ASCII for terminal text lines
         glyphs.append(contentsOf: (0x20..<0x7F).compactMap { UnicodeScalar($0) })
@@ -239,13 +304,80 @@ final class NativeMatrixRenderer {
         glyphs.append(UnicodeScalar(0x2588)!)
         return glyphs
     }()
+    /// Glyph tables derived from the rain fonts the user selected.
+    struct RainFontTables {
+        /// Glyph keys per font, selected with equal probability across fonts.
+        var pools: [[UnicodeScalar]] = []
+        /// Font family each glyph key is drawn with.
+        var fontByScalar: [UnicodeScalar: String] = [:]
+        /// Private-use glyph key to the character drawn in its selected font.
+        var sourceByScalar: [UnicodeScalar: UnicodeScalar] = [:]
+        /// Upper bound on glyphs taken from one font, sampled evenly, to keep the glyph cache small.
+        static let maximumGlyphsPerFont = 512
+    }
+
+    /// Samples a font's repertoire while retaining default or custom characters for macOS fallback.
+    /// - Parameters:
+    ///   - name: Installed font family or font name.
+    ///   - characters: Custom rain characters; empty uses the font's BMP repertoire.
+    /// - Returns: At most `maximumGlyphsPerFont` characters; missing glyphs are resolved at rasterization.
+    static func glyphEntries(forFont name: String, characters: String = "") -> [UnicodeScalar] {
+        guard let font = RainFontCatalog.font(named: name, size: 16) else { return [] }
+        let cs = CTFontCopyCharacterSet(font) as CharacterSet
+        let defaults = Set(defaultGlyphPool)
+        var out = [UnicodeScalar]()
+        let values = characters.isEmpty
+            ? Array(UInt32(0x21)...UInt32(0xFFFF))
+            : Array(Set(characters.unicodeScalars.map(\.value))).sorted()
+        for v in values {
+            guard let sc = UnicodeScalar(v), cs.contains(sc) || !characters.isEmpty || defaults.contains(sc),
+                  v != 0xA0, v != 0x2028, v != 0x2029, v != 0x2588,
+                  !CharacterSet.whitespacesAndNewlines.contains(sc),
+                  !CharacterSet.controlCharacters.contains(sc) else { continue }
+            out.append(sc)
+        }
+        let limit = RainFontTables.maximumGlyphsPerFont
+        guard out.count > limit else { return out }
+        // Keep the default repertoire intact instead of sampling away characters that need fallback.
+        let required = characters.isEmpty ? out.filter { defaults.contains($0) } : []
+        let requiredSet = Set(required)
+        let remaining = out.filter { !requiredSet.contains($0) }
+        let count = limit - required.count
+        let step = Double(remaining.count) / Double(count)
+        return required + (0..<count).map { remaining[Int(Double($0) * step)] }
+    }
+
+    /// Builds the glyph tables for the selected rain fonts, skipping fonts that are not installed.
+    /// - Parameters:
+    ///   - fonts: Selected families, with duplicates ignored and at most eight used.
+    ///   - characters: Optional custom character restriction applied before sampling.
+    ///   - glyphSet: Film presets supply their complete repertoire instead of sampling the font.
+    /// - Returns: Disjoint private-use keys for every font, including shared characters.
+    static func makeRainTables(fonts: [String], characters: String = "", glyphSet: RainGlyphSet = .default) -> RainFontTables {
+        var tables = RainFontTables()
+        var seen = Set<String>()
+        let names = fonts.filter { seen.insert($0).inserted }.prefix(8)
+        for (fontIndex, name) in names.enumerated() {
+            var pool = [UnicodeScalar]()
+            for (index, source) in (glyphSet.scalars ?? glyphEntries(forFont: name, characters: characters)).enumerated() {
+                // Each font owns separate keys so shared glyphs cannot steal another font's weight.
+                let key = UnicodeScalar(0xF0000 + fontIndex * RainFontTables.maximumGlyphsPerFont + index)!
+                pool.append(key)
+                tables.fontByScalar[key] = name
+                tables.sourceByScalar[key] = source
+            }
+            if !pool.isEmpty { tables.pools.append(pool) }
+        }
+        return tables
+    }
+
     private static let palette = makePalette()
 
     /// Returns the glyph pool for the given characters string, deduplicating and falling back to the default pool when empty.
-    private static func resolveGlyphPool(characters: String) -> [UnicodeScalar] {
+    private static func resolveGlyphPool(characters: String, fallback: [UnicodeScalar]) -> [UnicodeScalar] {
         let trimmed = characters.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            return defaultGlyphPool
+            return fallback
         }
         var seen = Set<UnicodeScalar>()
         var pool = [UnicodeScalar]()
@@ -257,7 +389,7 @@ final class NativeMatrixRenderer {
                 pool.append(scalar)
             }
         }
-        return pool.isEmpty ? defaultGlyphPool : pool
+        return pool.isEmpty ? fallback : pool
     }
 
     /// The content margin (in cells) used for the text row and columns in number/neo scenes.
@@ -283,6 +415,21 @@ final class NativeMatrixRenderer {
 
     private var configuration = Configuration().sanitized()
     private var activeGlyphPool: [UnicodeScalar] = NativeMatrixRenderer.defaultGlyphPool
+    /// Active rain characters in pool order, resolving private-use cache aliases for the options preview.
+    var rainGlyphs: [UnicodeScalar] {
+        activeGlyphPool.map { rainSourceByScalar[$0] ?? $0 }
+    }
+
+    /// When set, each rain glyph picks a selected font at random, then a glyph within it.
+    private var activeMixPools: [[UnicodeScalar]]? = nil
+    /// Glyph tables for the current `activeRainFonts`.
+    private var rainTables = RainFontTables()
+    /// Rain font families the glyph tables were built for.
+    private(set) var activeRainFonts: [String] = []
+    /// Font family to draw each rain glyph key with.
+    private(set) var rainFontByScalar: [UnicodeScalar: String] = [:]
+    /// Character actually drawn for aliased glyph keys.
+    private(set) var rainSourceByScalar: [UnicodeScalar: UnicodeScalar] = [:]
 
     var supportedScalars: [UnicodeScalar] {
         let defaultSet = Set(Self.defaultGlyphPool)
@@ -521,7 +668,23 @@ final class NativeMatrixRenderer {
             pendingSimulationSteps = 0.0
         }
 
-        activeGlyphPool = Self.resolveGlyphPool(characters: sanitizedConfiguration.characters)
+        let glyphsChanged = sanitizedConfiguration.rainFonts != previousConfiguration.rainFonts ||
+            sanitizedConfiguration.characters != previousConfiguration.characters ||
+            sanitizedConfiguration.rainGlyphSet != previousConfiguration.rainGlyphSet
+        if glyphsChanged {
+            activeRainFonts = sanitizedConfiguration.rainGlyphSet.fontName.map { [$0] } ?? sanitizedConfiguration.rainFonts
+            rainTables = Self.makeRainTables(fonts: activeRainFonts,
+                                            characters: sanitizedConfiguration.characters.trimmingCharacters(in: .whitespacesAndNewlines),
+                                            glyphSet: sanitizedConfiguration.rainGlyphSet)
+            rainFontByScalar = rainTables.fontByScalar
+            rainSourceByScalar = rainTables.sourceByScalar
+        }
+        let fontPoolUnion = rainTables.pools.flatMap { $0 }
+        activeGlyphPool = fontPoolUnion.isEmpty ? Self.resolveGlyphPool(
+            characters: sanitizedConfiguration.characters,
+            fallback: Self.defaultGlyphPool
+        ) : fontPoolUnion
+        activeMixPools = rainTables.pools.count > 1 ? rainTables.pools : nil
 
         let shouldResetSceneSequence =
             columns > 0 &&
@@ -539,6 +702,9 @@ final class NativeMatrixRenderer {
             resetLayers()
             beginSceneSequence()
         } else if columns > 0, rows > 0, activeScene == .rainForever {
+            if glyphsChanged {
+                resetLayers()
+            }
             constructRenderContent()
         }
         markAllRowsDirty()
@@ -1330,7 +1496,12 @@ final class NativeMatrixRenderer {
 
     /// Returns a random glyph from the supported rain character pool.
     private func randomGlyph() -> UnicodeScalar {
-        activeGlyphPool.randomElement(using: &rainRNG) ?? UnicodeScalar("0")
+        if let pools = activeMixPools,
+           let pool = pools.randomElement(using: &rainRNG),
+           let glyph = pool.randomElement(using: &rainRNG) {
+            return glyph
+        }
+        return activeGlyphPool.randomElement(using: &rainRNG) ?? UnicodeScalar("0")
     }
 
     /// Returns a random ASCII numeral for the startup number scene.
@@ -1558,5 +1729,78 @@ final class NativeMatrixRenderer {
         result.insert(TerminalColor(red: 0, green: 63, blue: 0), at: 1)
         result.insert(TerminalColor(red: 0, green: 32, blue: 0), at: 1)
         return result
+    }
+}
+
+/// Lists installed font families and resolves them for rain rendering.
+enum RainFontCatalog {
+    /// File-backed families omitted by the system's selectable-font enumeration.
+    private static var hiddenFonts: [String: NSFontDescriptor] = [:]
+    /// Modification dates avoid reparsing font files on every menu click.
+    private static var fontFileInventory: [URL: Date]?
+
+    /// Discovers font metadata in the standard system, local, network, and user font folders.
+    private static func refreshHiddenFonts() {
+        let manager = FileManager.default
+        let roots = manager.urls(for: .libraryDirectory, in: .allDomainsMask).map { $0.appendingPathComponent("Fonts") }
+        let keys: [URLResourceKey] = [.isRegularFileKey, .contentModificationDateKey]
+        var inventory: [URL: Date] = [:]
+        for root in roots {
+            guard let files = manager.enumerator(at: root, includingPropertiesForKeys: keys, options: [.skipsPackageDescendants]) else { continue }
+            for case let url as URL in files {
+                guard ["ttf", "otf", "ttc", "otc", "dfont", "suit"].contains(url.pathExtension.lowercased()),
+                      let values = try? url.resourceValues(forKeys: Set(keys)), values.isRegularFile == true else { continue }
+                inventory[url] = values.contentModificationDate ?? .distantPast
+            }
+        }
+        guard inventory != fontFileInventory else { return }
+        let publicFamilies = Set(NSFontManager.shared.availableFontFamilies)
+        var discovered: [String: NSFontDescriptor] = [:]
+        for url in inventory.keys.sorted(by: { $0.path < $1.path }) {
+            guard let descriptors = CTFontManagerCreateFontDescriptorsFromURL(url as CFURL) as? [CTFontDescriptor] else { continue }
+            for descriptor in descriptors {
+                guard let family = CTFontDescriptorCopyAttribute(descriptor, kCTFontFamilyNameAttribute) as? String,
+                      !publicFamilies.contains(family) else { continue }
+                let candidate = descriptor as NSFontDescriptor
+                if let current = discovered[family], fontStyleScore(current) <= fontStyleScore(candidate) { continue }
+                discovered[family] = candidate
+            }
+        }
+        hiddenFonts = discovered
+        fontFileInventory = inventory
+    }
+
+    /// Prefers upright faces with weight nearest regular when a file contains multiple styles.
+    /// - Parameter descriptor: File-backed face to rank.
+    /// - Returns: A lower score for a more neutral style.
+    private static func fontStyleScore(_ descriptor: NSFontDescriptor) -> Double {
+        let traits = descriptor.object(forKey: .traits) as? [NSFontDescriptor.TraitKey: Any]
+        let weight = (traits?[.weight] as? NSNumber)?.doubleValue ?? 0
+        return abs(weight) + (descriptor.symbolicTraits.contains(.italic) ? 10 : 0)
+    }
+
+    /// Resolves a family, PostScript or full font name to a font.
+    static func font(named name: String, size: CGFloat) -> NSFont? {
+        if let descriptor = RainGlyphSet.fontDescriptors[name] {
+            return NSFont(descriptor: descriptor, size: size)
+        }
+        if fontFileInventory == nil { refreshHiddenFonts() }
+        if let descriptor = hiddenFonts[name] {
+            // A descriptor retains the file URL; resolving a hidden name alone may substitute Times.
+            return NSFont(descriptor: descriptor, size: size)
+        }
+        return NSFont(name: name, size: size)
+            ?? NSFontManager.shared.font(withFamily: name, traits: [], weight: 5, size: size)
+    }
+
+    /// Lists installed font families, retaining selected names for deselection.
+    /// - Parameter alwaysInclude: Selected families to keep available for deselection.
+    /// - Returns: Unique family names in localized alphabetical order.
+    static func families(alwaysInclude: [String]) -> [String] {
+        refreshHiddenFonts()
+        let all = Set(NSFontManager.shared.availableFontFamilies).union(hiddenFonts.keys)
+        var names = all
+        names.formUnion(alwaysInclude)
+        return names.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
     }
 }
