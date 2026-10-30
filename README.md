@@ -41,10 +41,20 @@ The saver exposes a native **Options…** sheet. The values are stored with `Scr
 | Error rate | Set the factor for the rate of character changes. A non-negative number. | 1.0 |
 | Characters | Restrict rain glyphs to a custom set (e.g. ATGC). Leave empty for the default. | *(empty)* |
 | Neo message scene | Show the Neo message intro before the main scene. | On |
-| Neo message speed | Typing and pause speed multiplier for the Neo message intro. A positive number. | 1.0 |
-| Neo message lines | Lines typed during the Neo message intro. Between 1 and 10 lines, up to 256 characters each. | The 4 classic lines |
+| Typing speed | Typing speed multiplier for Neo messages, custom command entry and the trace program. A positive number; pauses keep their natural duration. Output is not typed. | 1.0 |
+| Name | Name used in the intro message ("Wake up, {name}..."). Only applies when Neo message lines is empty. | *(empty — uses "Neo")* |
+| Neo message lines | Custom lines typed during the Neo message intro, up to 10 lines / 256 characters each. Leave empty to use the Name-based default message instead. | *(empty)* |
+| Show custom scene | Animate each command using trace's initial cursor blink, natural typing rhythm and final pause, then clear it and execute it. Uses the general typing speed. Only output is shown afterward, appearing immediately as it arrives from the top row. Full screens scroll upward; wide rows are clipped without wrapping. Each command clears the screen first. Commands use a size-configured terminal with combined stdout/stderr and receive `COLUMNS`, `LINES`, and `stty size`. No keyboard input is provided. Commands run until exit or cancellation, not a fixed 12-second deadline; use `ping -c 100 google.com` for 100 replies. A command that never exits keeps its scene active until stopped. Displayed output is limited to the first 64 KiB; excess output is drained. Configure commands with **Edit…** in **Intro scenes**. Skipped if disabled or empty; the enabled trace program follows. | Off |
+| Output hold (seconds) | Keep each command's output visible after it finishes, before the next command or scene. Non-negative seconds; 0 advances immediately. | 10 |
+| command playback | Radio buttons select all commands in sequence, one random command, or all commands in random order on each scene entry. Random order runs every command once and reshuffles each cycle; all displays agree on the pick or order. Add, edit, remove, or drag command rows to change their execution order in **Edit…**. Both whole-list modes finish each command and its message playback before running the next. | One random command |
 | Scan lines intensity | Opacity of the CRT scan line overlay (0 = off, 100 = fully opaque). | 25 |
 | Scan lines vertical | Orientation of the scan line overlay (vertical or horizontal). | On (vertical) |
+
+Custom shell commands execute through `/bin/sh` with the host's permissions.
+Only enter commands you trust, and avoid sensitive command text or output: both are visible on the screen saver,
+including while the screen is locked. Command text and output are not logged. Live commands run
+until exit and retain at most 64 KiB of combined output; stopping or restarting playback
+cancels its command. The sandboxed screen saver may not have the same access as the wallpaper app.
 
 ### Wallpaper menubar menu
 
@@ -57,13 +67,14 @@ The saver exposes a native **Options…** sheet. The values are stored with `Scr
 - Native Swift/AppKit screen saver bundle
 - Edge-to-edge full-screen saver output, with terminal-style chrome kept in the preview host
 - In-process renderer for `rain-forever` with an optional upstream `number` intro
-- Native **Options…** sheet for Number scene, Twinkle, Diffuse, Character size, Rain density, Frame rate, Error rate, Characters, Neo message scene/speed/lines, and Scan lines
+- Native **Options…** sheet for Number scene, Twinkle, Diffuse, Character size, Rain density, Frame rate, Error rate, Characters, Neo message scene/speed/lines, custom shell commands/playback, and Scan lines
 - Preview app for fast iteration without reinstalling
 
 ### Repository layout
 
 - `Sources/MatrixScreenSaver/MatrixScreenSaverView.swift` - screen saver view, layout, drawing, and option wiring
 - `Sources/MatrixScreenSaver/NativeMatrixRenderer.swift` - native Matrix scene renderer
+- `Sources/MatrixScreenSaver/CmdCaptureScene.swift` - streams command output into scrolling terminal rows before the full trace program
 - `Sources/MatrixScreenSaver/MatrixScreenSaverOptions.swift` - options model and native configure sheet
 - `Sources/MatrixScreenSaver/TerminalSupport.swift` - small shared terminal types used by the active renderer
 - `Scripts/install-saver.sh` - shared ditto-based installer used by local installs

@@ -5,6 +5,7 @@ func wallpaperAppTests() {
     wallpaperIconTests()
     wallpaperSyncMenuTests()
     wallpaperDeferredLaunchTests()
+    wallpaperBackgroundFailureTests()
     let suite = "MatrixWallpaperPlaybackTests.\(UUID().uuidString)"
     let defaults = UserDefaults(suiteName: suite)!
     defer { defaults.removePersistentDomain(forName: suite) }
@@ -141,7 +142,20 @@ func wallpaperAppTests() {
     wait(0.1)
     let optionsWindow = NSApp.windows.first { $0.isVisible && !($0 is DesktopWindow) && $0.canBecomeKey }
     check(optionsWindow != nil, "Options opens a normal native window while stopped")
+    let saverOptionsHost = MatrixScreenSaverView(frame: NSRect(x: 0, y: 0, width: 640, height: 360), isPreview: true)!
+    let saverOptionsWindow = saverOptionsHost.configureSheet
+    let saverOptionsController: MatrixScreenSaverOptionsSheetController? = stored("optionsSheetController", in: saverOptionsHost)
+    let wallpaperOptionsController: MatrixScreenSaverOptionsSheetController? = stored("optionsController", in: host)
+    check(saverOptionsController != nil && wallpaperOptionsController != nil
+          && saverOptionsWindow === saverOptionsController?.configureSheet()
+          && optionsWindow === wallpaperOptionsController?.configureSheet(),
+          "saver and wallpaper both present the shared native options controller")
+    check(saverOptionsWindow?.contentView?.bounds.size == optionsWindow?.contentView?.bounds.size,
+          "saver sheet and wallpaper options window use identical dialog dimensions")
     check(desktopWindowCount() == 0, "opening Options does not start stopped playback")
+    if let controller = wallpaperOptionsController, let window = optionsWindow {
+        wallpaperEditingShortcutTests(controller: controller, window: window)
+    }
     optionsWindow?.performClose(nil)
 
     NSApp.sendAction(NSSelectorFromString("togglePlayback:"), to: host, from: nil)
@@ -158,6 +172,50 @@ func wallpaperAppTests() {
     NotificationCenter.default.post(name: NSApplication.didChangeScreenParametersNotification, object: nil)
     check(desktopWindowCount() == 0, "Quit unregisters system observers")
     wallpaperTerminationRecoveryTests()
+}
+
+/// Checks registered shortcuts against the real field editor without requiring foreground activation.
+private func wallpaperEditingShortcutTests(controller: MatrixScreenSaverOptionsSheetController, window: NSWindow) {
+    guard let field: NSTextField = stored("nameField", in: controller) else {
+        check(false, "options exposes an editable name field")
+        return
+    }
+    let pasteboard = NSPasteboard.general
+    let savedItems = (pasteboard.pasteboardItems ?? []).map { item in
+        let saved = NSPasteboardItem()
+        for type in item.types {
+            if let data = item.data(forType: type) { saved.setData(data, forType: type) }
+        }
+        return saved
+    }
+    let original = field.stringValue
+    let wasEnabled = field.isEnabled
+    let root: NSStackView? = stored("rootStack", in: controller)
+    let tabs = root?.arrangedSubviews.compactMap { $0 as? NSTabView }.first
+    let selectedTab = tabs?.selectedTabViewItem
+    tabs?.selectTabViewItem(at: 1)
+    defer {
+        field.stringValue = original
+        field.isEnabled = wasEnabled
+        if let selectedTab { tabs?.selectTabViewItem(selectedTab) }
+        pasteboard.clearContents()
+        pasteboard.writeObjects(savedItems)
+    }
+    field.isEnabled = true
+    field.stringValue = "Neo"
+    window.makeKeyAndOrderFront(nil)
+    check(window.makeFirstResponder(field) && field.currentEditor() != nil, "options field receives editing focus")
+    func shortcut(_ key: String) -> Bool {
+        guard let item = NSApp.mainMenu?.item(withTitle: "Edit")?.submenu?.items.first(where: {
+            $0.keyEquivalent == key && $0.keyEquivalentModifierMask == .command
+        }), item.target == nil, let action = item.action, let editor = field.currentEditor() else { return false }
+        return NSApp.sendAction(action, to: editor, from: item)
+    }
+    check(shortcut("a") && (field.currentEditor() as? NSTextView)?.selectedRange() == NSRange(location: 0, length: 3),
+          "Command-A selects the focused options field")
+    check(shortcut("c") && pasteboard.string(forType: .string) == "Neo", "Command-C copies selected dialog text")
+    check(shortcut("x") && field.currentEditor()?.string == "", "Command-X cuts selected dialog text")
+    check(shortcut("v") && field.currentEditor()?.string == "Neo", "Command-V pastes into the focused dialog field")
 }
 
 /// Exercises launch cancellation and notifications before the queued continuation can run.
@@ -264,6 +322,46 @@ private func wallpaperDeferredLaunchTests() {
     workspace.post(name: NSWorkspace.sessionDidBecomeActiveNotification, object: nil)
     check(desktopWindowCount() == NSScreen.screens.count && ScreenSyncCoordinator.shared.registeredCount == NSScreen.screens.count,
           "resuming deferred launch starts one session using the current displays")
+}
+
+/// A desktop without readable originals must not block animation or lose its wallpaper.
+private func wallpaperBackgroundFailureTests() {
+    let suite = "MatrixWallpaperBackgroundFailureTests.\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: suite)!
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let desktop = DesktopWallpaperFixture()
+    desktop.unreadable = ["first"]
+    let controller = desktop.controller()
+    let host = WallpaperApp(defaults: defaults, desktopWallpaper: controller)
+    var alerts = 0
+    // Dismiss a regression's modal alert so the failing test cannot hang waiting for a click.
+    let dismissAlert = Timer(timeInterval: 0.02, repeats: true) { _ in
+        guard let window = NSApp.modalWindow else { return }
+        alerts += 1
+        NSApp.abortModal()
+        window.orderOut(nil)
+    }
+    RunLoop.main.add(dismissAlert, forMode: .default)
+    RunLoop.main.add(dismissAlert, forMode: .modalPanel)
+    defer {
+        dismissAlert.invalidate()
+        host.applicationWillTerminate(Notification(name: NSApplication.willTerminateNotification))
+    }
+    host.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
+    check(eventually(10) { desktopWindowCount() == NSScreen.screens.count },
+          "an unreadable original wallpaper does not block animation on any display")
+    check(alerts == 0 && NSApp.modalWindow == nil,
+          "failure to set the black background is logged without a modal alert")
+    check(desktop.images["first"]?.url.path == "/original-a.jpg"
+          && desktop.images["second"]?.url == controller.blackImageURL,
+          "a display without a saved original stays untouched while other backgrounds turn black")
+    NSApp.sendAction(NSSelectorFromString("togglePlayback:"), to: host, from: nil)
+    check(desktop.images["second"]?.url.path == "/original-b.jpg",
+          "Stop restores saved backgrounds after a partial black-background failure")
+    desktop.unreadable = []
+    NSApp.sendAction(NSSelectorFromString("togglePlayback:"), to: host, from: nil)
+    check(desktop.images.values.allSatisfy { $0.url == controller.blackImageURL },
+          "a later Start retries the background once its original is readable")
 }
 
 /// Ensures a failed restore cannot block Quit and stale entries cannot replace a newer choice.

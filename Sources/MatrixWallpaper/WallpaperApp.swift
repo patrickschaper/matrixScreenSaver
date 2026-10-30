@@ -90,6 +90,7 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// Installs menu controls and observers, then queues desktop recovery and playback on the main run loop.
     func applicationDidFinishLaunching(_ notification: Notification) {
+        installEditingMenu()
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let url = Bundle.main.url(forResource: "MenuBarIcon", withExtension: "pdf"),
            let image = NSImage(contentsOf: url) {
@@ -157,6 +158,22 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         pendingLaunch = startup
         DispatchQueue.main.async(execute: startup)
+    }
+
+    /// Provides standard text shortcuts through the focused dialog's responder chain.
+    private func installEditingMenu() {
+        let mainMenu = NSMenu()
+        mainMenu.addItem(NSMenuItem())
+        mainMenu.items[0].submenu = NSMenu()
+        let editItem = NSMenuItem(title: "Edit", action: nil, keyEquivalent: "")
+        let editMenu = NSMenu(title: "Edit")
+        editMenu.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        editMenu.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        editMenu.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        editItem.submenu = editMenu
+        mainMenu.addItem(editItem)
+        NSApp.mainMenu = mainMenu
     }
 
     /// Refreshes both optional controls when installations or system settings change.
@@ -304,10 +321,12 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         } catch {
             let message = error.localizedDescription
             NSLog("Matrix Wallpaper desktop image: %@", message)
+            // Black is cosmetic; keep animation running without hiding restore failures.
+            guard restoring else { return }
             guard lastWallpaperError != message else { return }
             lastWallpaperError = message
             let alert = NSAlert()
-            alert.messageText = restoring ? "Could not restore the desktop wallpaper" : "Could not set the desktop to black"
+            alert.messageText = "Could not restore the desktop wallpaper"
             alert.informativeText = "\(message)\nSaved wallpaper settings are kept for retry on Stop or the next launch."
             alert.runModal()
         }
