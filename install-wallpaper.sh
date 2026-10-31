@@ -2,9 +2,10 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
-SOURCE_BUNDLE="${1:-$ROOT_DIR/build/MatrixWallpaper.app}"
+SOURCE_BUNDLE="${1:-$ROOT_DIR/build/Matrix Wallpaper.app}"
 INSTALL_DIR="$HOME/Applications"
-INSTALL_BUNDLE="$INSTALL_DIR/MatrixWallpaper.app"
+INSTALL_BUNDLE="$INSTALL_DIR/Matrix Wallpaper.app"
+LEGACY_BUNDLE="$INSTALL_DIR/MatrixWallpaper.app"
 
 if ! osascript -l JavaScript <<'JXA'
 ObjC.import('AppKit');
@@ -51,6 +52,11 @@ if ! verify_bundle "$SOURCE_BUNDLE"; then
   exit 1
 fi
 
+if [[ -d "$INSTALL_BUNDLE" ]] && ! verify_bundle "$INSTALL_BUNDLE"; then
+  echo "Refusing to replace an unrecognized app: $INSTALL_BUNDLE" >&2
+  exit 1
+fi
+
 mkdir -p "$INSTALL_DIR"
 STAGING="$(mktemp -d "$INSTALL_DIR/.MatrixWallpaper-install.XXXXXX")"
 
@@ -62,6 +68,12 @@ cleanup() {
       return 1
     fi
   fi
+  if [[ "$result" -ne 0 && -d "$STAGING/legacy.app" && ! -e "$LEGACY_BUNDLE" ]]; then
+    if ! mv "$STAGING/legacy.app" "$LEGACY_BUNDLE"; then
+      echo "Restore failed. Your previous app is preserved at $STAGING/legacy.app" >&2
+      return 1
+    fi
+  fi
   rm -rf "$STAGING"
   return "$result"
 }
@@ -69,10 +81,10 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-ditto "$SOURCE_BUNDLE" "$STAGING/MatrixWallpaper.app"
-verify_bundle "$STAGING/MatrixWallpaper.app"
+ditto "$SOURCE_BUNDLE" "$STAGING/Matrix Wallpaper.app"
+verify_bundle "$STAGING/Matrix Wallpaper.app"
 SOURCE_HASH="$(shasum -a 256 "$SOURCE_BUNDLE/Contents/MacOS/MatrixWallpaper" | awk '{print $1}')"
-COPIED_HASH="$(shasum -a 256 "$STAGING/MatrixWallpaper.app/Contents/MacOS/MatrixWallpaper" | awk '{print $1}')"
+COPIED_HASH="$(shasum -a 256 "$STAGING/Matrix Wallpaper.app/Contents/MacOS/MatrixWallpaper" | awk '{print $1}')"
 if [[ "$SOURCE_HASH" != "$COPIED_HASH" ]]; then
   echo "Copied executable does not match the source; installation cancelled." >&2
   exit 1
@@ -81,6 +93,10 @@ fi
 if [[ -d "$INSTALL_BUNDLE" ]]; then
   mv "$INSTALL_BUNDLE" "$STAGING/previous.app"
 fi
-mv "$STAGING/MatrixWallpaper.app" "$INSTALL_BUNDLE"
+# Keep the old bundle for rollback until promotion succeeds; ignore unrelated bundles and symlinks.
+if [[ ! -L "$LEGACY_BUNDLE" && -d "$LEGACY_BUNDLE" ]] && verify_bundle "$LEGACY_BUNDLE" >/dev/null 2>&1; then
+  mv "$LEGACY_BUNDLE" "$STAGING/legacy.app"
+fi
+mv "$STAGING/Matrix Wallpaper.app" "$INSTALL_BUNDLE"
 echo "Installed $INSTALL_BUNDLE"
 echo "Double-click it in Finder, or run: open \"$INSTALL_BUNDLE\""

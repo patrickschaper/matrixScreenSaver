@@ -8,11 +8,12 @@ ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "Scripts/update-homebrew-tap.py"
 TEMPLATE = (ROOT / "Homebrew/Casks/matrix-screen-saver.rb").read_text()
 LEGACY = (ROOT / "Tests/Homebrew/fixtures/legacy-screen-saver.rb").read_text()
+LEGACY_WALLPAPER = (ROOT / "Tests/Homebrew/fixtures/legacy-wallpaper.rb").read_text()
 
 
-def cask(version="1.2.3", digest="a" * 64, floor="sequoia"):
+def cask(version="1.2.3", digest="a" * 64, floor="sequoia", app="Matrix Wallpaper.app"):
     import re
-    text = re.sub(r'^  version "[^"]+"$', f'  version "{version}"', TEMPLATE, flags=re.M)
+    text = re.sub(r'^  version "[^"]+"$', f'  version "{version}"', TEMPLATE.replace("MatrixWallpaper.app", app), flags=re.M)
     text = re.sub(r'^  sha256 "[^"]+"$', f'  sha256 "{digest}"', text, flags=re.M)
     return re.sub(r'^  depends_on macos: :\w+$', f'  depends_on macos: :{floor}', text, flags=re.M)
 
@@ -42,7 +43,7 @@ class TapUpdateTest(unittest.TestCase):
         spec.loader.exec_module(self.module)
 
     def test_known_saver_only_cask_migrates_without_allowing_unrelated_changes(self):
-        self.assertIn('app "MatrixWallpaper.app"', cask())
+        self.assertIn('app "Matrix Wallpaper.app", target: "Matrix Wallpaper.app"', cask())
         api = FakeAPI(LEGACY)
         self.module.update(api, "owner/homebrew-test", "1.2.3", cask())
         self.assertEqual(cask(), api.content)
@@ -53,6 +54,22 @@ class TapUpdateTest(unittest.TestCase):
             with self.subTest(content=content), self.assertRaises(ValueError):
                 self.module.update(api, "owner/homebrew-test", "1.2.3", cask())
             self.assertTrue(all(method == "GET" for method, _, _ in api.calls))
+
+    def test_old_name_dual_bundle_cask_migrates_without_allowing_unrelated_changes(self):
+        for app in ("MatrixWallpaper.app", "Matrix Wallpaper.app"):
+            with self.subTest(app=app):
+                api = FakeAPI(LEGACY_WALLPAPER)
+                self.module.update(api, "owner/homebrew-test", "1.2.3", cask(app=app))
+                self.assertEqual(cask(app=app), api.content)
+                api = FakeAPI(LEGACY_WALLPAPER + "# unreviewed change\n")
+                with self.assertRaises(ValueError):
+                    self.module.update(api, "owner/homebrew-test", "1.2.3", cask(app=app))
+                self.assertTrue(all(method == "GET" for method, _, _ in api.calls))
+
+    def test_old_archive_source_upgrades_to_renamed_archive_source(self):
+        api = FakeAPI(cask("1.2.3", app="MatrixWallpaper.app"))
+        self.module.update(api, "owner/homebrew-test", "1.2.4", cask("1.2.4"))
+        self.assertEqual(cask("1.2.4"), api.content)
 
     def test_legacy_migration_never_rewrites_same_or_newer_version(self):
         for version in ("0.1.0", "0.2.0"):

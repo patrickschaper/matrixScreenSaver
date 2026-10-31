@@ -77,9 +77,12 @@ exit "${SIGN_FAILURE:-0}"
         response = self.directory / "response.plist"
         response.write_bytes(plistlib.dumps({"status": status, "id": "test-id"}))
         self.env["NOTARY_RESPONSE"] = str(response)
-        self.stub("ditto", 'printf "%s\\n" "$*" >> "$COMMAND_LOG"\n')
+        self.stub("ditto", '''printf '%s\\n' "$*" >> "$COMMAND_LOG"
+if [[ "$1" == -c ]]; then [[ "$#" == 5 ]]; else [[ "$#" == 2 ]]; fi
+''')
         self.stub("xcrun", '''printf '%s\\n' "$*" >> "$COMMAND_LOG"
 if [[ "$1 $2" == 'notarytool submit' ]]; then cat "$NOTARY_RESPONSE"; fi
+if [[ "$1" == stapler ]]; then [[ "$#" == 3 ]]; fi
 if [[ "$1 $2" == 'stapler staple' ]]; then exit "${STAPLE_FAILURE:-0}"; fi
 ''')
 
@@ -89,7 +92,7 @@ if [[ "$1 $2" == 'stapler staple' ]]; then exit "${STAPLE_FAILURE:-0}"; fi
         self.assertEqual(0, result.returncode, result.stderr)
         commands = self.log.read_text()
         self.assertIn("--keychain-profile test-profile --wait", commands)
-        for bundle in ("MatrixScreenSaver.saver", "MatrixWallpaper.app"):
+        for bundle in ("MatrixScreenSaver.saver", "Matrix Wallpaper.app"):
             self.assertIn(f"stapler staple {ROOT}/build/{bundle}", commands)
             self.assertIn(f"stapler validate {ROOT}/build/{bundle}", commands)
 
@@ -112,7 +115,7 @@ if [[ "$1 $2" == 'stapler staple' ]]; then exit "${STAPLE_FAILURE:-0}"; fi
         self.assertNotIn("secrets.DEVELOPER_ID", prepare)
         self.assertIn("SIGNING_IDENTITY: ${{ secrets.SIGNING_IDENTITY }}", publish)
         self.assertIn("APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}", publish)
-        for bundle in ("MatrixScreenSaver.saver", "MatrixWallpaper.app"):
+        for bundle in ("MatrixScreenSaver.saver", "Matrix Wallpaper.app"):
             sign_command = f'bash Scripts/sign-bundle.sh "build/{bundle}"'
             self.assertIn(sign_command, publish)
             self.assertLess(publish.index("./build-wallpaper.sh"), publish.index(sign_command))

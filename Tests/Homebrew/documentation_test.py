@@ -11,7 +11,7 @@ class DocumentationTest(unittest.TestCase):
         self.assertIn("brew trust --cask patrickschaper/tap/matrix-screen-saver", quick)
         self.assertIn("brew install --cask patrickschaper/tap/matrix-screen-saver", quick)
         self.assertLessEqual(len(quick.strip().splitlines()), 7)
-        self.assertIn("open **MatrixWallpaper** in Applications", quick)
+        self.assertIn("open **Matrix Wallpaper** in Applications", quick)
         self.assertIn("MatrixScreenSaver → Options…", quick)
         self.assertNotIn("## Homebrew install", text)
         self.assertNotIn("## Homebrew lifecycle", text)

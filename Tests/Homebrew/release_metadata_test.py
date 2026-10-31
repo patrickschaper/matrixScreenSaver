@@ -48,9 +48,29 @@ class ReleaseMetadataTest(unittest.TestCase):
         cask = (self.root / "out/Casks/matrix-screen-saver.rb").read_text()
         self.assertIn('version "1.2.3"', cask)
         self.assertIn(manifest["sha256"], cask)
+        self.assertIn('app "Matrix Wallpaper.app", target: "Matrix Wallpaper.app"', cask)
+        self.assertIn('"{{staged_path}}/Matrix Wallpaper.app"', cask)
+        self.assertNotIn("MatrixWallpaper.app", cask)
         self.assertNotIn("PLACEHOLDER", cask)
         self.assertEqual(0, self.run_render().returncode)
         self.assertEqual(cask, (self.root / "out/Casks/matrix-screen-saver.rb").read_text())
+
+    def test_immutable_old_archive_installs_with_new_name(self):
+        write_archive(self.archive, wallpaper_root="MatrixWallpaper.app")
+        result = self.run_render()
+        self.assertEqual(0, result.returncode, result.stderr)
+        cask = (self.root / "out/Casks/matrix-screen-saver.rb").read_text()
+        self.assertIn('app "MatrixWallpaper.app", target: "Matrix Wallpaper.app"', cask)
+        self.assertIn('"{{staged_path}}/MatrixWallpaper.app"', cask)
+        self.assertIn("Open {{appdir}}/Matrix Wallpaper.app", cask)
+
+    def test_rejects_archives_containing_both_app_names(self):
+        with zipfile.ZipFile(self.archive, "a") as archive:
+            archive.writestr("MatrixWallpaper.app/Contents/Info.plist", b"ambiguous")
+        result = self.run_render()
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("exactly one wallpaper app", result.stderr)
+        self.assertFalse((self.root / "out").exists())
 
     def test_rejects_invalid_inputs_without_handoff(self):
         cases = [dict(version="../oops"), dict(digest="sha256:" + "0" * 64),
@@ -87,7 +107,7 @@ class ReleaseMetadataTest(unittest.TestCase):
         write_archive(self.archive)
         with zipfile.ZipFile(self.archive) as archive:
             app = [(entry, archive.read(entry)) for entry in archive.infolist()
-                   if entry.filename.startswith("MatrixWallpaper.app/")]
+                   if entry.filename.startswith("Matrix Wallpaper.app/")]
         with zipfile.ZipFile(self.archive, "w") as archive:
             for entry, data in app:
                 archive.writestr(entry, data)
@@ -95,8 +115,8 @@ class ReleaseMetadataTest(unittest.TestCase):
         self.assertFalse((self.root / "out").exists())
 
     def test_rejects_invalid_wallpaper_metadata_and_binary(self):
-        plist_path = "MatrixWallpaper.app/Contents/Info.plist"
-        binary_path = "MatrixWallpaper.app/Contents/MacOS/MatrixWallpaper"
+        plist_path = "Matrix Wallpaper.app/Contents/Info.plist"
+        binary_path = "Matrix Wallpaper.app/Contents/MacOS/MatrixWallpaper"
         cases = [(plist_path, key, value) for key, value in [
             ("CFBundleIdentifier", "dev.patsch.Other"),
             ("CFBundleShortVersionString", "9.9.9"), ("CFBundleVersion", "9.9.9"),
@@ -129,7 +149,7 @@ class ReleaseMetadataTest(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("render_release", SCRIPT)
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
-        entry = zipfile.ZipInfo("MatrixWallpaper.app/large")
+        entry = zipfile.ZipInfo("Matrix Wallpaper.app/large")
         entry.file_size = 100_000_001
         digest = "sha256:" + hashlib.sha256(self.archive.read_bytes()).hexdigest()
         with patch.object(module.zipfile.ZipFile, "infolist", return_value=[entry]):
@@ -140,7 +160,7 @@ class ReleaseMetadataTest(unittest.TestCase):
 
     def test_archive_guards(self):
         for name, mode in [("../escape", 0), ("/absolute", 0), ("bad\\path", 0),
-                           ("Unexpected/file", 0), ("MatrixWallpaper.app/link", 0o120777),
+                           ("Unexpected/file", 0), ("Matrix Wallpaper.app/link", 0o120777),
                            ("MatrixScreenSaver.saver/Contents/Info.plist", 0)]:
             with self.subTest(name=name):
                 write_archive(self.archive)
@@ -159,11 +179,11 @@ class ReleaseMetadataTest(unittest.TestCase):
         for job in (prepare, publish):
             self.assertIn("./build.sh\n", job)
             self.assertIn("./build-wallpaper.sh\n", job)
-            for bundle in ("MatrixScreenSaver.saver", "MatrixWallpaper.app"):
+            for bundle in ("MatrixScreenSaver.saver", "Matrix Wallpaper.app"):
                 self.assertIn(f'codesign --verify --deep --strict "build/{bundle}"', job)
         self.assertLess(prepare.index('printf \'%s\\n\' "${{ steps.version.outputs.next }}" > VERSION'),
                         prepare.index("./build.sh\n"))
-        self.assertIn('ditto "build/MatrixWallpaper.app" "${release_dir}/MatrixWallpaper.app"', publish)
+        self.assertIn('ditto "build/Matrix Wallpaper.app" "${release_dir}/Matrix Wallpaper.app"', publish)
 
     def test_release_uses_highest_version_tag_not_nearest(self):
         repository = self.root / "repository"

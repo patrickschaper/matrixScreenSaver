@@ -134,7 +134,7 @@ jobs:
           ./build.sh
           ./build-wallpaper.sh
           codesign --verify --deep --strict "build/MatrixScreenSaver.saver"
-          codesign --verify --deep --strict "build/MatrixWallpaper.app"
+          codesign --verify --deep --strict "build/Matrix Wallpaper.app"
 
       - name: Update CHANGELOG
         id: changelog
@@ -456,9 +456,9 @@ jobs:
           ./build.sh
           ./build-wallpaper.sh
           bash Scripts/sign-bundle.sh "build/MatrixScreenSaver.saver"
-          bash Scripts/sign-bundle.sh "build/MatrixWallpaper.app"
+          bash Scripts/sign-bundle.sh "build/Matrix Wallpaper.app"
           codesign --verify --deep --strict "build/MatrixScreenSaver.saver"
-          codesign --verify --deep --strict "build/MatrixWallpaper.app"
+          codesign --verify --deep --strict "build/Matrix Wallpaper.app"
 
       - name: Notarize and staple both bundles
         if: steps.release.outputs.exists != 'true'
@@ -491,7 +491,7 @@ jobs:
           rm -rf "${release_dir}"
           mkdir -p "${release_dir}"
           ditto "build/MatrixScreenSaver.saver" "${release_dir}/MatrixScreenSaver.saver"
-          ditto "build/MatrixWallpaper.app" "${release_dir}/MatrixWallpaper.app"
+          ditto "build/Matrix Wallpaper.app" "${release_dir}/Matrix Wallpaper.app"
 
           echo "dir=${release_dir}" >> "$GITHUB_OUTPUT"
 

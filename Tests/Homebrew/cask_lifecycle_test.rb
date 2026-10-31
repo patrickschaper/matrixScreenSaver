@@ -100,6 +100,7 @@ class CaskLifecycleTest < TestHarness
   def test_no_preference_cleanup_artifact
     dsl = definition
     assert_equal ["MatrixWallpaper.app", "MatrixScreenSaver.saver"], dsl.artifacts.map { |a| a.source.basename.to_s }
+    assert_equal ["Matrix Wallpaper.app", "MatrixScreenSaver.saver"], dsl.artifacts.map { |a| a.target.basename.to_s }
     assert_equal({quit: "dev.patsch.MatrixWallpaper", login_item: "Matrix Wallpaper"}, dsl.uninstall_directives)
     source = File.read(File.expand_path("../../Homebrew/Casks/matrix-screen-saver.rb", __dir__))
     refute_match(/\b(zap|defaults|unregister|launchctl)\b/, source)
@@ -111,9 +112,9 @@ class CaskLifecycleTest < TestHarness
     dsl = definition(occupied: true, artifact_index: 0)
     assert_raises(RuntimeError) { dsl.install }
     assert_equal "manual", (dsl.artifacts.first.target/"executable").read
-    guidance = dsl.commands.find { |_, args| args.any? { |arg| arg.include?("Existing app at #{@root}/custom apps/MatrixWallpaper.app") } }
+    guidance = dsl.commands.find { |_, args| args.any? { |arg| arg.include?("Existing app at #{@root}/custom apps/Matrix Wallpaper.app") } }
     assert guidance, "missing custom appdir conflict guidance"
-    assert_equal [{path: "MatrixWallpaper.app", base: :appdir}], guidance[2][:writable_paths]
+    assert_equal [{path: "Matrix Wallpaper.app", base: :appdir}], guidance[2][:writable_paths]
     refute_includes dsl.messages, COFFEE
     assert_equal "saved options\x00", @prefs.read
     dsl.install(force: true)

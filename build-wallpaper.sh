@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SOURCE_DIR="$ROOT_DIR/Sources/MatrixScreenSaver"
 WALLPAPER_DIR="$ROOT_DIR/Sources/MatrixWallpaper"
-BUNDLE_DIR="$ROOT_DIR/build/MatrixWallpaper.app"
+BUNDLE_DIR="$ROOT_DIR/build/Matrix Wallpaper.app"
 
 if [[ ! -s "$ROOT_DIR/VERSION" ]]; then
   echo "VERSION file is missing or empty." >&2

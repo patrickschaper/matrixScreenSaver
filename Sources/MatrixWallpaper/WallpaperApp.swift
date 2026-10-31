@@ -55,7 +55,10 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var isTerminating = false
 
     /// Menu action whose label follows requested playback, not temporary suspension.
-    private let playbackItem = NSMenuItem(title: "Stop", action: #selector(togglePlayback(_:)), keyEquivalent: "")
+    private let playbackButton = NSButton(title: "Stop", target: nil, action: #selector(togglePlayback(_:)))
+
+    /// Manual pause remains available independently of temporary system suspension.
+    private let pauseButton = NSButton(title: "Pause", target: nil, action: #selector(togglePause(_:)))
 
     /// Retains native options UI independently of transient wallpaper views.
     private var optionsController: MatrixScreenSaverOptionsSheetController?
@@ -104,15 +107,28 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let menu = NSMenu()
         menu.autoenablesItems = false
         menu.delegate = self
-        playbackItem.target = self
-        menu.addItem(playbackItem)
+        for button in [playbackButton, pauseButton] {
+            button.target = self
+            button.bezelStyle = .rounded
+        }
+        let controls = NSStackView(views: [playbackButton, pauseButton])
+        controls.orientation = .horizontal
+        controls.alignment = .centerY
+        controls.distribution = .fillEqually
+        controls.spacing = 8
+        controls.edgeInsets = NSEdgeInsets(top: 4, left: 14, bottom: 4, right: 14)
+        controls.frame = NSRect(x: 0, y: 0, width: 240, height: 36)
+        controls.autoresizingMask = [.width]
+        let playbackRow = NSMenuItem(title: "Playback", action: nil, keyEquivalent: "")
+        playbackRow.view = controls
+        menu.addItem(playbackRow)
         let options = NSMenuItem(title: "Options…", action: #selector(showOptions(_:)), keyEquivalent: "")
         options.target = self
         menu.addItem(options)
         syncItem.target = self
-        menu.addItem(syncItem)
         menu.addItem(.separator())
         menu.addItem(loginItems.item)
+        menu.addItem(syncItem)
         menu.addItem(.separator())
         let coffee = NSMenuItem(title: "Buy me a coffee ☕", action: #selector(openDonationPage(_:)), keyEquivalent: "")
         coffee.target = self
@@ -206,10 +222,22 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Starts or stops at the user's request without overriding system suspension.
     @objc private func togglePlayback(_ sender: Any?) {
         guard !isTerminating else { return }
+        statusItem?.menu?.cancelTracking()
         pendingLaunch?.cancel()
         pendingLaunch = nil
         if !playback.isRequested { updateDesktopWallpaper(restoring: true) }
         playback.isRequested.toggle()
+        playback.isPaused = false
+        reconcilePlayback()
+    }
+
+    /// Freezes or resumes the existing scene without releasing the user's desktop session.
+    @objc private func togglePause(_ sender: Any?) {
+        guard !isTerminating, playback.isRequested else { return }
+        statusItem?.menu?.cancelTracking()
+        playback.isPaused.toggle()
+        // A paused producer cannot supply fresh frames; let the saver use its own renderer.
+        if playback.isPaused { endFrameSharing() }
         reconcilePlayback()
     }
 
@@ -255,32 +283,19 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     ///
     /// - Parameter restart: Forces coordinated reconstruction after options or display changes.
     private func reconcilePlayback(restart: Bool = false) {
-        guard !isTerminating, pendingLaunch == nil else { return }
-        playbackItem.title = playback.isRequested ? "Stop" : "Start"
+        guard !isTerminating else { return }
+        playbackButton.title = playback.isRequested ? "Stop" : "Start"
+        pauseButton.title = playback.isPaused ? "Resume" : "Pause"
+        pauseButton.isEnabled = playback.isRequested
+        guard pendingLaunch == nil else { return }
         if !playback.isRequested { updateDesktopWallpaper(restoring: true) }
         if !playback.isRequested || restart { removeDesktopWindows() }
         guard playback.isRequested else { return }
-        guard playback.shouldRun else {
-            if suspendedAt == nil && !windows.isEmpty {
-                suspendedAt = Date.timeIntervalSinceReferenceDate
-                for window in windows {
-                    (window.contentView as? MatrixScreenSaverView)?.pauseWallpaperAnimation()
-                    window.orderOut(nil)
-                }
-            }
-            return
+        if playback.shouldRun || playback.shouldShowDesktop {
+            updateDesktopWallpaper(restoring: false)
         }
-        updateDesktopWallpaper(restoring: false)
-        guard !isTerminating, playback.shouldRun else { return }
-        if let suspendedAt {
-            let duration = Date.timeIntervalSinceReferenceDate - suspendedAt
-            ScreenSyncCoordinator.shared.shiftTimeline(by: duration)
-            for window in windows {
-                (window.contentView as? MatrixScreenSaverView)?.resumeWallpaperAnimation(after: duration)
-            }
-            self.suspendedAt = nil
-        }
-        if windows.isEmpty {
+        guard !isTerminating, playback.isRequested else { return }
+        if windows.isEmpty && (playback.shouldRun || playback.shouldShowDesktop) {
             currentOptions = MatrixScreenSaverView.loadSaverOptions()
             displayLayout = currentDisplayLayout
             for screen in NSScreen.screens {
@@ -308,6 +323,21 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
             if playback.shouldShowDesktop {
                 if !window.isVisible { window.orderBack(nil) }
             } else if window.isVisible { window.orderOut(nil) }
+        }
+        if playback.shouldRun {
+            if let suspendedAt {
+                let duration = Date.timeIntervalSinceReferenceDate - suspendedAt
+                ScreenSyncCoordinator.shared.shiftTimeline(by: duration)
+                for window in windows {
+                    (window.contentView as? MatrixScreenSaverView)?.resumeWallpaperAnimation(after: duration)
+                }
+                self.suspendedAt = nil
+            }
+        } else if suspendedAt == nil && !windows.isEmpty {
+            suspendedAt = Date.timeIntervalSinceReferenceDate
+            for window in windows {
+                (window.contentView as? MatrixScreenSaverView)?.pauseWallpaperAnimation()
+            }
         }
     }
 
@@ -399,7 +429,7 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     ///
     /// - Parameter displayID: Display requested through the sandbox-safe discovery notification.
     private func shareFrames(for displayID: UInt32) {
-        guard defaults.bool(forKey: Self.syncPreferenceKey), playback.isRequested,
+        guard defaults.bool(forKey: Self.syncPreferenceKey), playback.isRequested, !playback.isPaused,
               currentDisplayLayout.contains(where: { $0.id == displayID }) else { return }
         let starting = !playback.isServingScreenSaver
         if starting {

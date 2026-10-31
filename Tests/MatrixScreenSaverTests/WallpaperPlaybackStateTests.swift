@@ -4,6 +4,20 @@ import Foundation
 func wallpaperPlaybackStateTests() {
     var state = WallpaperPlaybackState()
     ok(state.shouldRun, "WallpaperPlaybackState: launches with playback requested")
+    state.isPaused = true
+    ok(!state.shouldRun && state.shouldShowDesktop, "WallpaperPlaybackState: manual pause keeps the desktop visible")
+    state.setSuspended(.sleeping, true)
+    ok(!state.shouldRun && !state.shouldShowDesktop, "WallpaperPlaybackState: sleep hides a paused desktop")
+    state.setSuspended(.sleeping, false)
+    ok(!state.shouldRun && state.shouldShowDesktop, "WallpaperPlaybackState: wake preserves manual pause")
+    state.isServingScreenSaver = true
+    state.setSuspended(.locked, true)
+    ok(!state.shouldRun && !state.shouldShowDesktop, "WallpaperPlaybackState: saver sharing cannot override manual pause")
+    state.isServingScreenSaver = false
+    state.isPaused = false
+    ok(!state.shouldRun, "WallpaperPlaybackState: manual resume cannot override lock")
+    state.setSuspended(.locked, false)
+    ok(state.shouldRun && state.shouldShowDesktop, "WallpaperPlaybackState: resume runs after system suspension clears")
     state.setSuspended(.locked, true)
     state.setSuspended(.locked, true)
     state.setSuspended(.sleeping, true)

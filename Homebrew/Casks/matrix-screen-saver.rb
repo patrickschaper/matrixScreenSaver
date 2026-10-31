@@ -10,7 +10,7 @@ cask "matrix-screen-saver" do
   depends_on arch: :arm64
   depends_on macos: :sequoia
 
-  app "MatrixWallpaper.app"
+  app "MatrixWallpaper.app", target: "Matrix Wallpaper.app"
   screen_saver "MatrixScreenSaver.saver"
 
   preflight_steps do
@@ -24,13 +24,13 @@ cask "matrix-screen-saver" do
           writable_paths: [{ path: "MatrixScreenSaver.saver", base: :screen_saverdir }]
     end
 
-    if_path_exists "MatrixWallpaper.app", base: :appdir do
+    if_path_exists "Matrix Wallpaper.app", base: :appdir do
       run "/bin/echo",
-          args:           ["Existing app at {{appdir}}/MatrixWallpaper.app. " \
+          args:           ["Existing app at {{appdir}}/Matrix Wallpaper.app. " \
                            "To replace it while retaining options, run: " \
                            "brew install --cask --force patrickschaper/tap/matrix-screen-saver"],
           print_stdout:   true,
-          writable_paths: [{ path: "MatrixWallpaper.app", base: :appdir }]
+          writable_paths: [{ path: "Matrix Wallpaper.app", base: :appdir }]
     end
 
     run "/bin/echo",
@@ -53,7 +53,7 @@ cask "matrix-screen-saver" do
         args:         ["Open System Settings > Wallpaper > Screen Saver and select MatrixScreenSaver."],
         print_stdout: true
     run "/bin/echo",
-        args:         ["Open {{appdir}}/MatrixWallpaper.app to start Matrix Wallpaper. " \
+        args:         ["Open {{appdir}}/Matrix Wallpaper.app to start Matrix Wallpaper. " \
                        "Launch at Login is optional in its Matrix menu."],
         print_stdout: true
   end

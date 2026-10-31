@@ -19,7 +19,8 @@ TAP.instance_variable_set(:@path, ROOT/"tap")
 (TAP.path/"Casks").mkpath
 CONFIG = Cask::Config.new(explicit: Cask::Config::DEFAULT_DIRS.keys.to_h { |key| [key, ROOT/key.to_s] })
 TARGET = CONFIG.screen_saverdir/"MatrixScreenSaver.saver"
-APP_TARGET = CONFIG.appdir/"MatrixWallpaper.app"
+APP_TARGET = CONFIG.appdir/"Matrix Wallpaper.app"
+LEGACY_APP_TARGET = CONFIG.appdir/"MatrixWallpaper.app"
 TARGETS = [TARGET, APP_TARGET].freeze
 PREFS = ROOT/"preferences-sentinel"
 PREFS.write("saved options\x00")
@@ -77,8 +78,13 @@ ensure
   $stdout, $stderr = old_out, old_err
 end
 
-def definition(version, legacy: false)
-  content = Pathname(legacy ? "Tests/Homebrew/fixtures/legacy-screen-saver.rb" : "Homebrew/Casks/matrix-screen-saver.rb").read
+def definition(version, legacy: nil)
+  source = case legacy
+  when :saver then Pathname("Tests/Homebrew/fixtures/legacy-screen-saver.rb")
+  when :wallpaper then Pathname("Tests/Homebrew/fixtures/legacy-wallpaper.rb")
+  else ROOT/"handoff-#{version}/Casks/matrix-screen-saver.rb"
+  end
+  content = source.read
   content.sub!('version "0.2.0"', "version \"#{version}\"")
   content.sub!(/sha256 "[0-9a-f]+"/, "sha256 \"#{Digest::SHA256.file(ROOT/"#{version}.zip").hexdigest}\"")
   content.sub!(/^  url .+$/, "  url \"file://#{ROOT}/#{version}.zip\"")
@@ -144,7 +150,7 @@ puts "PASS AE1 sandboxed native fresh install and actual coffee stdout"
 
 uninstall(fresh)
 OSASCRIPT_CALLS.clear
-legacy = definition("1.2.2", legacy: true)
+legacy = definition("1.2.2", legacy: :saver)
 capture { Cask::Installer.new(legacy).install }
 verify_target("1.2.2", targets: [TARGET])
 check(!APP_TARGET.exist?, "Legacy fixture installed an app")
@@ -204,6 +210,43 @@ check(output.scan(COFFEE).length == 1, "Reinstall coffee output count wrong")
 verify_target("1.2.4")
 uninstall(reinstall)
 puts "PASS AE5 native uninstall and managed reinstall preference retention"
+
+# The receipt owns the old filename; native upgrade must restore it on failure.
+old_name = definition("1.2.1", legacy: :wallpaper)
+capture { Cask::Installer.new(old_name).install }
+verify_target("1.2.1", targets: [TARGET, LEGACY_APP_TARGET])
+APP_TARGET.mkpath
+(APP_TARGET/"manual-executable").write("manual sentinel")
+renamed = definition("1.2.4")
+failed = false
+output = capture do
+  begin
+    Cask::Upgrade.upgrade_cask(old_name, renamed, binaries: true, force: false,
+                             require_sha: true, quit: false, skip_cask_deps: false, verbose: false,
+                             download_queue: Homebrew::DownloadQueue.default,
+                             new_cask_installer: Cask::Installer.new(renamed, upgrade: true))
+  rescue Cask::CaskError
+    failed = true
+  end
+end
+check(failed, "Rename upgrade unexpectedly replaced an unrelated app")
+check((APP_TARGET/"manual-executable").read == "manual sentinel", "Rename upgrade changed unrelated app")
+verify_target("1.2.1", targets: [TARGET, LEGACY_APP_TARGET])
+check(output.include?("Reverting upgrade"), "Rename upgrade did not report rollback")
+FileUtils.remove_entry(APP_TARGET)
+renamed = definition("1.2.4")
+OSASCRIPT_CALLS.clear
+capture do
+  Cask::Upgrade.upgrade_cask(old_name, renamed, binaries: true, force: false,
+                           require_sha: true, quit: false, skip_cask_deps: false, verbose: false,
+                           download_queue: Homebrew::DownloadQueue.default,
+                           new_cask_installer: Cask::Installer.new(renamed, upgrade: true))
+end
+verify_target("1.2.4")
+check(!LEGACY_APP_TARGET.exist?, "Rename upgrade left the old app filename")
+check(OSASCRIPT_CALLS.none? { |args| args.join.include?("delete every login item") }, "Rename upgrade removed login items")
+uninstall(renamed)
+puts "PASS native old-name app upgrade, conflict rollback, and preference retention"
 
 # AE2/AE3: existing manual bundle survives native rejection, then explicit force replaces.
 TARGETS.each do |target|
