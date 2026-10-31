@@ -288,6 +288,8 @@ private func introDirtyRowTests() {
         renderer.updateConfiguration(configuration)
         renderer.resize(to: TerminalSize(columns: 40, rows: 12))
         renderer.overrideSceneStartTime = Date.timeIntervalSinceReferenceDate
+        // This seed finishes typing X before 0.1s, without a random hesitation between the idle frames.
+        renderer.overrideSceneContentStartTime = 1000
         renderer.start()
         defer { renderer.stop() }
         renderer.shiftTimeline(by: -0.1)
