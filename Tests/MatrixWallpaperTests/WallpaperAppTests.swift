@@ -35,7 +35,13 @@ func wallpaperAppTests() {
           ScreenSyncCoordinator.shared.registeredCount == 0 &&
           desktop.images["first"]?.url.path == "/original-a.jpg" && desktop.images["second"]?.url.path == "/original-b.jpg",
           "launch returns before creating views, registering playback, or acquiring desktops")
-    check(eventually { desktopWindowCount() == NSScreen.screens.count }, "queued launch starts playback on the main run loop")
+    let started = eventually { desktopWindowCount() == NSScreen.screens.count }
+    if !started {
+        let pending = stored("pendingLaunch", in: host, as: DispatchWorkItem?.self).flatMap { $0 } != nil
+        let playback = stored("playback", in: host, as: WallpaperPlaybackState.self)
+        print("# launch pending=\(pending), playback=\(String(describing: playback)), visible=\(desktopWindowCount()), screens=\(NSScreen.screens.count)")
+    }
+    check(started, "queued launch starts playback on the main run loop")
     check(desktop.images.values.allSatisfy { $0.url == desktopController.blackImageURL }, "host launch applies black desktop images")
     check(desktopWindowCount() == NSScreen.screens.count, "app creates one desktop window per display")
     check(ScreenSyncCoordinator.shared.registeredCount == NSScreen.screens.count, "app starts every display as one coordinated session")
