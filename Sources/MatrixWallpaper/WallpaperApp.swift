@@ -236,8 +236,6 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard !isTerminating, playback.isRequested else { return }
         statusItem?.menu?.cancelTracking()
         playback.isPaused.toggle()
-        // A paused producer cannot supply fresh frames; let the saver use its own renderer.
-        if playback.isPaused { endFrameSharing() }
         reconcilePlayback()
     }
 
@@ -429,7 +427,7 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     ///
     /// - Parameter displayID: Display requested through the sandbox-safe discovery notification.
     private func shareFrames(for displayID: UInt32) {
-        guard defaults.bool(forKey: Self.syncPreferenceKey), playback.isRequested, !playback.isPaused,
+        guard defaults.bool(forKey: Self.syncPreferenceKey), playback.isRequested,
               currentDisplayLayout.contains(where: { $0.id == displayID }) else { return }
         let starting = !playback.isServingScreenSaver
         if starting {

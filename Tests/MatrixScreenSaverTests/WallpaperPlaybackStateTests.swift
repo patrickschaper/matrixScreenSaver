@@ -12,8 +12,19 @@ func wallpaperPlaybackStateTests() {
     ok(!state.shouldRun && state.shouldShowDesktop, "WallpaperPlaybackState: wake preserves manual pause")
     state.isServingScreenSaver = true
     state.setSuspended(.locked, true)
-    ok(!state.shouldRun && !state.shouldShowDesktop, "WallpaperPlaybackState: saver sharing cannot override manual pause")
+    ok(state.shouldRun && state.isPaused && !state.shouldShowDesktop, "WallpaperPlaybackState: saver sharing temporarily advances a manually paused scene")
+    for reason in [WallpaperPlaybackState.Suspension.sleeping, .displaysSleeping, .sessionInactive] {
+        state.setSuspended(reason, true)
+        ok(!state.shouldRun, "WallpaperPlaybackState: paused sharing respects \(reason)")
+        state.setSuspended(reason, false)
+    }
+    state.isRequested = false
+    ok(!state.shouldRun, "WallpaperPlaybackState: sharing cannot restart a stopped wallpaper")
+    state.isRequested = true
     state.isServingScreenSaver = false
+    state.setSuspended(.locked, false)
+    ok(!state.shouldRun && state.isPaused && state.shouldShowDesktop, "WallpaperPlaybackState: saver exit restores the paused desktop")
+    state.setSuspended(.locked, true)
     state.isPaused = false
     ok(!state.shouldRun, "WallpaperPlaybackState: manual resume cannot override lock")
     state.setSuspended(.locked, false)

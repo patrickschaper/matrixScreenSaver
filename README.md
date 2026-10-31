@@ -195,8 +195,9 @@ installation detection. This does not change visual options or synchronization b
 While Matrix Wallpaper runs, it saves each display's desktop image and display options,
 then sets the underlying wallpaper to plain black. **Stop** and **Pause/Resume** share
 one native menu row. **Pause** freezes the visible frame; **Resume** continues the scene.
-Pausing is session-only and does not persist across launches. While paused, the wallpaper
-declines frame sharing so the screen saver animates independently. **Stop** and
+Pausing is session-only and does not persist across launches. With **Sync with Screen Saver**
+enabled, the saver temporarily advances the shared scene even while the wallpaper is paused.
+When the saver exits, the wallpaper pauses again at the updated scene. **Stop** and
 **Quit Matrix Wallpaper** restore the original wallpaper settings. Temporary pauses
 and animation restarts keep the original backup.
 If you choose a different wallpaper while Matrix runs, that newer choice is preserved.

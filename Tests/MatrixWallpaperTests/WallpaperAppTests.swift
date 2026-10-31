@@ -86,6 +86,8 @@ func wallpaperAppTests() {
     if let source = originalWindows.first?.contentView as? MatrixScreenSaverView,
        let screen = originalWindows.first?.screen,
        let displayID = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? UInt32 {
+        NSApp.sendAction(NSSelectorFromString("togglePause:"), to: host, from: nil)
+        check(!source.isAnimating, "wallpaper is paused before saver discovery")
         var reader: WallpaperFrameReader? = WallpaperFrameReader()
         _ = reader?.frame(displayID: displayID, pointSize: source.bounds.size)
         var first: SharedWallpaperFrame.Frame?
@@ -94,7 +96,8 @@ func wallpaperAppTests() {
             wait(0.1)
             first = reader?.frame(displayID: displayID, pointSize: source.bounds.size)
         } while first == nil && Date() < deadline
-        check(first != nil, "host discovery publishes a matching display without restarting its renderer")
+        check(first != nil && source.isAnimating && pauseItem?.title == "Resume",
+              "saver discovery advances the paused scene without clearing manual pause")
         let distributed = DistributedNotificationCenter.default()
         distributed.postNotificationName(Notification.Name("com.apple.screensaver.willstart"), object: nil,
                                          userInfo: nil, deliverImmediately: true)
@@ -105,20 +108,10 @@ func wallpaperAppTests() {
         let next = reader?.frame(displayID: displayID, pointSize: source.bounds.size)
         check(next != nil && next!.sequence > (first?.sequence ?? 0),
               "hidden wallpaper publishes advancing frames for the saver")
-        let pausedURL = source.shareWallpaperFrames()!
         NSApp.sendAction(NSSelectorFromString("togglePause:"), to: host, from: nil)
-        check(!FileManager.default.fileExists(atPath: pausedURL.path) && !source.isAnimating && desktopWindowCount() == 0,
-              "Pause ends active saver sharing without revealing a locked desktop")
-        check(eventually(5) {
-            let frame = reader?.frame(displayID: displayID, pointSize: source.bounds.size)
-            return frame == nil
-        }, "paused producer lets the saver fall back instead of offering stale frames")
-        check(!source.isAnimating, "repeated saver requests cannot override manual pause")
         NSApp.sendAction(NSSelectorFromString("togglePause:"), to: host, from: nil)
-        check(eventually(5) {
-            let frame = reader?.frame(displayID: displayID, pointSize: source.bounds.size)
-            return frame != nil && source.isAnimating
-        }, "Resume reconnects the saver to the preserved wallpaper scene")
+        check(source.isAnimating && pauseItem?.title == "Resume" && desktopWindowCount() == 0,
+              "changing manual pause during saver playback preserves the active shared scene")
         let sharedURL = source.shareWallpaperFrames()!
         NSApp.sendAction(NSSelectorFromString("toggleScreenSaverSync:"), to: host, from: nil)
         check(!FileManager.default.fileExists(atPath: sharedURL.path) && !source.isAnimating,
@@ -136,6 +129,22 @@ func wallpaperAppTests() {
         }, "re-enabling sync reconnects through normal frame discovery")
         check(Set(NSApp.windows.filter { $0 is DesktopWindow }.map(ObjectIdentifier.init)).isSuperset(of: originalIDs),
               "sync reconnect retains the existing wallpaper views")
+        reader = nil
+        distributed.postNotificationName(Notification.Name("com.apple.screensaver.didstop"), object: nil,
+                                         userInfo: nil, deliverImmediately: true)
+        wait(0.2)
+        check(!source.isAnimating && pauseItem?.title == "Resume" &&
+              Set(originalWindows.filter(\.isVisible).map(ObjectIdentifier.init)) == originalIDs,
+              "saver exit immediately reveals the preserved paused wallpaper before its lease expires")
+        let frozen = pixels(of: source)
+        wait(0.3)
+        check(frozen != nil && pixels(of: source) == frozen, "returned wallpaper stays frozen at the advanced scene")
+        distributed.postNotificationName(Notification.Name("com.apple.screensaver.willstart"), object: nil,
+                                         userInfo: nil, deliverImmediately: true)
+        reader = WallpaperFrameReader()
+        check(eventually(5) {
+            reader?.frame(displayID: displayID, pointSize: source.bounds.size) != nil && source.isAnimating
+        }, "a second saver session resumes sharing while manual pause remains set")
         workspace.post(name: NSWorkspace.willSleepNotification, object: nil)
         NSApp.sendAction(NSSelectorFromString("toggleScreenSaverSync:"), to: host, from: nil)
         NSApp.sendAction(NSSelectorFromString("toggleScreenSaverSync:"), to: host, from: nil)
@@ -177,8 +186,11 @@ func wallpaperAppTests() {
         distributed.postNotificationName(Notification.Name("com.apple.screensaver.didstop"), object: nil,
                                          userInfo: nil, deliverImmediately: true)
         wait(0.2)
-        check(source.isAnimating && Set(NSApp.windows.filter { $0 is DesktopWindow && $0.isVisible }.map(ObjectIdentifier.init)) == originalIDs,
-              "saver exit reveals the same wallpaper views without replaying the intro")
+        check(!source.isAnimating && pauseItem?.title == "Resume" &&
+              Set(NSApp.windows.filter { $0 is DesktopWindow && $0.isVisible }.map(ObjectIdentifier.init)) == originalIDs,
+              "saver exit after lease expiry keeps the same wallpaper views paused")
+        NSApp.sendAction(NSSelectorFromString("togglePause:"), to: host, from: nil)
+        check(source.isAnimating, "manual Resume still works after synced saver playback")
     }
     NSApp.sendAction(NSSelectorFromString("togglePause:"), to: host, from: nil)
     workspace.post(name: NSWorkspace.willSleepNotification, object: nil)
