@@ -13,10 +13,10 @@ The screen saver also comes with an app replacing your wallpaper with the animat
 
 ```bash
 brew trust --cask patrickschaper/tap/matrix-screen-saver
-brew install --cask patrickschaper/tap/matrix-screen-saver && open /Applications/MatrixWallpaper.app
+brew install --cask patrickschaper/tap/matrix-screen-saver && open "/Applications/Matrix Wallpaper.app"
 ```
 
-- Wallpaper: open **MatrixWallpaper** in Applications. options available through menubar icon.
+- Wallpaper: open **Matrix Wallpaper** in Applications. options available through menubar icon.
 - Screen saver options: **System Settings → Wallpaper → Screen Saver → MatrixScreenSaver → Options…**.
 
 ## Buy me a coffee
@@ -108,7 +108,7 @@ These create the screen saver bundle and wallpaper app:
 
 ```text
 build/MatrixScreenSaver.saver
-build/MatrixWallpaper.app
+build/Matrix Wallpaper.app
 ```
 
 Both build scripts read the current version from `./VERSION` and write it into their bundle metadata.
@@ -145,7 +145,7 @@ This rebuilds the bundle, compiles the preview host, and opens the saver in a no
 To launch the built wallpaper app without installing:
 
 ```bash
-open build/MatrixWallpaper.app
+open "build/Matrix Wallpaper.app"
 ```
 
 ### Install
@@ -176,11 +176,15 @@ To install and launch the wallpaper app in your user Applications folder:
 
 ```bash
 ./install-wallpaper.sh
-open ~/Applications/MatrixWallpaper.app
+open "$HOME/Applications/Matrix Wallpaper.app"
 ```
 
 The installer builds and verifies the app, gracefully quits running copies before
 replacement, and retains preferences. It does not launch the app or enable login startup.
+It migrates a signed `MatrixWallpaper.app` with the matching bundle ID to
+`Matrix Wallpaper.app`, restoring the previous installation if replacement fails.
+Unrelated bundles and symlinks at the old path are left alone. The executable remains
+`MatrixWallpaper` and the bundle ID remains `dev.patsch.MatrixWallpaper`.
 
 When MatrixScreenSaver is installed in `~/Library/Screen Savers` or `/Library/Screen Savers`,
 the wallpaper menu shows **Sync with Screen Saver**. It is checked by default: the saver
@@ -189,8 +193,13 @@ The choice survives app restarts and saver reinstallation; opening the menu refr
 installation detection. This does not change visual options or synchronization between monitors.
 
 While Matrix Wallpaper runs, it saves each display's desktop image and display options,
-then sets the underlying wallpaper to plain black. **Stop** and **Quit Matrix Wallpaper**
-restore those settings. Temporary pauses and animation restarts keep the original backup.
+then sets the underlying wallpaper to plain black. **Stop** and **Pause/Resume** share
+one native menu row. **Pause** freezes the visible frame; **Resume** continues the scene.
+Pausing is session-only and does not persist across launches. With **Sync with Screen Saver**
+enabled, the saver temporarily advances the shared scene even while the wallpaper is paused.
+When the saver exits, the wallpaper pauses again at the updated scene. **Stop** and
+**Quit Matrix Wallpaper** restore the original wallpaper settings. Temporary pauses
+and animation restarts keep the original backup.
 If you choose a different wallpaper while Matrix runs, that newer choice is preserved.
 
 Backups are stored in `~/Library/Application Support/MatrixWallpaper/DesktopWallpaper/`.

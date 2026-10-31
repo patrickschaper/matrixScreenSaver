@@ -5,7 +5,7 @@ import zipfile
 
 
 def write_archive(path, version="1.2.3", cpu=0x0100000C, minimum=15, root="MatrixScreenSaver.saver",
-                  *, wallpaper=True, wallpaper_minimum=15):
+                  *, wallpaper=True, wallpaper_minimum=15, wallpaper_root="Matrix Wallpaper.app"):
     command = struct.pack("<6I", 0x32, 24, 1, minimum << 16, minimum << 16, 0)
     binary = struct.pack("<8I", 0xFEEDFACF, cpu, 0, 8, 1, len(command), 0, 0) + command
     info = plistlib.dumps({"CFBundleIdentifier": "dev.patsch.MatrixScreenSaver",
@@ -21,7 +21,7 @@ def write_archive(path, version="1.2.3", cpu=0x0100000C, minimum=15, root="Matri
             info = plistlib.dumps({"CFBundleIdentifier": "dev.patsch.MatrixWallpaper",
                                   "CFBundleShortVersionString": version, "CFBundleVersion": version,
                                   "CFBundleExecutable": "MatrixWallpaper",
-                                  "CFBundlePackageType": "APPL", "CFBundleName": "MatrixWallpaper"})
-            for name, data in [("MatrixWallpaper.app/Contents/Info.plist", info),
-                               ("MatrixWallpaper.app/Contents/MacOS/MatrixWallpaper", binary)]:
+                                  "CFBundlePackageType": "APPL", "CFBundleName": "Matrix Wallpaper"})
+            for name, data in [(f"{wallpaper_root}/Contents/Info.plist", info),
+                               (f"{wallpaper_root}/Contents/MacOS/MatrixWallpaper", binary)]:
                 archive.writestr(zipfile.ZipInfo(name, (2026, 1, 1, 0, 0, 0)), data)

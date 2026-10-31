@@ -19,12 +19,23 @@ export HOMEBREW_DEVELOPER=1
 mkdir -p "$HOMEBREW_CACHE" "$HOMEBREW_LOGS" "$HOMEBREW_TEMP"
 PYTHONDONTWRITEBYTECODE=1 python3 - "$root" <<'PY'
 from pathlib import Path
+import hashlib
+import importlib.util
 import sys
 sys.path.insert(0, "Tests/Homebrew")
 from fixtures.release_fixture import write_archive
 root = Path(sys.argv[1])
+write_archive(root / "1.2.1.zip", version="1.2.1", wallpaper_root="MatrixWallpaper.app")
 write_archive(root / "1.2.2.zip", version="1.2.2", wallpaper=False)
+spec = importlib.util.spec_from_file_location("renderer", "Scripts/render-homebrew-release.py")
+renderer = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(renderer)
 for version in ("1.2.3", "1.2.4"):
-    write_archive(root / f"{version}.zip", version=version)
+    archive = root / f"{version}.zip"
+    write_archive(archive, version=version,
+                  wallpaper_root="MatrixWallpaper.app" if version == "1.2.3" else "Matrix Wallpaper.app")
+    renderer.render(archive, version, renderer.asset_url(version),
+                    "sha256:" + hashlib.sha256(archive.read_bytes()).hexdigest(),
+                    "native lifecycle fixture", root / f"handoff-{version}")
 PY
 brew ruby Tests/Homebrew/support/integration_driver.rb "$root"

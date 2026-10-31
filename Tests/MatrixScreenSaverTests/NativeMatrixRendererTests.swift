@@ -288,6 +288,8 @@ private func introDirtyRowTests() {
         renderer.updateConfiguration(configuration)
         renderer.resize(to: TerminalSize(columns: 40, rows: 12))
         renderer.overrideSceneStartTime = Date.timeIntervalSinceReferenceDate
+        // This seed finishes typing X before 0.1s, without a random hesitation between the idle frames.
+        renderer.overrideSceneContentStartTime = 1000
         renderer.start()
         defer { renderer.stop() }
         renderer.shiftTimeline(by: -0.1)
@@ -350,6 +352,9 @@ private func traceFrameRateTests() {
             renderer.shiftTimeline(by: Date.timeIntervalSinceReferenceDate - anchor - target)
             renderer.advance()
         }
+        // Sample past the tick boundary so floating-point rounding cannot leave one renderer a frame behind.
+        renderer.shiftTimeline(by: -0.001)
+        renderer.advance()
         frames.append((0..<12).flatMap { row in (0..<40).map { renderer[row, $0] } })
     }
     ok(frames[0].contains(where: \.hasForeground), "Trace scrolling: comparison includes visible digits")
@@ -544,7 +549,8 @@ private func customScrollingViewportTests() {
     var scrolled = false
     var cleared = false
     var next = false
-    let deadline = Date(timeIntervalSinceNow: 6)
+    // Allow shared startup and both command schedules, as in the sequence test below.
+    let deadline = Date(timeIntervalSinceNow: 20)
     while !next && Date() < deadline {
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.01))
         renderer.shiftTimeline(by: -0.1)

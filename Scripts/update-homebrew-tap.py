@@ -12,7 +12,11 @@ import urllib.parse
 import urllib.request
 
 TEMPLATE = Path(__file__).resolve().parents[1] / "Homebrew/Casks/matrix-screen-saver.rb"
-LEGACY_STRUCTURE_SHA256 = "5887ff0f5de0edcb895128458af2b519c4243ebe67b6de3a78374c1934c24e59"
+# Reviewed saver-only and old-name dual-bundle predecessors; arbitrary edits still fail closed.
+LEGACY_STRUCTURE_SHA256 = {
+    "5887ff0f5de0edcb895128458af2b519c4243ebe67b6de3a78374c1934c24e59",
+    "85c52f3fa521d0f2d269ebdae5c56f634b715744d0b261f9ac289ddaa47cf047",
+}
 
 
 def cask_metadata(content):
@@ -57,7 +61,10 @@ def update(api, target, version, content):
     if not re.fullmatch(r"(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)", version):
         raise ValueError("Invalid release version")
     metadata, structure = cask_metadata(content)
-    if metadata[0] != version or structure != cask_metadata(TEMPLATE.read_text())[1]:
+    template = TEMPLATE.read_text()
+    structures = {cask_metadata(template)[1],
+                  cask_metadata(template.replace("MatrixWallpaper.app", "Matrix Wallpaper.app"))[1]}
+    if metadata[0] != version or structure not in structures:
         raise ValueError("Generated cask differs from the release template or version")
     repo = f"repos/{target}"
     default = api.request("GET", repo)["default_branch"]
@@ -67,8 +74,8 @@ def update(api, target, version, content):
         raise ValueError("Tap cask is missing or not a regular file; inspect it before publication")
     current = base64.b64decode(existing["content"]).decode()
     previous, previous_structure = cask_metadata(current)
-    if (previous_structure != structure
-            and hashlib.sha256(previous_structure.encode()).hexdigest() != LEGACY_STRUCTURE_SHA256):
+    if (previous_structure not in structures
+            and hashlib.sha256(previous_structure.encode()).hexdigest() not in LEGACY_STRUCTURE_SHA256):
         raise ValueError("Tap cask has unrelated edits; review the manual handoff (no overwrite)")
     if tuple(map(int, previous[0].split("."))) > tuple(map(int, version.split("."))):
         return f"Tap already has newer version {previous[0]}; skipped {version}"

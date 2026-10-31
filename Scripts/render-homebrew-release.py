@@ -69,18 +69,24 @@ def render(archive_path, version, url, digest, provenance, output):
         names = [entry.filename for entry in entries]
         if len(names) != len(set(names)) or sum(e.file_size for e in entries) > 100_000_000:
             raise ValueError("Duplicate or oversized archive entries")
+        # Published archives are immutable; accept either filename, but never both.
+        app_roots = {PurePosixPath(name).parts[0] for name in names if PurePosixPath(name).parts} & {
+            "MatrixWallpaper.app", "Matrix Wallpaper.app"}
+        if len(app_roots) != 1:
+            raise ValueError("Expected exactly one wallpaper app bundle")
+        app_root = app_roots.pop()
         for entry in entries:
             path = PurePosixPath(entry.filename)
             if path.is_absolute() or ".." in path.parts or "\\" in entry.filename:
                 raise ValueError("Unsafe archive path")
-            if not path.parts or path.parts[0] not in ("MatrixScreenSaver.saver", "MatrixWallpaper.app", "__MACOSX"):
+            if not path.parts or path.parts[0] not in ("MatrixScreenSaver.saver", app_root, "__MACOSX"):
                 raise ValueError("Unexpected release archive layout")
             if (entry.external_attr >> 16) & 0o170000 == 0o120000:
                 raise ValueError("Symlinks are not supported in release archives")
         minimum = (0, 0, 0)
         identifiers = []
-        for name, extension, kind in [("MatrixScreenSaver", "saver", 8), ("MatrixWallpaper", "app", 2)]:
-            root = f"{name}.{extension}/Contents"
+        for name, bundle, kind in [("MatrixScreenSaver", "MatrixScreenSaver.saver", 8), ("MatrixWallpaper", app_root, 2)]:
+            root = f"{bundle}/Contents"
             info = plistlib.loads(archive.read(f"{root}/Info.plist"))
             if (info.get("CFBundleIdentifier") != f"dev.patsch.{name}"
                     or info.get("CFBundleShortVersionString") != version
@@ -96,7 +102,7 @@ def render(archive_path, version, url, digest, provenance, output):
         floor, symbol = "26.0", "tahoe"
     else:
         raise ValueError("Unsupported macOS floor: update compatibility mapping before release")
-    cask = TEMPLATE.read_text()
+    cask = TEMPLATE.read_text().replace("MatrixWallpaper.app", app_root)
     cask, versions = re.subn(r'^  version "[^"]+"$', f'  version "{version}"', cask, flags=re.M)
     cask, hashes = re.subn(r'^  sha256 "[0-9a-f]{64}"$', f'  sha256 "{sha256}"', cask, flags=re.M)
     cask, floors = re.subn(r'^  depends_on macos: :\w+$', f'  depends_on macos: :{symbol}', cask, flags=re.M)

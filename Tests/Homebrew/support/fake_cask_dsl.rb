@@ -29,8 +29,8 @@ class FakeCaskDSL
     @artifacts << Artifact.new(@root/"stage"/name, @root/"custom savers"/name)
   end
 
-  def app(name)
-    @artifacts << Artifact.new(@root/"stage"/name, @root/"custom apps"/name)
+  def app(name, target: name)
+    @artifacts << Artifact.new(@root/"stage"/name, @root/"custom apps"/target)
   end
 
   def uninstall(**directives) = @uninstall_directives = directives

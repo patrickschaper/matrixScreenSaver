@@ -140,6 +140,7 @@ class MatrixColumn {
 ## Git commits
 
 - Follow Conventional Commits, for example: `feat: ...`, `fix: ...`, `docs: ...`, `refactor: ...`, `test: ...`
+- Classify version-number bumps as `chore:`, not `fix:`, in commit messages and PR titles.
 - Use a short title line.
 - Add a few very concise bullet points for the meaningful changes.
 
@@ -188,6 +189,8 @@ feat: add character size options
 
 ## Releases
 
+- Keep changelog entries and release notes focused on user-facing changes; omit code-signing changes and details.
+- Use Semantic Versioning (`MAJOR.MINOR.PATCH`): major for breaking changes, minor for backward-compatible features, patch for backward-compatible fixes. Select the corresponding bump in the release workflow; `VERSION` remains the source of truth.
 - Trigger releases by running the **Release** GitHub Actions workflow (`workflow_dispatch`) — never manually.
 - The workflow bumps the version, updates `CHANGELOG.md`, and opens a `release/*` PR targeting `main`.
 - Merging that `release/*` PR into `main` triggers the publish job, which creates the actual GitHub release with a zipped `.saver` bundle attached.

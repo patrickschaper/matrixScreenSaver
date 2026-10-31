@@ -6,7 +6,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 : "${NOTARY_KEYCHAIN_PROFILE:?Set NOTARY_KEYCHAIN_PROFILE to your notarytool credential profile.}"
-BUNDLES=("$ROOT_DIR/build/MatrixScreenSaver.saver" "$ROOT_DIR/build/MatrixWallpaper.app")
+BUNDLES=("$ROOT_DIR/build/MatrixScreenSaver.saver" "$ROOT_DIR/build/Matrix Wallpaper.app")
 
 for bundle in "${BUNDLES[@]}"; do
   codesign --verify --deep --strict "$bundle"
