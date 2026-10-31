@@ -352,6 +352,9 @@ private func traceFrameRateTests() {
             renderer.shiftTimeline(by: Date.timeIntervalSinceReferenceDate - anchor - target)
             renderer.advance()
         }
+        // Sample past the tick boundary so floating-point rounding cannot leave one renderer a frame behind.
+        renderer.shiftTimeline(by: -0.001)
+        renderer.advance()
         frames.append((0..<12).flatMap { row in (0..<40).map { renderer[row, $0] } })
     }
     ok(frames[0].contains(where: \.hasForeground), "Trace scrolling: comparison includes visible digits")
