@@ -188,6 +188,7 @@ feat: add character size options
 
 ## Releases
 
+- Use Semantic Versioning (`MAJOR.MINOR.PATCH`): major for breaking changes, minor for backward-compatible features, patch for backward-compatible fixes. Select the corresponding bump in the release workflow; `VERSION` remains the source of truth.
 - Trigger releases by running the **Release** GitHub Actions workflow (`workflow_dispatch`) — never manually.
 - The workflow bumps the version, updates `CHANGELOG.md`, and opens a `release/*` PR targeting `main`.
 - Merging that `release/*` PR into `main` triggers the publish job, which creates the actual GitHub release with a zipped `.saver` bundle attached.
