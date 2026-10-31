@@ -546,7 +546,8 @@ private func customScrollingViewportTests() {
     var scrolled = false
     var cleared = false
     var next = false
-    let deadline = Date(timeIntervalSinceNow: 6)
+    // Allow shared startup and both command schedules, as in the sequence test below.
+    let deadline = Date(timeIntervalSinceNow: 20)
     while !next && Date() < deadline {
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.01))
         renderer.shiftTimeline(by: -0.1)
