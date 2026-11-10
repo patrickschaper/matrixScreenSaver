@@ -71,6 +71,8 @@ The bundled [Matrix Code](https://github.com/Rezmason/matrix/raw/master/assets/M
 
 ## Development
 
+See the [project roadmap](docs/plans/2026-11-10-1812-project-roadmap-plan.md) for planned work, including GPU-accelerated 3D scenes.
+
 ### Current state
 
 - Native Swift/AppKit screen saver bundle
