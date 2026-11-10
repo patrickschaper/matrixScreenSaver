@@ -756,6 +756,8 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         coffeeButton.contentTintColor = .linkColor
         coffeeButton.font = aboutButton.font
         coffeeButton.setContentHuggingPriority(.required, for: .horizontal)
+        // The native centered title uses half the extra width as icon-to-label spacing.
+        coffeeButton.widthAnchor.constraint(greaterThanOrEqualToConstant: coffeeButton.intrinsicContentSize.width + 8).isActive = true
 
         let spacerRight = NSView()
         spacerRight.translatesAutoresizingMaskIntoConstraints = false
