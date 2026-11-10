@@ -113,7 +113,7 @@ func sharedSaverTests() {
           "shuffled playback is mutually exclusive with the existing modes")
     checkOptionsLayout(in: controller.configureSheet())
     checkSceneOptions(controller, options: options)
-    let applyButton = buttons(in: controller.configureSheet().contentView!).first { $0.title == "OK" }
+    let applyButton = buttons(in: controller.configureSheet().contentView!).first { $0.title == "Save" }
     check(applyButton != nil, "native options window exposes Apply")
     applyButton?.performClick(nil)
     let loaded = MatrixScreenSaverOptions.load(from: defaults)
@@ -128,7 +128,7 @@ func sharedSaverTests() {
     var cancelApplied = false
     let cancelController = MatrixScreenSaverOptionsSheetController { _ in cancelApplied = true }
     cancelController.prepare(using: options)
-    buttons(in: cancelController.configureSheet().contentView!).first { $0.title == "Reset to defaults" }!.performClick(nil)
+    buttons(in: cancelController.configureSheet().contentView!).first { $0.title == "Restore Defaults" }!.performClick(nil)
     buttons(in: cancelController.configureSheet().contentView!).first { $0.title == "Cancel" }!.performClick(nil)
     check(!cancelApplied && MatrixScreenSaverOptions.load(from: defaults).commands == options.commands,
           "main Cancel discards edits without invoking persistence")
@@ -288,7 +288,7 @@ private func rainFontResetTests() {
     check(picker?.title.hasPrefix("Default - ") == true && picker?.menu?.items[1].state == .on &&
           picker?.menu?.items.filter { $0.representedObject is String }.allSatisfy { $0.state == .off } == true,
           "font reset restores the system-font summary and clears custom-font checkmarks")
-    buttons(in: window.contentView!).first { $0.title == "OK" }?.performClick(nil)
+    buttons(in: window.contentView!).first { $0.title == "Save" }?.performClick(nil)
     check(applied?.rainFonts.isEmpty == true && applied?.characters == "ATGC" && applied?.frameRate == 42,
           "font reset applies the default font without changing other options")
 }
@@ -345,9 +345,11 @@ private func rainGlyphOptionsTests() {
         check(preview?.font?.fontName == expectedFont, "\(radio.title) preview uses its current rendering font")
     }
     window.contentView!.layoutSubtreeIfNeeded()
-    check(preview != nil && preview!.frame.height > (preview!.font?.pointSize ?? 0) * 1.5 && (rainTab.view as? NSScrollView)?.hasVerticalScroller == true,
-          "long glyph sets wrap onto multiple lines in a scrollable Rain tab")
-    buttons(in: window.contentView!).first { $0.title == "OK" }?.performClick(nil)
+    check(preview != nil && preview!.maximumNumberOfLines == 3 && !(rainTab.view is NSScrollView)
+          && descendants(of: rainTab.view!).compactMap { $0 as? NSControl }.allSatisfy {
+              rainTab.view!.bounds.contains($0.convert($0.bounds, to: rainTab.view!))
+          }, "film glyph samples and all Rain settings fit without scrolling")
+    buttons(in: window.contentView!).first { $0.title == "Save" }?.performClick(nil)
     check(applied?.rainGlyphSet == .resurrections && applied?.rainFonts == ["Menlo"] && applied?.characters == "ATGC",
           "accepting a film preset keeps custom fonts and characters for switching back")
     controller.prepare(using: applied!)
@@ -364,10 +366,20 @@ private func rainGlyphOptionsTests() {
     reset?.performClick(nil)
     check(preview?.font?.fontName == NSFont.monospacedSystemFont(ofSize: 16, weight: .medium).fontName,
           "font Reset restores the system typeface in the preview")
+    characters?.stringValue = ""
+    controller.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: characters))
+    if let menu = picker?.menu, let index = menu.items.firstIndex(where: { $0.representedObject as? String == "Hiragino Sans" }) {
+        menu.performActionForItem(at: index)
+    }
+    window.contentView!.layoutSubtreeIfNeeded()
+    check((preview?.stringValue.count ?? 0) > 135
+          && descendants(of: rainTab.view!).compactMap { $0 as? NSControl }.allSatisfy {
+              rainTab.view!.bounds.contains($0.convert($0.bounds, to: rainTab.view!))
+          }, "large font repertoires remain a bounded sample without hiding Rain settings")
     var cancelled = false
     let cancelController = MatrixScreenSaverOptionsSheetController { _ in cancelled = true }
     cancelController.prepare(using: options)
-    buttons(in: cancelController.configureSheet().contentView!).first { $0.title == "Reset to defaults" }?.performClick(nil)
+    buttons(in: cancelController.configureSheet().contentView!).first { $0.title == "Restore Defaults" }?.performClick(nil)
     let resetRadios: [NSButton] = stored("rainGlyphRadios", in: cancelController) ?? []
     check(resetRadios.first?.state == .on, "Reset to defaults restores the default glyph set")
     buttons(in: cancelController.configureSheet().contentView!).first { $0.title == "Cancel" }?.performClick(nil)
@@ -396,6 +408,7 @@ private func glyphCacheTests() {
     check(original === glyph("A"), "frame-rate changes preserve glyph rasters")
     // These checks exercise plain scalar keys, independent of the user's saved font selection.
     options.rainFonts = []
+    options.rainGlyphSet = .default
     options.characters = "☃"
     view.applyWallpaperOptions(options)
     check(glyph("☃") != nil && glyph("☃", bold: true) != nil,
@@ -525,18 +538,32 @@ private func checkOptionsLayout(in window: NSWindow) {
     let content = window.contentView!
     content.layoutSubtreeIfNeeded()
     let size = content.bounds.size
-    // The Rain tab gained the Fonts section, so the sheet is taller than the original 600 point budget.
-    check(size.width <= 600 && size.height <= 650,
-          "options fit in a compact window without screen-sized help text")
+    check(size.width <= 720 && size.height <= 800,
+          "options fit all settings in a fixed desktop-sized window")
     guard let tabs = descendants(of: content).compactMap({ $0 as? NSTabView }).first else {
         check(false, "options organize settings into native tabs")
         return
     }
     check(tabs.tabViewItems.map(\.label) == ["General", "Intro scenes", "Rain"],
           "command capture integrates into the current native tab structure")
+    let general = tabs.tabViewItems[0].view!
+    let rain = tabs.tabViewItems[2].view!
+    check(buttons(in: general).contains { $0.title == "Twinkling effect" }
+          && !buttons(in: rain).contains { $0.title == "Twinkling effect" },
+          "twinkle belongs to shared settings because it affects rain and trace")
+    check(!descendants(of: general).contains { $0.accessibilityLabel() == "Font" }
+          && descendants(of: rain).contains { $0.accessibilityLabel() == "Font" }
+          && descendants(of: rain).contains { $0.accessibilityLabel() == "Custom glyphs" },
+          "rain owns its font and custom glyph controls")
+    let save = buttons(in: content).first { $0.title == "Save" }
+    let cancel = buttons(in: content).first { $0.title == "Cancel" }
+    check(save?.keyEquivalent == "\r" && cancel?.keyEquivalent == "\u{1b}",
+          "Save and Cancel retain standard Return and Escape shortcuts")
+    check(!window.styleMask.contains(.resizable), "options window has a fixed size")
     for item in tabs.tabViewItems {
         tabs.selectTabViewItem(item)
         content.layoutSubtreeIfNeeded()
+        check(!(item.view is NSScrollView), "\(item.label) exposes all settings without scrolling")
         let page = (item.view as? NSScrollView)?.documentView ?? item.view!
         let controls = descendants(of: page).compactMap { $0 as? NSControl }
         check(!controls.isEmpty && controls.allSatisfy { page.bounds.contains($0.convert($0.bounds, to: page)) },
@@ -574,7 +601,7 @@ private func checkSceneOptions(_ controller: MatrixScreenSaverOptionsSheetContro
     let groups = descendants(of: page).compactMap { $0 as? NSBox }
     check(groups.count == 3, "intro scenes have three native fieldsets")
     guard groups.count == 3 else { return }
-    let titles = ["Show Neo message scene", "Show custom scene", "Show trace program scene"]
+    let titles = ["Show Neo message", "Run custom commands", "Show trace program"]
     check(groups.map { buttons(in: $0).first?.title ?? "" } == titles,
           "fieldsets follow Neo, custom, trace playback order")
     for group in groups {
@@ -586,13 +613,11 @@ private func checkSceneOptions(_ controller: MatrixScreenSaverOptionsSheetContro
             zip(stack.arrangedSubviews, stack.arrangedSubviews.dropFirst()).allSatisfy { $0.frame.minY >= $1.frame.maxY }
         }, "fieldset rows do not overlap")
     }
-    let customCopy = "Execute custom commands and show its output as messages. Off by default."
     let labels = descendants(of: groups[1]).compactMap { $0 as? NSTextField }
     check(labels.contains { $0.isEditable && $0.accessibilityLabel() == "Command output hold in seconds" && $0.stringValue == "4.5" }
           && !labels.contains { $0.stringValue == "Typing speed" || $0.accessibilityLabel() == "Custom typing speed" },
           "custom fieldset replaces independent typing speed with an output hold control")
-    check(labels.filter { $0.stringValue == customCopy }.count == 1
-          && labels.contains { $0.stringValue == "Commands" }, "custom group has exact description and separate Commands row")
+    check(labels.contains { $0.stringValue == "Commands" }, "custom group has a separate Commands editor row")
     check(descendants(of: groups[0]).compactMap { $0 as? NSTextField }.contains { $0.stringValue == "Lines" },
           "Neo fieldset owns its Lines editor")
     let speed = descendants(of: page).compactMap { $0 as? NSTextField }.first { $0.isEditable && $0.stringValue == "2" }!
@@ -667,12 +692,15 @@ private func checkSceneOptions(_ controller: MatrixScreenSaverOptionsSheetContro
     } else {
         check(false, "custom Edit opens a native editor sheet")
     }
-    buttons(in: window.contentView!).first { $0.title == "Reset to defaults" }!.performClick(nil)
+    let originalSize = window.contentView!.bounds.size
+    buttons(in: window.contentView!).first { $0.title == "Restore Defaults" }!.performClick(nil)
+    check(window.contentView!.bounds.size == originalSize, "Restore Defaults preserves the fixed window size")
     check(buttons(in: groups[0]).first!.state == .on && name.isEnabled
           && buttons(in: groups[1]).first!.state == .off && !customEdit.isEnabled
           && buttons(in: groups[2]).first!.state == .on && speed.isEnabled,
           "Reset restores scene enablement and leaves shared speed editable")
     controller.prepare(using: options)
+    check(window.contentView!.bounds.size == originalSize, "refreshing options preserves the fixed window size")
     tabs.selectTabViewItem(at: 0)
 }
 
