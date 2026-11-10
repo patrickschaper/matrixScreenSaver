@@ -55,10 +55,10 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var isTerminating = false
 
     /// Menu action whose label follows requested playback, not temporary suspension.
-    private let playbackButton = NSButton(title: "Stop", target: nil, action: #selector(togglePlayback(_:)))
+    private let playbackItem = NSMenuItem(title: "Stop Wallpaper", action: #selector(togglePlayback(_:)), keyEquivalent: "")
 
     /// Manual pause remains available independently of temporary system suspension.
-    private let pauseButton = NSButton(title: "Pause", target: nil, action: #selector(togglePause(_:)))
+    private let pauseItem = NSMenuItem(title: "Pause Animation", action: #selector(togglePause(_:)), keyEquivalent: "")
 
     /// Retains native options UI independently of transient wallpaper views.
     private var optionsController: MatrixScreenSaverOptionsSheetController?
@@ -107,32 +107,23 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let menu = NSMenu()
         menu.autoenablesItems = false
         menu.delegate = self
-        for button in [playbackButton, pauseButton] {
-            button.target = self
-            button.bezelStyle = .rounded
-        }
-        let controls = NSStackView(views: [playbackButton, pauseButton])
-        controls.orientation = .horizontal
-        controls.alignment = .centerY
-        controls.distribution = .fillEqually
-        controls.spacing = 8
-        controls.edgeInsets = NSEdgeInsets(top: 4, left: 14, bottom: 4, right: 14)
-        controls.frame = NSRect(x: 0, y: 0, width: 240, height: 36)
-        controls.autoresizingMask = [.width]
-        let playbackRow = NSMenuItem(title: "Playback", action: nil, keyEquivalent: "")
-        playbackRow.view = controls
-        menu.addItem(playbackRow)
-        let options = NSMenuItem(title: "Options…", action: #selector(showOptions(_:)), keyEquivalent: "")
+        pauseItem.target = self
+        playbackItem.target = self
+        updatePlaybackMenu()
+        menu.addItem(pauseItem)
+        menu.addItem(playbackItem)
+        menu.addItem(.separator())
+        let options = NSMenuItem(title: "Settings…", action: #selector(showOptions(_:)), keyEquivalent: ",")
         options.target = self
         menu.addItem(options)
         syncItem.target = self
-        menu.addItem(.separator())
         menu.addItem(loginItems.item)
         menu.addItem(syncItem)
         menu.addItem(.separator())
-        let coffee = NSMenuItem(title: "Buy me a coffee ☕", action: #selector(openDonationPage(_:)), keyEquivalent: "")
+        let coffee = NSMenuItem(title: "Buy Me a Coffee", action: #selector(openDonationPage(_:)), keyEquivalent: "")
         coffee.target = self
         menu.addItem(coffee)
+        menu.addItem(.separator())
         let quit = NSMenuItem(title: "Quit Matrix Wallpaper", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         quit.target = NSApp
         menu.addItem(quit)
@@ -282,9 +273,7 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// - Parameter restart: Forces coordinated reconstruction after options or display changes.
     private func reconcilePlayback(restart: Bool = false) {
         guard !isTerminating else { return }
-        playbackButton.title = playback.isRequested ? "Stop" : "Start"
-        pauseButton.title = playback.isPaused ? "Resume" : "Pause"
-        pauseButton.isEnabled = playback.isRequested
+        updatePlaybackMenu()
         guard pendingLaunch == nil else { return }
         if !playback.isRequested { updateDesktopWallpaper(restoring: true) }
         if !playback.isRequested || restart { removeDesktopWindows() }
@@ -337,6 +326,15 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 (window.contentView as? MatrixScreenSaverView)?.pauseWallpaperAnimation()
             }
         }
+    }
+
+    /// Keeps native command labels, symbols, and availability tied to user intent rather than system suspension.
+    private func updatePlaybackMenu() {
+        playbackItem.title = playback.isRequested ? "Stop Wallpaper" : "Start Wallpaper"
+        playbackItem.image = NSImage(systemSymbolName: playback.isRequested ? "stop.fill" : "play.fill", accessibilityDescription: nil)
+        pauseItem.title = playback.isPaused ? "Resume Animation" : "Pause Animation"
+        pauseItem.image = NSImage(systemSymbolName: playback.isPaused ? "play.fill" : "pause.fill", accessibilityDescription: nil)
+        pauseItem.isEnabled = playback.isRequested
     }
 
     /// Changes desktop ownership without coupling it to transient animation windows.

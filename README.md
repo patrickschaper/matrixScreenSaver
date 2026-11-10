@@ -16,7 +16,7 @@ brew trust --cask patrickschaper/tap/matrix-screen-saver
 brew install --cask patrickschaper/tap/matrix-screen-saver && open "/Applications/Matrix Wallpaper.app"
 ```
 
-- Wallpaper: open **Matrix Wallpaper** in Applications. options available through menubar icon.
+- Wallpaper: open **Matrix Wallpaper** in Applications. Choose **Settings…** from its menu bar icon to customize the animation.
 - Screen saver options: **System Settings → Wallpaper → Screen Saver → MatrixScreenSaver → Options…**.
 
 ## Buy me a coffee
@@ -193,17 +193,17 @@ The choice survives app restarts and saver reinstallation; opening the menu refr
 installation detection. This does not change visual options or synchronization between monitors.
 
 While Matrix Wallpaper runs, it saves each display's desktop image and display options,
-then sets the underlying wallpaper to plain black. **Stop** and **Pause/Resume** share
-one native menu row. **Pause** freezes the visible frame; **Resume** continues the scene.
+then sets the underlying wallpaper to plain black. The menu starts with **Pause Animation**
+and **Stop Wallpaper**. **Pause Animation** freezes the visible frame; **Resume Animation** continues the scene.
 Pausing is session-only and does not persist across launches. With **Sync with Screen Saver**
 enabled, the saver temporarily advances the shared scene even while the wallpaper is paused.
-When the saver exits, the wallpaper pauses again at the updated scene. **Stop** and
+When the saver exits, the wallpaper pauses again at the updated scene. **Stop Wallpaper** and
 **Quit Matrix Wallpaper** restore the original wallpaper settings. Temporary pauses
 and animation restarts keep the original backup.
 If you choose a different wallpaper while Matrix runs, that newer choice is preserved.
 
 Backups are stored in `~/Library/Application Support/MatrixWallpaper/DesktopWallpaper/`.
-After a crash or force-quit, reopen Matrix Wallpaper and choose **Stop** to restore the desktop.
+After a crash or force-quit, reopen Matrix Wallpaper and choose **Stop Wallpaper** to restore the desktop.
 Disconnected displays and failed restores keep their backups for a later retry.
 Exact restoration is supported for static images; macOS's public API cannot preserve every
 dynamic/aerial wallpaper, rotating collection, or separate Space configuration.
