@@ -94,6 +94,11 @@ Tests cover:
 - `Xorshift64` — same seed → same sequence; different seeds → different sequences
 - `NativeMatrixRenderer` — `seedOffset` defaults to `0`; two renderers with different `seedOffset` values diverge after 60 frames
 
+## README audience
+
+- Change `README.md` only when end-user information changes, such as installation, usage, or compatibility guidance.
+- Keep implementation details and contributor reference in `docs/development.md`, plans in `docs/plans/`, and agent instructions in `AGENTS.md`.
+
 ## Code documentation
 
 Use Swift doc comments (`///`) for all public and internal declarations — types, properties, methods, and parameters. Follow the standard Swift/Xcode documentation style:
