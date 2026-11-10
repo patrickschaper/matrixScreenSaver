@@ -160,6 +160,13 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(syncItem)
         menu.addItem(.separator())
         let coffee = NSMenuItem(title: "Buy Me a Coffee", action: #selector(openDonationPage(_:)), keyEquivalent: "")
+        coffee.image = Bundle.main.image(forResource: "BuyMeACoffee")
+        coffee.image?.size = NSSize(width: 16, height: 16)
+        coffee.image?.isTemplate = false
+        // macOS 27 hides menu images by default; retain the full-color favicon.
+        if coffee.responds(to: NSSelectorFromString("setPreferredImageVisibility:")) {
+            coffee.setValue(1, forKey: "preferredImageVisibility")
+        }
         coffee.target = self
         menu.addItem(coffee)
         menu.addItem(.separator())

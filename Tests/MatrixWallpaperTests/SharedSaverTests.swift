@@ -112,6 +112,15 @@ func sharedSaverTests() {
     check(shuffleRadio?.state == .on && randomRadio?.state == .off && sequenceRadio?.state == .off,
           "shuffled playback is mutually exclusive with the existing modes")
     checkOptionsLayout(in: controller.configureSheet())
+    check(buttons(in: controller.configureSheet().contentView!).first {
+        $0.action == NSSelectorFromString("openRepository:")
+    }?.title == "About the project", "options project link uses the requested label")
+    let donationButton = buttons(in: controller.configureSheet().contentView!).first {
+        $0.action == NSSelectorFromString("openDonationPage:")
+    }
+    check(donationButton?.title == "Buy Me a Coffee" && donationButton?.imagePosition == .imageLeft &&
+          donationButton?.image?.size == NSSize(width: 16, height: 16) && donationButton?.image?.isTemplate == false,
+          "options donation button uses the full-color favicon at 16 points before its title")
     checkSceneOptions(controller, options: options)
     let applyButton = buttons(in: controller.configureSheet().contentView!).first { $0.title == "Save" }
     check(applyButton != nil, "native options window exposes Apply")

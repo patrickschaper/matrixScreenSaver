@@ -646,7 +646,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
             versionDescription.widthAnchor.constraint(equalTo: warningText.widthAnchor),
         ])
 
-        let aboutButton = NSButton(title: "About Matrix", target: self, action: #selector(openRepository(_:)))
+        let aboutButton = NSButton(title: "About the project", target: self, action: #selector(openRepository(_:)))
         aboutButton.bezelStyle = .inline
         aboutButton.isBordered = false
         aboutButton.contentTintColor = .linkColor
@@ -744,7 +744,12 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         versionLabel.textColor = .secondaryLabelColor
         versionLabel.setContentHuggingPriority(.required, for: .horizontal)
 
-        let coffeeButton = NSButton(title: "Support the Project", target: self, action: #selector(openDonationPage(_:)))
+        let coffeeButton = NSButton(title: "Buy Me a Coffee", target: self, action: #selector(openDonationPage(_:)))
+        // Source: https://cdn.buymeacoffee.com/assets/homepage/meta/favicon-32x32.png
+        coffeeButton.image = Bundle(for: MatrixScreenSaverOptionsSheetController.self).image(forResource: "BuyMeACoffee")
+        coffeeButton.image?.size = NSSize(width: 16, height: 16)
+        coffeeButton.image?.isTemplate = false
+        coffeeButton.imagePosition = .imageLeft
         coffeeButton.bezelStyle = .inline
         coffeeButton.isBordered = false
         coffeeButton.controlSize = .small

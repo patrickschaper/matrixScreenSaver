@@ -16,6 +16,14 @@ func wallpaperAppTests() {
     defer { host.applicationWillTerminate(Notification(name: NSApplication.willTerminateNotification)) }
     let status: NSStatusItem? = stored("statusItem", in: host)
     let menuItems = status?.menu?.items ?? []
+    let donationItem = menuItems.first { $0.action == NSSelectorFromString("openDonationPage:") }
+    check(donationItem?.title == "Buy Me a Coffee" && donationItem?.image?.size == NSSize(width: 16, height: 16) &&
+          donationItem?.image?.isTemplate == false,
+          "donation menu uses the full-color favicon at 16 points with the requested title")
+    if let donationItem, donationItem.responds(to: NSSelectorFromString("preferredImageVisibility")) {
+        check(donationItem.value(forKey: "preferredImageVisibility") as? Int == 1,
+              "donation menu keeps the favicon visible on macOS 27")
+    }
     let stopItem = menuItems.first { $0.action == NSSelectorFromString("togglePlayback:") }
     let pauseItem = menuItems.first { $0.action == NSSelectorFromString("togglePause:") }
     check(menuItems.filter { !$0.isHidden }.prefix(2).map(\.title) == ["Pause Animation", "Stop Wallpaper"] &&
@@ -601,8 +609,8 @@ private func wallpaperIconTests() {
     let menu = NSBitmapImageRep(cgImage: context.makeImage()!)
     let stem = (12..<60).map { menu.colorAt(x: 20, y: $0)! }
     check(menu.colorAt(x: 0, y: 0)!.alphaComponent == 0 &&
-          stem.contains { $0.alphaComponent == 0 } && stem.contains { $0.alphaComponent > 0.9 },
-          "menu icon has transparent background and scanline gaps through the M")
+          stem.allSatisfy { $0.alphaComponent > 0.9 },
+          "menu icon has transparent background and a solid, high-contrast M stem")
     check(stem.allSatisfy { $0.redComponent == $0.greenComponent && $0.greenComponent == $0.blueComponent },
           "menu icon is monochrome for system template tinting")
 }

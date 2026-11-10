@@ -13,6 +13,7 @@ HOST_DIR="$TEST_CONTENTS/MacOS"
 TEST_BIN="$HOST_DIR/matrix-wallpaper-tests"
 mkdir -p "$HOST_DIR" "$TEST_CONTENTS/Resources"
 cp -R "$ROOT_DIR/Resources/Fonts" "$TEST_CONTENTS/Resources/Fonts"
+cp "$ROOT_DIR/Resources/BuyMeACoffee.png" "$TEST_CONTENTS/Resources/BuyMeACoffee.png"
 
 OPTIMIZATION="-Onone"
 if [[ "${1:-}" == "--gpu-composition-benchmark" || "${1:-}" == "--composition-benchmark" ]]; then
