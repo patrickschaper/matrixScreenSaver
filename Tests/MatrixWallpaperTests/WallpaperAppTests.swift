@@ -18,7 +18,7 @@ func wallpaperAppTests() {
     let menuItems = status?.menu?.items ?? []
     let stopItem = menuItems.first { $0.action == NSSelectorFromString("togglePlayback:") }
     let pauseItem = menuItems.first { $0.action == NSSelectorFromString("togglePause:") }
-    check(menuItems.prefix(2).map(\.title) == ["Pause Animation", "Stop Wallpaper"] &&
+    check(menuItems.filter { !$0.isHidden }.prefix(2).map(\.title) == ["Pause Animation", "Stop Wallpaper"] &&
           menuItems.allSatisfy { $0.view == nil } && pauseItem?.image != nil && stopItem?.image != nil,
           "playback commands lead the menu as native items with symbols")
     let settingsItem = menuItems.first { $0.action == NSSelectorFromString("showOptions:") }
@@ -267,8 +267,8 @@ private func wallpaperEditingShortcutTests(controller: MatrixScreenSaverOptionsS
     }
     let original = field.stringValue
     let wasEnabled = field.isEnabled
-    let root: NSStackView? = stored("rootStack", in: controller)
-    let tabs = root?.arrangedSubviews.compactMap { $0 as? NSTabView }.first
+    let scroll: NSScrollView? = stored("optionsScrollView", in: controller)
+    let tabs = scroll?.documentView as? NSTabView
     let selectedTab = tabs?.selectedTabViewItem
     tabs?.selectTabViewItem(at: 1)
     defer {

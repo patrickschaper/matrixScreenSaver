@@ -42,6 +42,14 @@ final class MatrixScreenSaverView: ScreenSaverView {
     /// Set before starting animation; ordinary saver and preview hosts keep the default.
     var isWallpaperHost = false
 
+    /// Wallpaper supplies its host snapshot; the saver checks its own loaded bundle.
+    var readVersionStatus: () -> MatrixVersionStatus = {
+        MatrixVersionStatus.current(hostBundle: Bundle(for: MatrixScreenSaverView.self))
+    }
+    private var versionMismatch = false
+    private var nextVersionCheck: TimeInterval = 0
+    private var errorMotionTime: TimeInterval = 0
+
     /// Lets the wallpaper's sole animation session continue while a saver covers its windows.
     var rendersWallpaperWhileHidden = false
 
@@ -245,6 +253,17 @@ final class MatrixScreenSaverView: ScreenSaverView {
         super.startAnimation()
         animationActive = true
         firstHiddenFrameTime = 0
+        versionMismatch = readVersionStatus().state == .mismatch
+        nextVersionCheck = ProcessInfo.processInfo.systemUptime + 60
+        updateScreenSaverLifecycleObservation()
+        if versionMismatch {
+            nativeRenderer.stop()
+            animationTimeInterval = 1.0 / 30.0
+            setAccessibilityLabel("Version mismatch. Install matching versions to play.")
+            needsDisplay = true
+            return
+        }
+        setAccessibilityLabel(nil)
         if shouldReloadOptionsOnStart {
             saverOptions = Self.loadSaverOptions()
         }
@@ -252,7 +271,6 @@ final class MatrixScreenSaverView: ScreenSaverView {
         wallpaperFrameReader = !isWallpaperHost && !isPreview && Self.isRunningInScreenSaverEngine ? WallpaperFrameReader() : nil
         NSLog("MatrixScreenSaver startAnimation bounds=%@", NSStringFromRect(bounds))
         appendDebugLog("[\(debugIdentifier)] startAnimation bounds=\(NSStringFromRect(bounds))")
-        updateScreenSaverLifecycleObservation()
         if let wallpaperFrameReader {
             nativeRenderer.stop()
             awaitingWallpaperUntil = ProcessInfo.processInfo.systemUptime + 1
@@ -327,6 +345,13 @@ final class MatrixScreenSaverView: ScreenSaverView {
             return
         }
         firstHiddenFrameTime = 0
+
+        if ProcessInfo.processInfo.systemUptime >= nextVersionCheck { refreshVersionStatus() }
+        if versionMismatch {
+            if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion { errorMotionTime += animationTimeInterval }
+            needsDisplay = true
+            return
+        }
 
         if let wallpaperFrameReader {
             if let frame = wallpaperFrameReader.frame(displayID: UInt32(displaySeed), pointSize: bounds.size) {
@@ -437,6 +462,17 @@ final class MatrixScreenSaverView: ScreenSaverView {
 
     /// Paints the full terminal-window scene for the current frame.
     override func draw(_ dirtyRect: NSRect) {
+        if versionMismatch {
+            NSColor.black.setFill()
+            bounds.fill()
+            let size = min(72, min(bounds.width, bounds.height) * 0.2)
+            let reduced = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+            let x = reduced ? 0 : sin(errorMotionTime * 0.12) * max(0, bounds.width - size) * 0.4
+            let y = reduced ? 0 : sin(errorMotionTime * 0.09) * max(0, bounds.height - size) * 0.4
+            MatrixVersionStatus.warningImage?.draw(in: NSRect(x: bounds.midX + x - size / 2,
+                                                          y: bounds.midY + y - size / 2, width: size, height: size))
+            return
+        }
         if let image = sharedWallpaperImage ?? publishedWallpaperImage {
             NSGraphicsContext.current?.cgContext.draw(image, in: bounds)
             return
@@ -1259,7 +1295,7 @@ final class MatrixScreenSaverView: ScreenSaverView {
     ///
     /// - Returns: A private shared-memory file, or nil if this host cannot publish it.
     func shareWallpaperFrames() -> URL? {
-        guard isWallpaperHost, animationActive else { return nil }
+        guard isWallpaperHost, animationActive, !versionMismatch else { return nil }
         let scale = window?.backingScaleFactor ?? 1
         if sharedFrameBuffer?.pointSize != bounds.size || sharedFrameBuffer?.displayID != UInt32(displaySeed) ||
             sharedFrameBuffer?.pixelWidth != Int(ceil(bounds.width * scale)) ||
@@ -1418,6 +1454,21 @@ final class MatrixScreenSaverView: ScreenSaverView {
         super.startAnimation()
     }
 
+    /// Stops incompatible rendering and frame sharing, or restarts after versions match.
+    func refreshVersionStatus() {
+        nextVersionCheck = ProcessInfo.processInfo.systemUptime + 60
+        let mismatch = readVersionStatus().state == .mismatch
+        guard mismatch != versionMismatch else { return }
+        versionMismatch = mismatch
+        if animationActive {
+            let wasPaused = wallpaperAnimationPaused
+            stopAnimation()
+            startAnimation()
+            if wasPaused { pauseWallpaperAnimation() }
+        }
+        needsDisplay = true
+    }
+
     /// Applies options to the live saver and optionally persists or restarts it.
     private func applySaverOptions(_ options: MatrixScreenSaverOptions, persist: Bool, restartAnimation: Bool) {
         let sanitizedOptions = options.sanitized()
@@ -1454,7 +1505,7 @@ final class MatrixScreenSaverView: ScreenSaverView {
 
     /// Creates a fresh configure-sheet controller for each presentation.
     private func makeOptionsSheetController() -> MatrixScreenSaverOptionsSheetController {
-        let controller = MatrixScreenSaverOptionsSheetController { [weak self] options in
+        let controller = MatrixScreenSaverOptionsSheetController(readVersionStatus: readVersionStatus) { [weak self] options in
             self?.applySaverOptionsFromSheet(options)
         }
         controller.onClose = { [weak self, weak controller] in

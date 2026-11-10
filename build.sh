@@ -34,6 +34,7 @@ swiftc \
   -framework ScreenSaver \
   "$SOURCE_DIR/TerminalSupport.swift" \
   "$SOURCE_DIR/MatrixScreenSaverOptions.swift" \
+  "$SOURCE_DIR/MatrixVersionStatus.swift" \
   "$SOURCE_DIR/Xorshift64.swift" \
   "$SOURCE_DIR/NeoMessageScene.swift" \
   "$SOURCE_DIR/CmdCaptureScene.swift" \

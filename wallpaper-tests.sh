@@ -22,6 +22,7 @@ fi
 swiftc "$OPTIMIZATION" -framework Foundation -framework AppKit -framework ScreenSaver -framework ServiceManagement \
   "$SOURCE_DIR/TerminalSupport.swift" \
   "$SOURCE_DIR/MatrixScreenSaverOptions.swift" \
+  "$SOURCE_DIR/MatrixVersionStatus.swift" \
   "$SOURCE_DIR/Xorshift64.swift" \
   "$SOURCE_DIR/NeoMessageScene.swift" \
   "$SOURCE_DIR/CmdCaptureScene.swift" \
@@ -42,12 +43,13 @@ swiftc "$OPTIMIZATION" -framework Foundation -framework AppKit -framework Screen
   "$TEST_DIR/SharedCompositionTests.swift" \
   "$TEST_DIR/GPUCompositionTests.swift" \
   "$TEST_DIR/WallpaperAppTests.swift" \
+  "$TEST_DIR/VersionWarningTests.swift" \
   "$TEST_DIR/LoginItemTests.swift" \
   "$TEST_DIR/DesktopWallpaperTests.swift" \
   "$TEST_DIR/main.swift" \
   -o "$TEST_BIN"
 
-if [[ "${1:-}" == "--composition-benchmark" || "${1:-}" == "--composition-tests" || "${1:-}" == "--gpu-composition-tests" || "${1:-}" == "--gpu-composition-benchmark" ]]; then
+if [[ "${1:-}" == "--composition-benchmark" || "${1:-}" == "--composition-tests" || "${1:-}" == "--gpu-composition-tests" || "${1:-}" == "--gpu-composition-benchmark" || "${1:-}" == "--version-warning-tests" ]]; then
   "$TEST_BIN" "$1"
   exit
 fi

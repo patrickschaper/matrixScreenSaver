@@ -192,6 +192,18 @@ shares the wallpaper's animation. Uncheck it to let the saver animate independen
 The choice survives app restarts and saver reinstallation; opening the menu refreshes
 installation detection. This does not change visual options or synchronization between monitors.
 
+If Matrix Wallpaper and Matrix Screen Saver have different release versions, an error
+appears above the options tabs, on the menu-bar icon, and at the top of its menu.
+The wallpaper also shows an alert once per launch. Matrix playback is blocked in both
+components: a yellow warning triangle moves slowly over a black screen instead. With Reduce
+Motion enabled, the symbol stays still. Settings remain editable. Choose **View Releases…**
+and install matching versions to resume playback.
+Checks refresh when opening settings or the menu, and approximately once a minute during
+playback. A missing companion is not a mismatch; unreadable version information
+is explained in settings. Checks compare the loaded host with installed companion bundles,
+so another process may still need restarting after an update. Older releases do not gain
+these warnings until they are updated.
+
 While Matrix Wallpaper runs, it saves each display's desktop image and display options,
 then sets the underlying wallpaper to plain black. The menu starts with **Pause Animation**
 and **Stop Wallpaper**. **Pause Animation** freezes the visible frame; **Resume Animation** continues the scene.
