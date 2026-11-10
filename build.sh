@@ -34,6 +34,7 @@ swiftc \
   -framework ScreenSaver \
   "$SOURCE_DIR/TerminalSupport.swift" \
   "$SOURCE_DIR/MatrixScreenSaverOptions.swift" \
+  "$SOURCE_DIR/MatrixVersionStatus.swift" \
   "$SOURCE_DIR/Xorshift64.swift" \
   "$SOURCE_DIR/NeoMessageScene.swift" \
   "$SOURCE_DIR/CmdCaptureScene.swift" \
@@ -47,6 +48,7 @@ swiftc \
 
 cp "$INPUT_RESOURCES_DIR/Info.plist" "$CONTENTS_DIR/Info.plist"
 cp -R "$INPUT_RESOURCES_DIR/Fonts" "$RESOURCES_DIR/Fonts"
+cp "$INPUT_RESOURCES_DIR/BuyMeACoffee.png" "$RESOURCES_DIR/BuyMeACoffee.png"
 for f in Preview.png "Preview@2x.png"; do
   if [[ -f "$INPUT_RESOURCES_DIR/$f" ]]; then
     cp "$INPUT_RESOURCES_DIR/$f" "$RESOURCES_DIR/$f"

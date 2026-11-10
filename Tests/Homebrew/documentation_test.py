@@ -20,6 +20,15 @@ class DocumentationTest(unittest.TestCase):
         self.assertIn("https://www.buymeacoffee.com/yesman82", text)
         self.assertIn("docs/bmc_qr.png", text)
 
+    def test_wallpaper_internals_live_in_developer_notes(self):
+        readme = (ROOT / "README.md").read_text()
+        developer = (ROOT / "docs/development.md").read_text()
+        self.assertIn("(docs/development.md)", readme)
+        for detail in ["dev.patsch.MatrixWallpaper", "Disconnected displays and failed restores",
+                       "Checks compare the loaded host", "restoring the previous installation if replacement fails"]:
+            self.assertNotIn(detail, readme)
+            self.assertIn(detail, developer)
+
     def test_maintainer_permissions_and_compatibility(self):
         text = (ROOT / "Homebrew/README.md").read_text()
         for phrase in ["HOMEBREW_TAP_REPOSITORY", "HOMEBREW_TAP_TOKEN", "contents",

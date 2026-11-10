@@ -22,6 +22,13 @@ func consumerHostTests() {
     // An unattached-to-window canvas uses display 0, isolating discovery from live wallpaper displays.
     let container = NSView(frame: NSRect(x: 0, y: 0, width: 437, height: 293))
     let view = MatrixScreenSaverView(frame: container.bounds, isPreview: false)!
+    var mismatch = false
+    view.readVersionStatus = {
+        MatrixVersionStatus(wallpapers: [.init(url: URL(fileURLWithPath: "/Wallpaper.app"), version: "1.0", isLoaded: false)],
+                            screenSavers: [.init(url: URL(fileURLWithPath: "/ScreenSaver.saver"),
+                                                 version: mismatch ? "2.0" : "1.0", isLoaded: true)],
+                            discoveryIncomplete: false)
+    }
     container.addSubview(view)
     view.startAnimation()
     defer { view.stopAnimation(); view.removeFromSuperview() }
@@ -55,6 +62,22 @@ func consumerHostTests() {
           "new publication reaches the actual consumer presentation")
     check(stored("frameIndex", in: renderer, as: Int.self) == frameIndex,
           "shared frame ticks do not advance native simulation")
+
+    let sharedPixels = pixels(of: view)
+    mismatch = true
+    view.refreshVersionStatus()
+    publish(0.4)
+    wait(0.1)
+    view.animateOneFrame()
+    check(stored("wallpaperFrameReader", in: view, as: WallpaperFrameReader.self) == nil &&
+          stored("sharedWallpaperImage", in: view, as: CGImage.self) == nil &&
+          stored("running", in: renderer, as: Bool.self) == false && pixels(of: view) != sharedPixels,
+          "mismatch tears down the real consumer and replaces shared frames with the error screen")
+    mismatch = false
+    view.refreshVersionStatus()
+    publish(0.75)
+    check(eventually { view.animateOneFrame(); return stored("sharedWallpaperImage", in: view, as: CGImage.self) != nil },
+          "matching versions reacquire wallpaper frames after a consumer mismatch")
 
     let nativeContainers = (1..<max(NSScreen.screens.count, 1)).map { index -> NSView in
         let container = NSView(frame: NSRect(x: 0, y: 0, width: 503 + index, height: 347))
@@ -115,4 +138,9 @@ func consumerHostTests() {
     nativeViews.forEach { $0.stopAnimation() }
     check(ScreenSyncCoordinator.shared.registeredCount == 0 && ScreenSyncCoordinator.shared.expected == 0,
           "consumer teardown clears synchronization state")
+    mismatch = true
+    view.startAnimation()
+    check(stored("wallpaperFrameReader", in: view, as: WallpaperFrameReader.self) == nil &&
+          stored("running", in: renderer, as: Bool.self) == false,
+          "mismatched startup in the real saver host never starts discovery or Matrix playback")
 }

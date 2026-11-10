@@ -15,19 +15,30 @@ func wallpaperAppTests() {
     host.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
     defer { host.applicationWillTerminate(Notification(name: NSApplication.willTerminateNotification)) }
     let status: NSStatusItem? = stored("statusItem", in: host)
-    let controls = status?.menu?.items.first?.view as? NSStackView
-    let buttons = controls?.arrangedSubviews.compactMap { $0 as? NSButton } ?? []
-    let stopItem = buttons.first
-    let pauseItem = buttons.last
-    check(controls?.orientation == .horizontal && buttons.map(\.title) == ["Stop", "Pause"] &&
-          buttons.allSatisfy { $0.imagePosition == .noImage && $0.bezelStyle == .rounded },
-          "launch shows Stop and Pause as text push buttons in one horizontal menu row")
     let menuItems = status?.menu?.items ?? []
+    let donationItem = menuItems.first { $0.action == NSSelectorFromString("openDonationPage:") }
+    check(donationItem?.title == "Buy Me a Coffee" && donationItem?.image?.size == NSSize(width: 16, height: 16) &&
+          donationItem?.image?.isTemplate == false,
+          "donation menu uses the full-color favicon at 16 points with the requested title")
+    if let donationItem, donationItem.responds(to: NSSelectorFromString("preferredImageVisibility")) {
+        check(donationItem.value(forKey: "preferredImageVisibility") as? Int == 1,
+              "donation menu keeps the favicon visible on macOS 27")
+    }
+    let stopItem = menuItems.first { $0.action == NSSelectorFromString("togglePlayback:") }
+    let pauseItem = menuItems.first { $0.action == NSSelectorFromString("togglePause:") }
+    check(menuItems.filter { !$0.isHidden }.prefix(2).map(\.title) == ["Pause Animation", "Stop Wallpaper"] &&
+          menuItems.allSatisfy { $0.view == nil } && pauseItem?.image != nil && stopItem?.image != nil,
+          "playback commands lead the menu as native items with symbols")
+    let settingsItem = menuItems.first { $0.action == NSSelectorFromString("showOptions:") }
+    check(settingsItem?.title == "Settings…" && settingsItem?.keyEquivalent == "," &&
+          settingsItem?.keyEquivalentModifierMask == .command,
+          "Settings uses the standard macOS label and Command-comma shortcut")
     if let loginIndex = menuItems.firstIndex(where: { $0.title.hasPrefix("Launch at Login") }),
        let syncIndex = menuItems.firstIndex(where: { $0.title == "Sync with Screen Saver" }) {
-        check(syncIndex == loginIndex + 1 && loginIndex > 0 && menuItems[loginIndex - 1].isSeparatorItem &&
+        check(syncIndex == loginIndex + 1 && loginIndex > 1 && menuItems[loginIndex - 1] === settingsItem &&
+              menuItems[loginIndex - 2].isSeparatorItem &&
               syncIndex + 1 < menuItems.count && menuItems[syncIndex + 1].isSeparatorItem,
-              "Sync with Screen Saver sits below Launch at Login between dividers")
+              "settings, login, and screen saver sync form one preference group")
     } else {
         check(false, "menu contains login and screen saver sync controls")
     }
@@ -47,9 +58,9 @@ func wallpaperAppTests() {
 
     let workspace = NSWorkspace.shared.notificationCenter
     wait(0.3)
-    check(NSApp.sendAction(NSSelectorFromString("togglePause:"), to: host, from: nil), "Pause menu action is connected")
-    check(pauseItem?.title == "Resume" && stopItem?.title == "Stop" && pauseItem?.isEnabled == true,
-          "paused menu offers Resume beside Stop")
+    if let pauseItem, let menu = status?.menu { menu.performActionForItem(at: menu.index(of: pauseItem)) }
+    check(pauseItem?.title == "Resume Animation" && stopItem?.title == "Stop Wallpaper" && pauseItem?.isEnabled == true,
+          "native Pause command freezes playback and offers Resume Animation")
     check(originalWindows.allSatisfy { $0.isVisible && ($0.contentView as? MatrixScreenSaverView)?.isAnimating == false },
           "Pause freezes every display without hiding its wallpaper")
     if let source = originalWindows.first?.contentView {
@@ -67,7 +78,7 @@ func wallpaperAppTests() {
     check(desktopWindowCount() == 0 && originalWindows.allSatisfy { ($0.contentView as? MatrixScreenSaverView)?.isAnimating == false },
           "Resume cannot override system sleep")
     workspace.post(name: NSWorkspace.didWakeNotification, object: nil)
-    check(pauseItem?.title == "Pause" && originalWindows.allSatisfy { $0.isVisible && ($0.contentView as? MatrixScreenSaverView)?.isAnimating == true },
+    check(pauseItem?.title == "Pause Animation" && originalWindows.allSatisfy { $0.isVisible && ($0.contentView as? MatrixScreenSaverView)?.isAnimating == true },
           "Resume continues the original views after the system suspension ends")
     workspace.post(name: NSWorkspace.willSleepNotification, object: nil)
     check(desktop.images.values.allSatisfy { $0.url == desktopController.blackImageURL }, "temporary sleep retains black desktops and backups")
@@ -99,7 +110,7 @@ func wallpaperAppTests() {
             wait(0.1)
             first = reader?.frame(displayID: displayID, pointSize: source.bounds.size)
         } while first == nil && Date() < deadline
-        check(first != nil && source.isAnimating && pauseItem?.title == "Resume",
+        check(first != nil && source.isAnimating && pauseItem?.title == "Resume Animation",
               "saver discovery advances the paused scene without clearing manual pause")
         let distributed = DistributedNotificationCenter.default()
         distributed.postNotificationName(Notification.Name("com.apple.screensaver.willstart"), object: nil,
@@ -113,7 +124,7 @@ func wallpaperAppTests() {
               "hidden wallpaper publishes advancing frames for the saver")
         NSApp.sendAction(NSSelectorFromString("togglePause:"), to: host, from: nil)
         NSApp.sendAction(NSSelectorFromString("togglePause:"), to: host, from: nil)
-        check(source.isAnimating && pauseItem?.title == "Resume" && desktopWindowCount() == 0,
+        check(source.isAnimating && pauseItem?.title == "Resume Animation" && desktopWindowCount() == 0,
               "changing manual pause during saver playback preserves the active shared scene")
         let sharedURL = source.shareWallpaperFrames()!
         NSApp.sendAction(NSSelectorFromString("toggleScreenSaverSync:"), to: host, from: nil)
@@ -136,7 +147,7 @@ func wallpaperAppTests() {
         distributed.postNotificationName(Notification.Name("com.apple.screensaver.didstop"), object: nil,
                                          userInfo: nil, deliverImmediately: true)
         wait(0.2)
-        check(!source.isAnimating && pauseItem?.title == "Resume" &&
+        check(!source.isAnimating && pauseItem?.title == "Resume Animation" &&
               Set(originalWindows.filter(\.isVisible).map(ObjectIdentifier.init)) == originalIDs,
               "saver exit immediately reveals the preserved paused wallpaper before its lease expires")
         let frozen = pixels(of: source)
@@ -189,7 +200,7 @@ func wallpaperAppTests() {
         distributed.postNotificationName(Notification.Name("com.apple.screensaver.didstop"), object: nil,
                                          userInfo: nil, deliverImmediately: true)
         wait(0.2)
-        check(!source.isAnimating && pauseItem?.title == "Resume" &&
+        check(!source.isAnimating && pauseItem?.title == "Resume Animation" &&
               Set(NSApp.windows.filter { $0 is DesktopWindow && $0.isVisible }.map(ObjectIdentifier.init)) == originalIDs,
               "saver exit after lease expiry keeps the same wallpaper views paused")
         NSApp.sendAction(NSSelectorFromString("togglePause:"), to: host, from: nil)
@@ -199,8 +210,8 @@ func wallpaperAppTests() {
     workspace.post(name: NSWorkspace.willSleepNotification, object: nil)
 
     check(NSApp.sendAction(NSSelectorFromString("togglePlayback:"), to: host, from: nil), "Stop menu action is connected")
-    check(stopItem?.title == "Start" && pauseItem?.title == "Pause" && pauseItem?.isEnabled == false,
-          "Stop clears manual pause and disables Pause beside Start")
+    check(stopItem?.title == "Start Wallpaper" && pauseItem?.title == "Pause Animation" && pauseItem?.isEnabled == false,
+          "Stop offers Start Wallpaper and leaves Pause Animation visible but disabled")
     NSApp.sendAction(NSSelectorFromString("togglePause:"), to: host, from: nil)
     check(desktop.images["first"]?.url.path == "/original-a.jpg" && desktop.images["second"]?.url.path == "/original-b.jpg",
           "Stop restores desktop images even during suspension")
@@ -264,8 +275,8 @@ private func wallpaperEditingShortcutTests(controller: MatrixScreenSaverOptionsS
     }
     let original = field.stringValue
     let wasEnabled = field.isEnabled
-    let root: NSStackView? = stored("rootStack", in: controller)
-    let tabs = root?.arrangedSubviews.compactMap { $0 as? NSTabView }.first
+    let scroll: NSScrollView? = stored("optionsScrollView", in: controller)
+    let tabs = scroll?.documentView as? NSTabView
     let selectedTab = tabs?.selectedTabViewItem
     tabs?.selectTabViewItem(at: 1)
     defer {
@@ -598,8 +609,8 @@ private func wallpaperIconTests() {
     let menu = NSBitmapImageRep(cgImage: context.makeImage()!)
     let stem = (12..<60).map { menu.colorAt(x: 20, y: $0)! }
     check(menu.colorAt(x: 0, y: 0)!.alphaComponent == 0 &&
-          stem.contains { $0.alphaComponent == 0 } && stem.contains { $0.alphaComponent > 0.9 },
-          "menu icon has transparent background and scanline gaps through the M")
+          stem.allSatisfy { $0.alphaComponent > 0.9 },
+          "menu icon has transparent background and a solid, high-contrast M stem")
     check(stem.allSatisfy { $0.redComponent == $0.greenComponent && $0.greenComponent == $0.blueComponent },
           "menu icon is monochrome for system template tinting")
 }

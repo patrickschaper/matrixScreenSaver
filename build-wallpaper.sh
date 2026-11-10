@@ -17,6 +17,7 @@ swiftc -O -module-name MatrixWallpaper \
   -framework Foundation -framework AppKit -framework ScreenSaver -framework ServiceManagement \
   "$SOURCE_DIR/TerminalSupport.swift" \
   "$SOURCE_DIR/MatrixScreenSaverOptions.swift" \
+  "$SOURCE_DIR/MatrixVersionStatus.swift" \
   "$SOURCE_DIR/Xorshift64.swift" \
   "$SOURCE_DIR/NeoMessageScene.swift" \
   "$SOURCE_DIR/CmdCaptureScene.swift" \
@@ -39,6 +40,7 @@ cp "$ROOT_DIR/Resources/Wallpaper-Info.plist" "$BUNDLE_DIR/Contents/Info.plist"
 mkdir -p "$BUNDLE_DIR/Contents/Resources/Fonts"
 cp "$ROOT_DIR/Resources/Fonts/"* "$BUNDLE_DIR/Contents/Resources/Fonts/"
 cp "$ROOT_DIR/Resources/WallpaperIcon.icns" "$ROOT_DIR/Resources/MenuBarIcon.pdf" "$BUNDLE_DIR/Contents/Resources/"
+cp "$ROOT_DIR/Resources/BuyMeACoffee.png" "$BUNDLE_DIR/Contents/Resources/BuyMeACoffee.png"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $BUNDLE_VERSION" "$BUNDLE_DIR/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUNDLE_VERSION" "$BUNDLE_DIR/Contents/Info.plist"
 plutil -lint "$BUNDLE_DIR/Contents/Info.plist" >/dev/null
