@@ -328,11 +328,6 @@ struct MatrixScreenSaverOptions: Equatable {
     }
 }
 
-/// A top-origin document keeps the Rain options at the top when its content grows.
-private final class RainOptionsDocumentView: NSView {
-    override var isFlipped: Bool { true }
-}
-
 final class MatrixScreenSaverOptionsSheetController: NSObject,
     NSTextFieldDelegate, NSWindowDelegate,
     NSTableViewDataSource, NSTableViewDelegate {
@@ -366,9 +361,19 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
     private let onApply: (MatrixScreenSaverOptions) -> Void
     var onClose: (() -> Void)?
 
+    /// Optional wallpaper-host action; omitted by the saver and preview to hide installation UI.
+    var onInstallScreenSaver: (() -> Void)?
+    /// Host-controlled notice above all tabs, removed from layout when the saver is installed.
+    private let installationBanner = NSStackView()
+    /// Explicit recovery action that never replaces the settings window's default Save button.
+    private let installScreenSaverButton = NSButton(title: "Install Screen Saver", target: nil, action: nil)
+
     private let window: NSWindow
     private let rootStack = NSStackView()
-    private let neoMessageSceneCheckbox = NSButton(checkboxWithTitle: "Show Neo message scene", target: nil, action: nil)
+    /// Scrolls settings on smaller displays while keeping actions visible.
+    private let optionsScrollView = NSScrollView()
+    private var optionsHeight: NSLayoutConstraint?
+    private let neoMessageSceneCheckbox = NSButton(checkboxWithTitle: "Show Neo message", target: nil, action: nil)
     private let neoMessageSpeedFactorField = NSTextField(string: "")
     private let cmdOutputHoldSecondsField = NSTextField(string: "")
     private let nameField = NSTextField(string: "")
@@ -398,7 +403,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
     private var maximumEditorRows: Int {
         editingCommands ? MatrixScreenSaverOptions.maxCommandCount : MatrixScreenSaverOptions.maxNeoMessageLineCount
     }
-    private let cmdSceneCheckbox = NSButton(checkboxWithTitle: "Show custom scene", target: nil, action: nil)
+    private let cmdSceneCheckbox = NSButton(checkboxWithTitle: "Run custom commands", target: nil, action: nil)
     /// Scene-owned editor buttons remain available only while their scene is enabled.
     private let commandsEditButton = NSButton(title: "Edit…", target: nil, action: nil)
     private let linesEditButton = NSButton(title: "Edit…", target: nil, action: nil)
@@ -410,7 +415,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
     private let commandsShuffleRadio = NSButton(radioButtonWithTitle: "All commands in random order", target: nil, action: nil)
     /// Commands accepted in the editor, not persisted until the main dialog is accepted.
     private var pendingCommands: [String] = []
-    private let numberSceneCheckbox = NSButton(checkboxWithTitle: "Show trace program scene", target: nil, action: nil)
+    private let numberSceneCheckbox = NSButton(checkboxWithTitle: "Show trace program", target: nil, action: nil)
     private let twinkleCheckbox = NSButton(checkboxWithTitle: "Twinkling effect", target: nil, action: nil)
     private let diffuseCheckbox = NSButton(checkboxWithTitle: "Glow effect", target: nil, action: nil)
     private let scanLinesSlider: NSSlider = {
@@ -461,7 +466,8 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
 
     /// Creates native options UI with a host-owned apply action.
     ///
-    /// - Parameter onApply: Receives validated options when the user chooses Apply.
+    /// - Parameters:
+    ///   - onApply: Receives validated options when the user chooses Save.
     init(onApply: @escaping (MatrixScreenSaverOptions) -> Void) {
         self.onApply = onApply
         window = NSWindow(
@@ -510,12 +516,30 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         updateRainGlyphControls()
         rebuildRainFontsMenu()
         updateSceneControls()
-        sizeWindowToFitContent()
     }
 
     /// Returns the native sheet window presented by ScreenSaver.framework.
     func configureSheet() -> NSWindow {
-        window
+        return window
+    }
+
+    /// Updates the optional recovery notice without reloading or saving any edited options.
+    ///
+    /// - Parameters:
+    ///   - isMissing: Whether discovery found no installed companion saver.
+    ///   - isInstalling: Whether the host already has an installation in progress.
+    func updateScreenSaverInstallation(isMissing: Bool, isInstalling: Bool) {
+        let hidden = onInstallScreenSaver == nil || (!isMissing && !isInstalling)
+        let changedVisibility = installationBanner.isHidden != hidden
+        installationBanner.isHidden = hidden
+        installScreenSaverButton.title = isInstalling ? "Installing Screen Saver…" : "Install Screen Saver"
+        installScreenSaverButton.isEnabled = !isInstalling
+        if changedVisibility { sizeWindowToFitContent() }
+    }
+
+    /// Forwards an explicit install click to the wallpaper host without applying settings.
+    @objc private func installScreenSaver(_ sender: Any?) {
+        onInstallScreenSaver?()
     }
 
     /// Validates and applies the edited options.
@@ -556,7 +580,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
 
     /// Constructs the native AppKit options sheet content and layout.
     private func buildWindow() {
-        window.title = "Matrix Screen Saver and animated Wallpaper"
+        window.title = "Matrix Options"
         window.isReleasedWhenClosed = false
         window.delegate = self
 
@@ -588,48 +612,85 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         rootStack.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
         rootStack.translatesAutoresizingMaskIntoConstraints = false
 
-        let aboutButton = NSButton(title: "About", target: self, action: #selector(openRepository(_:)))
+        let installationMessage = NSTextField(wrappingLabelWithString: "Screen saver isn’t installed.")
+        installationMessage.textColor = .secondaryLabelColor
+        installationBanner.orientation = .horizontal
+        installationBanner.alignment = .centerY
+        installationBanner.spacing = 12
+        installationBanner.isHidden = true
+        installScreenSaverButton.bezelStyle = .rounded
+        installScreenSaverButton.target = self
+        installScreenSaverButton.action = #selector(installScreenSaver(_:))
+        installScreenSaverButton.setContentHuggingPriority(.required, for: .horizontal)
+        installScreenSaverButton.setContentCompressionResistancePriority(.required, for: .horizontal)
+        installationBanner.addArrangedSubview(installationMessage)
+        installationBanner.addArrangedSubview(installScreenSaverButton)
+        rootStack.addArrangedSubview(installationBanner)
+        installationBanner.widthAnchor.constraint(equalToConstant: 640).isActive = true
+
+        let aboutButton = NSButton(title: "About the project", target: self, action: #selector(openRepository(_:)))
         aboutButton.bezelStyle = .inline
         aboutButton.isBordered = false
         aboutButton.contentTintColor = .linkColor
         aboutButton.font = .systemFont(ofSize: 13)
 
         // Tab pages lay out during insertion, before Auto Layout sizes the tab view.
-        let tabs = NSTabView(frame: NSRect(x: 0, y: 0, width: 520, height: 520))
+        let tabs = NSTabView(frame: NSRect(x: 0, y: 0, width: 640, height: 620))
         tabs.translatesAutoresizingMaskIntoConstraints = false
         tabs.addTabViewItem(makeOptionsTab(title: "General", views: [
-            makeCharacterSizeSection(),
-            makeScanLinesSection(),
-            makeNumericSection(title: "Frame rate", field: frameRateField, description: MatrixScreenSaverOptions.frameRateDescription),
+            makeDescriptionLabel("Shared settings for the screen saver and animated wallpaper."),
+            makeOptionsGroup(title: "Rendering", views: [
+                makeCharacterSizeSection(),
+                makeNumericSection(title: "Frame rate", field: frameRateField, description: "Frames per second. Higher values use more energy."),
+            ]),
+            makeOptionsGroup(title: "Shared effects", views: [
+                makeScanLinesSection(),
+                makeCheckboxSection(checkbox: twinkleCheckbox, description: "Vary character brightness in the rain and trace program."),
+            ]),
         ]))
         tabs.addTabViewItem(makeOptionsTab(title: "Intro scenes", views: [
-            makeSceneGroup(views: [
-                makeCheckboxSection(checkbox: neoMessageSceneCheckbox, description: MatrixScreenSaverOptions.neoMessageSceneDescription),
-                makeTextSection(title: "Name", field: nameField, description: MatrixScreenSaverOptions.nameDescription, fieldWidth: Self.textFieldWidth / 2),
+            makeNumericSection(title: "Typing speed", field: neoMessageSpeedFactorField, description: "Speed multiplier for all intro scenes. 1 is normal speed."),
+            makeOptionsGroup(title: "1. Neo message", views: [
+                neoMessageSceneCheckbox,
+                makeTextSection(title: "Name", field: nameField, description: "Used in “Wake up, {name}…”. Leave empty for Neo."),
                 makeNeoMessageLinesButtonRow(),
             ]),
-            makeSceneGroup(views: [makeCustomShellCommandsSection()]),
-            makeSceneGroup(views: [makeCheckboxSection(checkbox: numberSceneCheckbox, description: MatrixScreenSaverOptions.numberSceneDescription)]),
-            makeNumericSection(title: "Typing speed", field: neoMessageSpeedFactorField, description: MatrixScreenSaverOptions.neoMessageSpeedFactorDescription),
+            makeOptionsGroup(title: "2. Custom commands", views: [makeCustomShellCommandsSection()]),
+            makeOptionsGroup(title: "3. Trace program", views: [numberSceneCheckbox]),
         ]))
         tabs.addTabViewItem(makeOptionsTab(title: "Rain", views: [
-             makeCheckboxSection(checkbox: twinkleCheckbox, description: MatrixScreenSaverOptions.twinkleDescription),
-             makeCheckboxSection(checkbox: diffuseCheckbox, description: MatrixScreenSaverOptions.diffuseDescription),
-             makeNumericSection(title: "Density", field: rainDensityField, description: MatrixScreenSaverOptions.rainDensityDescription),
-              makeRainDurationSection(),
-              makeRainGlyphSection(),
-              makeRainFontsSection(),
-             makeTextSection(title: "Characters", field: charactersField, description: MatrixScreenSaverOptions.charactersDescription, fieldWidth: Self.textFieldWidth / 2),
-             makeNumericSection(title: "Error rate", field: errorRateField, description: MatrixScreenSaverOptions.errorRateDescription),
+            makeDescriptionLabel("The falling characters shown after the intro scenes."),
+            makeOptionsGroup(title: "Characters", views: [
+                makeRainGlyphSection(),
+                makeRainFontsSection(),
+                makeTextSection(title: "Custom glyphs", field: charactersField, description: "Leave empty to use the selected font’s character set."),
+            ]),
+            makeOptionsGroup(title: "Animation", views: [
+                makeNumericSection(title: "Density", field: rainDensityField, description: "Number of falling streams. 1 is normal density."),
+                makeRainDurationSection(),
+                makeNumericSection(title: "Change rate", field: errorRateField, description: "How often characters change. 0 keeps each character fixed."),
+            ]),
+            makeOptionsGroup(title: "Effects", views: [
+                makeCheckboxSection(checkbox: diffuseCheckbox, description: "Add a soft glow around falling characters."),
+            ]),
         ]))
-        rootStack.addArrangedSubview(tabs)
+        optionsScrollView.borderType = .noBorder
+        optionsScrollView.drawsBackground = false
+        optionsScrollView.hasVerticalScroller = true
+        optionsScrollView.autohidesScrollers = true
+        optionsScrollView.scrollerStyle = .overlay
+        optionsScrollView.documentView = tabs
+        rootStack.addArrangedSubview(optionsScrollView)
+        optionsHeight = optionsScrollView.heightAnchor.constraint(equalToConstant: 620)
+        optionsHeight?.isActive = true
 
         let groupWidth = -(rootStack.edgeInsets.left + rootStack.edgeInsets.right)
-        // Keep every page the same size so switching tabs never moves the dialog buttons.
+        // Reserve space for the longest page so every setting stays visible when switching tabs.
         NSLayoutConstraint.activate([
-            tabs.widthAnchor.constraint(equalToConstant: 520),
-            tabs.heightAnchor.constraint(equalToConstant: 550),
-            tabs.widthAnchor.constraint(equalTo: rootStack.widthAnchor, constant: groupWidth),
+            tabs.widthAnchor.constraint(equalToConstant: 640),
+            tabs.heightAnchor.constraint(equalToConstant: 620),
+            optionsScrollView.widthAnchor.constraint(equalTo: rootStack.widthAnchor, constant: groupWidth),
+            optionsScrollView.widthAnchor.constraint(equalToConstant: 640),
         ])
 
         let buttons = NSStackView()
@@ -638,11 +699,16 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         buttons.alignment = .centerY
         buttons.translatesAutoresizingMaskIntoConstraints = false
 
-        let resetButton = NSButton(title: "Reset to defaults", target: self, action: #selector(resetToDefaults(_:)))
+        let resetButton = NSButton(title: "Restore Defaults", target: self, action: #selector(resetToDefaults(_:)))
         let cancelButton = NSButton(title: "Cancel", target: self, action: #selector(cancel(_:)))
-        let okButton = NSButton(title: "OK", target: self, action: #selector(apply(_:)))
+        let okButton = NSButton(title: "Save", target: self, action: #selector(apply(_:)))
         okButton.keyEquivalent = "\r"
         cancelButton.keyEquivalent = "\u{1b}"
+        okButton.bezelStyle = .rounded
+        cancelButton.bezelStyle = .rounded
+        resetButton.bezelStyle = .rounded
+        okButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 72).isActive = true
+        cancelButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 72).isActive = true
         buttons.addArrangedSubview(cancelButton)
         buttons.addArrangedSubview(okButton)
 
@@ -657,16 +723,23 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
             .infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
         let versionLabel = NSTextField(labelWithString: versionString.isEmpty ? "" : "v\(versionString)")
         versionLabel.font = .systemFont(ofSize: 11)
-        versionLabel.textColor = .tertiaryLabelColor
+        versionLabel.textColor = .secondaryLabelColor
         versionLabel.setContentHuggingPriority(.required, for: .horizontal)
 
-        let coffeeButton = NSButton(title: "Buy me a coffee ☕", target: self, action: #selector(openDonationPage(_:)))
+        let coffeeButton = NSButton(title: "Buy Me a Coffee", target: self, action: #selector(openDonationPage(_:)))
+        // Source: https://cdn.buymeacoffee.com/assets/homepage/meta/favicon-32x32.png
+        coffeeButton.image = Bundle(for: MatrixScreenSaverOptionsSheetController.self).image(forResource: "BuyMeACoffee")
+        coffeeButton.image?.size = NSSize(width: 16, height: 16)
+        coffeeButton.image?.isTemplate = false
+        coffeeButton.imagePosition = .imageLeft
         coffeeButton.bezelStyle = .inline
         coffeeButton.isBordered = false
         coffeeButton.controlSize = .small
         coffeeButton.contentTintColor = .linkColor
         coffeeButton.font = aboutButton.font
         coffeeButton.setContentHuggingPriority(.required, for: .horizontal)
+        // The native centered title uses half the extra width as icon-to-label spacing.
+        coffeeButton.widthAnchor.constraint(greaterThanOrEqualToConstant: coffeeButton.intrinsicContentSize.width + 8).isActive = true
 
         let spacerRight = NSView()
         spacerRight.translatesAutoresizingMaskIntoConstraints = false
@@ -674,12 +747,22 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         spacerRight.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         footer.addArrangedSubview(resetButton)
-        footer.addArrangedSubview(aboutButton)
-        footer.addArrangedSubview(versionLabel)
-        footer.addArrangedSubview(coffeeButton)
         footer.addArrangedSubview(spacerRight)
         footer.addArrangedSubview(buttons)
 
+        let informationSpacer = NSView()
+        informationSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        let information = NSStackView(views: [aboutButton, versionLabel, informationSpacer, coffeeButton])
+        information.alignment = .centerY
+        information.spacing = 8
+        rootStack.addArrangedSubview(information)
+        information.widthAnchor.constraint(equalTo: tabs.widthAnchor).isActive = true
+        let separator = NSBox()
+        separator.boxType = .separator
+        rootStack.addArrangedSubview(separator)
+        separator.widthAnchor.constraint(equalTo: tabs.widthAnchor).isActive = true
+        rootStack.setCustomSpacing(10, after: information)
+        rootStack.setCustomSpacing(12, after: separator)
         rootStack.addArrangedSubview(footer)
         buttons.setHuggingPriority(.required, for: .horizontal)
         resetButton.setContentHuggingPriority(.required, for: .horizontal)
@@ -700,19 +783,22 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         sizeWindowToFitContent()
     }
 
-    /// Wraps scene controls in a native, untitled fieldset without changing their actions.
-    private func makeSceneGroup(views: [NSView]) -> NSBox {
+    /// Groups controls by scope, using native borders and a readable section heading.
+    private func makeOptionsGroup(title: String, views: [NSView]) -> NSBox {
         let box = NSBox()
-        box.titlePosition = .noTitle
-        box.contentViewMargins = NSSize(width: 8, height: 8)
+        box.title = title
+        box.titleFont = .systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
+        box.contentViewMargins = NSSize(width: 12, height: 10)
         let stack = NSStackView(views: views)
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 6
+        stack.spacing = 8
         stack.translatesAutoresizingMaskIntoConstraints = false
         let content = box.contentView!
         content.addSubview(stack)
         NSLayoutConstraint.activate([
+            // A single-checkbox group still needs room for the native box's content margins.
+            box.heightAnchor.constraint(greaterThanOrEqualTo: stack.heightAnchor, constant: box.contentViewMargins.height * 2),
             stack.leadingAnchor.constraint(equalTo: content.leadingAnchor),
             stack.trailingAnchor.constraint(equalTo: content.trailingAnchor),
             stack.topAnchor.constraint(equalTo: content.topAnchor),
@@ -745,7 +831,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         commandsEditButton.action = #selector(editCommands(_:))
         commandsEditButton.setAccessibilityLabel("Edit custom shell commands")
         let label = NSTextField(labelWithString: "Commands")
-        label.font = .systemFont(ofSize: 13, weight: .semibold)
+        label.font = .systemFont(ofSize: NSFont.systemFontSize)
         label.widthAnchor.constraint(equalToConstant: 100).isActive = true
         let heading = NSStackView(views: [label, commandsEditButton])
         heading.spacing = 12
@@ -758,15 +844,15 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         modes.alignment = .leading
         modes.spacing = 4
         let stack = NSStackView(views: [
-            makeCheckboxSection(checkbox: cmdSceneCheckbox, description: MatrixScreenSaverOptions.cmdSceneDescription),
+            cmdSceneCheckbox,
             heading, modes,
             makeNumericSection(title: "Output hold", field: cmdOutputHoldSecondsField,
-                               description: MatrixScreenSaverOptions.cmdOutputHoldSecondsDescription),
+                description: "Seconds to show output after each command finishes. 0 continues immediately."),
         ])
         cmdOutputHoldSecondsField.setAccessibilityLabel("Command output hold in seconds")
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 4
+        stack.spacing = 6
         return stack
     }
 
@@ -797,19 +883,20 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         row.alignment = .centerY
 
         let label = NSTextField(labelWithString: "Lines")
-        label.font = .systemFont(ofSize: 13, weight: .semibold)
+        label.font = .systemFont(ofSize: NSFont.systemFontSize)
         label.setContentHuggingPriority(.required, for: .horizontal)
         label.widthAnchor.constraint(equalToConstant: 100).isActive = true
 
         linesEditButton.target = self
         linesEditButton.action = #selector(editLines(_:))
         linesEditButton.setContentHuggingPriority(.required, for: .horizontal)
+        linesEditButton.setAccessibilityLabel("Edit Neo message lines")
 
         row.addArrangedSubview(label)
         row.addArrangedSubview(linesEditButton)
 
         stack.addArrangedSubview(row)
-        stack.addArrangedSubview(makeDescriptionLabel(MatrixScreenSaverOptions.neoMessageLinesDescription))
+        stack.addArrangedSubview(makeDescriptionLabel("Customize the intro message, or use the default greeting."))
         return stack
     }
 
@@ -1179,7 +1266,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         row.alignment = .centerY
 
         let label = NSTextField(labelWithString: "Scan lines")
-        label.font = .systemFont(ofSize: 13, weight: .semibold)
+        label.font = .systemFont(ofSize: NSFont.systemFontSize)
         label.setContentHuggingPriority(.required, for: .horizontal)
         label.widthAnchor.constraint(equalToConstant: 100).isActive = true
         scanLinesSlider.setAccessibilityLabel("Scan line intensity")
@@ -1200,7 +1287,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         row.addArrangedSubview(scanLinesDirectionPopup)
 
         stack.addArrangedSubview(row)
-        stack.addArrangedSubview(makeDescriptionLabel(MatrixScreenSaverOptions.scanLinesDescription))
+        stack.addArrangedSubview(makeDescriptionLabel("CRT texture across all scenes. Set to 0% to turn it off."))
         return stack
     }
 
@@ -1236,7 +1323,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         row.alignment = .centerY
 
         let label = NSTextField(labelWithString: title)
-        label.font = .systemFont(ofSize: 13, weight: .semibold)
+        label.font = .systemFont(ofSize: NSFont.systemFontSize)
         label.setContentHuggingPriority(.required, for: .horizontal)
         label.widthAnchor.constraint(equalToConstant: 100).isActive = true
         field.setAccessibilityLabel(title)
@@ -1254,9 +1341,10 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         return stack
     }
 
+    /// Keeps the rain-only preset, sample, and customization guidance together.
     private func makeRainGlyphSection() -> NSView {
         let heading = NSTextField(labelWithString: "Glyph set")
-        heading.font = .systemFont(ofSize: 13, weight: .semibold)
+        heading.font = .systemFont(ofSize: NSFont.systemFontSize)
         for (index, radio) in rainGlyphRadios.enumerated() {
             radio.tag = index
             radio.target = self
@@ -1267,15 +1355,19 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         rainGlyphPreview.drawsBackground = true
         rainGlyphPreview.backgroundColor = .black
         rainGlyphPreview.textColor = .green
+        // Fonts can contain thousands of glyphs; the sample must not displace the settings below it.
         rainGlyphPreview.lineBreakMode = .byCharWrapping
-        rainGlyphPreview.maximumNumberOfLines = 0
-        rainGlyphPreview.setAccessibilityLabel("Selected rain glyphs")
-        let stack = NSStackView(views: [heading, row, rainGlyphPreview])
+        rainGlyphPreview.maximumNumberOfLines = 3
+        rainGlyphPreview.heightAnchor.constraint(equalToConstant: 48).isActive = true
+        rainGlyphPreview.setAccessibilityLabel("Rain glyph sample")
+        let note = makeDescriptionLabel("Classic and Resurrections include their own font and glyphs. Choose Default to customize them below.")
+        let stack = NSStackView(views: [heading, row, rainGlyphPreview, note])
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 4
+        stack.spacing = 8
         stack.setHuggingPriority(.required, for: .vertical)
         rainGlyphPreview.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+        note.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         row.toolTip = "Classic and Resurrections use their original bundled fonts. Default uses the settings below."
         return stack
     }
@@ -1321,11 +1413,12 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         stack.setHuggingPriority(.required, for: .vertical)
 
         let heading = NSTextField(labelWithString: "Font")
-        heading.font = .systemFont(ofSize: 13, weight: .semibold)
+        heading.font = .systemFont(ofSize: NSFont.systemFontSize)
+        heading.widthAnchor.constraint(equalToConstant: 100).isActive = true
 
         rainFontsButton.setAccessibilityLabel("Font")
         rainFontsButton.translatesAutoresizingMaskIntoConstraints = false
-        rainFontsButton.widthAnchor.constraint(equalToConstant: Self.textFieldWidth).isActive = true
+        rainFontsButton.widthAnchor.constraint(equalToConstant: 220).isActive = true
         (rainFontsButton.cell as? NSPopUpButtonCell)?.lineBreakMode = .byTruncatingTail
 
         let resetButton = rainFontsResetButton
@@ -1336,15 +1429,12 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         resetButton.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
         resetButton.setAccessibilityLabel("Reset font to system default")
         resetButton.toolTip = "Use the default system font"
-        let row = NSStackView(views: [rainFontsButton, resetButton])
+        let row = NSStackView(views: [heading, rainFontsButton, resetButton])
         row.orientation = .horizontal
         row.alignment = .centerY
-        row.spacing = 8
+        row.spacing = 12
 
-        stack.addArrangedSubview(heading)
-        stack.addArrangedSubview(makeDescriptionLabel(MatrixScreenSaverOptions.rainFontsDescription))
         stack.addArrangedSubview(row)
-        stack.setCustomSpacing(8, after: stack.arrangedSubviews[1])
         return stack
     }
 
@@ -1395,7 +1485,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
     }
 
     /// Builds a labeled text input row with its description.
-    private func makeTextSection(title: String, field: NSTextField, description: String, fieldWidth: CGFloat? = nil) -> NSView {
+    private func makeTextSection(title: String, field: NSTextField, description: String) -> NSView {
         let stack = NSStackView()
         stack.orientation = .vertical
         stack.alignment = .leading
@@ -1408,7 +1498,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         row.alignment = .centerY
 
         let label = NSTextField(labelWithString: title)
-        label.font = .systemFont(ofSize: 13, weight: .semibold)
+        label.font = .systemFont(ofSize: NSFont.systemFontSize)
         label.setContentHuggingPriority(.required, for: .horizontal)
         label.widthAnchor.constraint(equalToConstant: 100).isActive = true
         field.setAccessibilityLabel(title)
@@ -1416,7 +1506,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         field.alignment = .left
         field.controlSize = .regular
         field.translatesAutoresizingMaskIntoConstraints = false
-        field.widthAnchor.constraint(equalToConstant: fieldWidth ?? Self.textFieldWidth).isActive = true
+        field.widthAnchor.constraint(equalToConstant: Self.textFieldWidth).isActive = true
 
         row.addArrangedSubview(label)
         row.addArrangedSubview(field)
@@ -1447,7 +1537,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
          secondsRow.alignment = .centerY
 
          let secondsLabel = NSTextField(labelWithString: "Seconds")
-         secondsLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        secondsLabel.font = .systemFont(ofSize: NSFont.systemFontSize)
          secondsLabel.setContentHuggingPriority(.required, for: .horizontal)
          secondsLabel.widthAnchor.constraint(equalToConstant: 100).isActive = true
          rainDurationField.setAccessibilityLabel("Rain duration in seconds")
@@ -1462,7 +1552,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
 
          stack.addArrangedSubview(checkboxRow)
          stack.addArrangedSubview(secondsRow)
-         stack.addArrangedSubview(makeDescriptionLabel(MatrixScreenSaverOptions.rainDurationSecondsDescription))
+        stack.addArrangedSubview(makeDescriptionLabel("When off, rain winds down after this many seconds, then the scene sequence repeats."))
          return stack
     }
 
@@ -1480,7 +1570,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         row.alignment = .centerY
 
         let titleLabel = NSTextField(labelWithString: "Character size")
-        titleLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        titleLabel.font = .systemFont(ofSize: NSFont.systemFontSize)
         titleLabel.setContentHuggingPriority(.required, for: .horizontal)
         titleLabel.widthAnchor.constraint(equalToConstant: 100).isActive = true
         characterSizeSlider.setAccessibilityLabel("Character size")
@@ -1497,7 +1587,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         row.addArrangedSubview(characterSizeValueLabel)
 
         stack.addArrangedSubview(row)
-        stack.addArrangedSubview(makeDescriptionLabel(MatrixScreenSaverOptions.characterSizeDescription))
+        stack.addArrangedSubview(makeDescriptionLabel("Character cell dimensions in pixels, used by every scene."))
         return stack
     }
 
@@ -1518,21 +1608,9 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         item.label = title
         // Start at the real page size so NSTabView never lays the page out at its 20pt placeholder width,
         // which made the fixed-width rows report unsatisfiable constraints in the screen saver host.
-        let frame = NSRect(x: 0, y: 0, width: 520, height: 550)
-        let scrolls = title == "Rain"
-        let contentView = scrolls ? RainOptionsDocumentView(frame: frame) : NSView(frame: frame)
-        if scrolls {
-            let scrollView = NSScrollView(frame: frame)
-            scrollView.hasVerticalScroller = true
-            scrollView.autohidesScrollers = true
-            scrollView.drawsBackground = false
-            scrollView.documentView = contentView
-            contentView.translatesAutoresizingMaskIntoConstraints = false
-            contentView.widthAnchor.constraint(equalTo: scrollView.contentView.widthAnchor).isActive = true
-            item.view = scrollView
-        } else {
-            item.view = contentView
-        }
+        let frame = NSRect(x: 0, y: 0, width: 640, height: 620)
+        let contentView = NSView(frame: frame)
+        item.view = contentView
         let stack = NSStackView(views: views)
         stack.orientation = .vertical
         stack.alignment = .leading
@@ -1545,8 +1623,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
             stack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
             stack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
             stack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 16),
-            scrolls ? stack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -16)
-                : stack.bottomAnchor.constraint(lessThanOrEqualTo: contentView.bottomAnchor, constant: -16),
+            stack.bottomAnchor.constraint(lessThanOrEqualTo: contentView.bottomAnchor, constant: -16),
         ])
         for view in views {
             view.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
@@ -1558,7 +1635,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
     /// Creates the smaller descriptive text used under each option row.
     private func makeDescriptionLabel(_ description: String) -> NSTextField {
         let label = NSTextField(wrappingLabelWithString: description)
-        label.font = .systemFont(ofSize: 11)
+        label.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
         label.textColor = .secondaryLabelColor
         label.alignment = .left
         label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
@@ -1712,20 +1789,30 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         value.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// Resizes the sheet window so it fits the current stack view content.
+    /// Fits the fixed-size pages and action area without making the window user-resizable.
     private func sizeWindowToFitContent() {
         guard let contentView = window.contentView else {
             return
         }
 
         contentView.layoutSubtreeIfNeeded()
+        // Keep Save/Cancel on screen; only the fixed-size tab document scrolls.
+        let currentHeight = optionsHeight?.constant ?? 620
+        let chromeHeight = window.frame.height - window.contentRect(forFrameRect: window.frame).height
+        let availableHeight = (window.screen ?? NSScreen.main)?.visibleFrame.height ?? 1000
+        let otherHeight = rootStack.fittingSize.height - currentHeight
+        optionsHeight?.constant = min(620, max(120, availableHeight - chromeHeight - otherHeight - 24))
+        contentView.layoutSubtreeIfNeeded()
         let fittingSize = rootStack.fittingSize
         let contentSize = NSSize(
             width: ceil(fittingSize.width),
             height: ceil(fittingSize.height)
         )
-        window.setContentSize(contentSize)
         window.contentMinSize = contentSize
+        window.setContentSize(contentSize)
+        if optionsHeight?.constant != currentHeight, let document = optionsScrollView.documentView {
+            document.scroll(NSPoint(x: 0, y: max(0, document.frame.height - optionsScrollView.contentSize.height)))
+        }
     }
 
     private static let fourDigitFieldWidth: CGFloat = {

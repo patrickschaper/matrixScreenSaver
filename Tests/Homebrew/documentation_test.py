@@ -11,7 +11,7 @@ class DocumentationTest(unittest.TestCase):
         self.assertIn("brew trust --cask patrickschaper/tap/matrix-screen-saver", quick)
         self.assertIn("brew install --cask patrickschaper/tap/matrix-screen-saver", quick)
         self.assertLessEqual(len(quick.strip().splitlines()), 7)
-        self.assertIn("open **MatrixWallpaper** in Applications", quick)
+        self.assertIn("open **Matrix Wallpaper** in Applications", quick)
         self.assertIn("MatrixScreenSaver → Options…", quick)
         self.assertNotIn("## Homebrew install", text)
         self.assertNotIn("## Homebrew lifecycle", text)
@@ -19,6 +19,15 @@ class DocumentationTest(unittest.TestCase):
         self.assertIn("## Buy me a coffee", text)
         self.assertIn("https://www.buymeacoffee.com/yesman82", text)
         self.assertIn("docs/bmc_qr.png", text)
+
+    def test_wallpaper_internals_live_in_developer_notes(self):
+        readme = (ROOT / "README.md").read_text()
+        developer = (ROOT / "docs/development.md").read_text()
+        self.assertIn("(docs/development.md)", readme)
+        for detail in ["dev.patsch.MatrixWallpaper", "Disconnected displays and failed restores",
+                       "Checks compare the loaded host", "restoring the previous installation if replacement fails"]:
+            self.assertNotIn(detail, readme)
+            self.assertIn(detail, developer)
 
     def test_maintainer_permissions_and_compatibility(self):
         text = (ROOT / "Homebrew/README.md").read_text()

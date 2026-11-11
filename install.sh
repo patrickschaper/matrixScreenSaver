@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PRODUCT_NAME="MatrixScreenSaver"
-BUILD_BUNDLE="$ROOT_DIR/build/$PRODUCT_NAME.saver"
-
-"$ROOT_DIR/build.sh"
-"$ROOT_DIR/Scripts/install-saver.sh" "$BUILD_BUNDLE"
+if [[ $# -eq 0 ]]; then
+  "$ROOT_DIR/build.sh"
+  "$ROOT_DIR/build-wallpaper.sh" --saver "$ROOT_DIR/build/MatrixScreenSaver.saver"
+  set -- "$ROOT_DIR/build/Matrix Wallpaper.app" "$ROOT_DIR/build/MatrixScreenSaver.saver"
+fi
+exec /bin/bash "$ROOT_DIR/Scripts/product-lifecycle.sh" install "$@"

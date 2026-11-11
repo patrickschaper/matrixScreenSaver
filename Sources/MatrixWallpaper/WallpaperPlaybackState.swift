@@ -19,6 +19,9 @@ struct WallpaperPlaybackState {
     /// Whether the user wants wallpaper playback, even if it cannot run right now.
     var isRequested = true
 
+    /// Freezes desktop playback; a synced saver temporarily advances the same scene without clearing this choice.
+    var isPaused = false
+
     /// A recent matching saver request lets the wallpaper own animation while its desktop is hidden.
     var isServingScreenSaver = false
 
@@ -27,7 +30,8 @@ struct WallpaperPlaybackState {
 
     /// Whether animation may run after combining user intent and system state.
     var shouldRun: Bool {
-        isRequested && suspensions.allSatisfy { isServingScreenSaver && ($0 == .screenSaver || $0 == .locked) }
+        isRequested && (!isPaused || isServingScreenSaver) &&
+            suspensions.allSatisfy { isServingScreenSaver && ($0 == .screenSaver || $0 == .locked) }
     }
 
     /// Desktop visibility remains separate from rendering for the lock-screen consumer.

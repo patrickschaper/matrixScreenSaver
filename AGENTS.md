@@ -71,7 +71,8 @@ This repository is hosted on GitHub. When relevant, assume GitHub-native feature
 ### Resources
 
 - `Resources/Info.plist` — bundle metadata; version injected at build time from `VERSION`
-- `Resources/Preview.png`, `Resources/Preview@2x.png` — saver thumbnail assets
+- `Resources/thumbnail.png`, `Resources/thumbnail@2x.png` — System Settings gallery thumbnails
+- `Resources/ThumbnailSource.png` — original screenshot used to export the thumbnails; not bundled
 - `VERSION` — single source of truth for the bundle and release version
 
 ## Build
@@ -93,6 +94,15 @@ Compiles a test binary with `swiftc` and runs it. Emits **TAP** (Test Anything P
 Tests cover:
 - `Xorshift64` — same seed → same sequence; different seeds → different sequences
 - `NativeMatrixRenderer` — `seedOffset` defaults to `0`; two renderers with different `seedOffset` values diverge after 60 frames
+
+## README audience
+
+- Ask before editing `README.md`, unless the user explicitly requested the edit.
+- Keep sentences very short. Skip obvious explanations, such as what uninstallation does.
+- Keep "Buy me a coffee" directly below "Quick install".
+- Keep both screen saver and animated wallpaper in the README title.
+- Change `README.md` only when end-user information changes, such as installation, usage, or compatibility guidance.
+- Keep implementation details and contributor reference in `docs/development.md`, plans in `docs/plans/`, and agent instructions in `AGENTS.md`.
 
 ## Code documentation
 
@@ -140,6 +150,7 @@ class MatrixColumn {
 ## Git commits
 
 - Follow Conventional Commits, for example: `feat: ...`, `fix: ...`, `docs: ...`, `refactor: ...`, `test: ...`
+- Classify version-number bumps as `chore:`, not `fix:`, in commit messages and PR titles.
 - Use a short title line.
 - Add a few very concise bullet points for the meaningful changes.
 
@@ -188,6 +199,8 @@ feat: add character size options
 
 ## Releases
 
+- Keep changelog entries and release notes focused on user-facing changes; omit code-signing changes and details.
+- Use Semantic Versioning (`MAJOR.MINOR.PATCH`): major for breaking changes, minor for backward-compatible features, patch for backward-compatible fixes. Select the corresponding bump in the release workflow; `VERSION` remains the source of truth.
 - Trigger releases by running the **Release** GitHub Actions workflow (`workflow_dispatch`) — never manually.
 - The workflow bumps the version, updates `CHANGELOG.md`, and opens a `release/*` PR targeting `main`.
 - Merging that `release/*` PR into `main` triggers the publish job, which creates the actual GitHub release with a zipped `.saver` bundle attached.

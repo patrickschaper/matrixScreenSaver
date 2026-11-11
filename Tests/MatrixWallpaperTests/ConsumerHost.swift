@@ -56,6 +56,7 @@ func consumerHostTests() {
     check(stored("frameIndex", in: renderer, as: Int.self) == frameIndex,
           "shared frame ticks do not advance native simulation")
 
+
     let nativeContainers = (1..<max(NSScreen.screens.count, 1)).map { index -> NSView in
         let container = NSView(frame: NSRect(x: 0, y: 0, width: 503 + index, height: 347))
         let native = MatrixScreenSaverView(frame: container.bounds, isPreview: false)!

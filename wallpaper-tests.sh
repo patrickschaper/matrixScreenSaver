@@ -13,6 +13,7 @@ HOST_DIR="$TEST_CONTENTS/MacOS"
 TEST_BIN="$HOST_DIR/matrix-wallpaper-tests"
 mkdir -p "$HOST_DIR" "$TEST_CONTENTS/Resources"
 cp -R "$ROOT_DIR/Resources/Fonts" "$TEST_CONTENTS/Resources/Fonts"
+cp "$ROOT_DIR/Resources/BuyMeACoffee.png" "$TEST_CONTENTS/Resources/BuyMeACoffee.png"
 
 OPTIMIZATION="-Onone"
 if [[ "${1:-}" == "--gpu-composition-benchmark" || "${1:-}" == "--composition-benchmark" ]]; then
@@ -36,18 +37,20 @@ swiftc "$OPTIMIZATION" -framework Foundation -framework AppKit -framework Screen
   "$WALLPAPER_DIR/WallpaperPlaybackState.swift" \
   "$WALLPAPER_DIR/LoginItemController.swift" \
   "$WALLPAPER_DIR/DesktopWallpaperController.swift" \
+  "$WALLPAPER_DIR/ScreenSaverInstallationController.swift" \
   "$WALLPAPER_DIR/WallpaperApp.swift" \
   "$TEST_DIR/SharedSaverTests.swift" \
   "$TEST_DIR/ConsumerHost.swift" \
   "$TEST_DIR/SharedCompositionTests.swift" \
   "$TEST_DIR/GPUCompositionTests.swift" \
   "$TEST_DIR/WallpaperAppTests.swift" \
+  "$TEST_DIR/ScreenSaverInstallationTests.swift" \
   "$TEST_DIR/LoginItemTests.swift" \
   "$TEST_DIR/DesktopWallpaperTests.swift" \
   "$TEST_DIR/main.swift" \
   -o "$TEST_BIN"
 
-if [[ "${1:-}" == "--composition-benchmark" || "${1:-}" == "--composition-tests" || "${1:-}" == "--gpu-composition-tests" || "${1:-}" == "--gpu-composition-benchmark" ]]; then
+if [[ "${1:-}" == "--installation-tests" || "${1:-}" == "--composition-benchmark" || "${1:-}" == "--composition-tests" || "${1:-}" == "--gpu-composition-tests" || "${1:-}" == "--gpu-composition-benchmark" ]]; then
   "$TEST_BIN" "$1"
   exit
 fi

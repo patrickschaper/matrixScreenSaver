@@ -19,8 +19,26 @@ TAP.instance_variable_set(:@path, ROOT/"tap")
 (TAP.path/"Casks").mkpath
 CONFIG = Cask::Config.new(explicit: Cask::Config::DEFAULT_DIRS.keys.to_h { |key| [key, ROOT/key.to_s] })
 TARGET = CONFIG.screen_saverdir/"MatrixScreenSaver.saver"
-APP_TARGET = CONFIG.appdir/"MatrixWallpaper.app"
+APP_TARGET = CONFIG.appdir/"Matrix Wallpaper.app"
+LEGACY_APP_TARGET = CONFIG.appdir/"MatrixWallpaper.app"
 TARGETS = [TARGET, APP_TARGET].freeze
+# Lifecycle commands run against a temporary home and mocked launch services.
+FIXTURE_HOME = ROOT/"home"
+FIXTURE_BIN = ROOT/"bin"
+FIXTURE_HOME.mkpath
+FIXTURE_BIN.mkpath
+(FIXTURE_BIN/"codesign").write("#!/bin/sh\nexit 0\n")
+(FIXTURE_BIN/"launchctl").write(<<~SH)
+  #!/bin/bash
+  case "$1" in
+    print) test -f "#{ROOT}/job";;
+    bootstrap) touch "#{ROOT}/job";;
+    bootout) rm -f "#{ROOT}/job";;
+    *) exit 1;;
+  esac
+SH
+(FIXTURE_BIN/"codesign").chmod(0755)
+(FIXTURE_BIN/"launchctl").chmod(0755)
 PREFS = ROOT/"preferences-sentinel"
 PREFS.write("saved options\x00")
 COFFEE = "There is no spoon. There is coffee: https://www.buymeacoffee.com/yesman82".freeze
@@ -55,6 +73,7 @@ module StageObservation
       raise "Source or target escaped isolation" unless [artifact.source, artifact.target].all? { |p| p.to_s.start_with?("#{ROOT}/") }
 
       executable = artifact.source.extname == ".app" ? "MatrixWallpaper" : "MatrixScreenSaver"
+      (artifact.source/"Contents/MacOS"/executable).chmod(0755)
       [artifact.source, artifact.source/"Contents/MacOS"/executable].each do |path|
         SystemCommand.run!("/usr/bin/xattr", args: ["-w", "com.apple.quarantine", "0081;00000000;fixture;", path.to_s])
       end
@@ -77,8 +96,15 @@ ensure
   $stdout, $stderr = old_out, old_err
 end
 
-def definition(version, legacy: false)
-  content = Pathname(legacy ? "Tests/Homebrew/fixtures/legacy-screen-saver.rb" : "Homebrew/Casks/matrix-screen-saver.rb").read
+def definition(version, legacy: nil)
+  source = case legacy
+  when :saver then Pathname("Tests/Homebrew/fixtures/legacy-screen-saver.rb")
+  when :wallpaper then Pathname("Tests/Homebrew/fixtures/legacy-wallpaper.rb")
+  else ROOT/"handoff-#{version}/Casks/matrix-screen-saver.rb"
+  end
+  content = source.read
+  content.gsub!('"HOME" => user_home', '"HOME" => user_home, "PATH" => "' + FIXTURE_BIN.to_s + ':/usr/bin:/bin:/usr/sbin:/sbin"')
+  content.sub!("user_home = Dir.home", "user_home = #{FIXTURE_HOME.to_s.inspect}")
   content.sub!('version "0.2.0"', "version \"#{version}\"")
   content.sub!(/sha256 "[0-9a-f]+"/, "sha256 \"#{Digest::SHA256.file(ROOT/"#{version}.zip").hexdigest}\"")
   content.sub!(/^  url .+$/, "  url \"file://#{ROOT}/#{version}.zip\"")
@@ -102,6 +128,9 @@ def verify_target(version, targets: TARGETS)
     end
   end
   check(PREFS.read == "saved options\x00", "Preferences changed")
+  if targets == TARGETS
+    check((FIXTURE_HOME/"Library/LaunchAgents/dev.patsch.MatrixWallpaper.cleanup.plist").exist?, "Cleanup registration missing")
+  end
 end
 
 def uninstall(cask)
@@ -116,6 +145,28 @@ def uninstall(cask)
   check(login_calls.any? { |args| args.last.include?("Matrix Wallpaper".inspect) }, "Native named login removal not attempted")
   check(output.include?("failed"), "Failed login cleanup did not warn")
   check(PREFS.read == "saved options\x00", "Uninstall changed preferences")
+  check(!(FIXTURE_HOME/"Library/LaunchAgents/dev.patsch.MatrixWallpaper.cleanup.plist").exist?, "Cleanup registration survived uninstall")
+end
+
+# Restore the native artifact from app resources while retaining Homebrew's real receipt and paths.
+def restore_saver
+  recovery = APP_TARGET/"Contents/Resources/ScreenSaver"
+  recovery.mkpath
+  FileUtils.cp("Scripts/product-lifecycle.sh", recovery/"product-lifecycle.sh")
+  SystemCommand.run!("/usr/bin/xcrun", args: ["swiftc", "Tools/ScreenSaverInstaller.swift", "-o",
+                                            (APP_TARGET/"Contents/MacOS/MatrixScreenSaverInstaller").to_s])
+  SystemCommand.run!("/usr/bin/ditto", args: ["-c", "-k", "--sequesterRsrc", "--keepParent",
+                                            TARGET.to_s, (recovery/"MatrixScreenSaver.zip").to_s])
+  app_inode = APP_TARGET.stat.ino
+  record = FIXTURE_HOME/"Library/Application Support/MatrixWallpaper/Installation/installation.plist"
+  registration = record.binread
+  TARGET.rmtree
+  SystemCommand.run!("/bin/bash", args: [(recovery/"product-lifecycle.sh").to_s, "install-saver", APP_TARGET.to_s],
+                                 env: { "HOME" => FIXTURE_HOME.to_s,
+                                        "PATH" => "#{FIXTURE_BIN}:/usr/bin:/bin:/usr/sbin:/sbin" })
+  check(TARGET.directory?, "Recovery did not restore the configured Homebrew target")
+  check(APP_TARGET.stat.ino == app_inode, "Recovery replaced the wallpaper app")
+  check(record.binread == registration, "Recovery changed Homebrew ownership or registration")
 end
 
 # AE1: modern steps run in Homebrew's real sandbox, including actual echo stdout.
@@ -142,9 +193,11 @@ verify_target("1.2.3")
 check(OSASCRIPT_CALLS.empty?, "Install attempted startup or cleanup")
 puts "PASS AE1 sandboxed native fresh install and actual coffee stdout"
 
+restore_saver
+verify_target("1.2.3")
 uninstall(fresh)
 OSASCRIPT_CALLS.clear
-legacy = definition("1.2.2", legacy: true)
+legacy = definition("1.2.2", legacy: :saver)
 capture { Cask::Installer.new(legacy).install }
 verify_target("1.2.2", targets: [TARGET])
 check(!APP_TARGET.exist?, "Legacy fixture installed an app")
@@ -180,6 +233,10 @@ check(output.scan(COFFEE).length == 1, "Legacy migration coffee output count wro
 check(OSASCRIPT_CALLS.empty?, "Legacy migration attempted automation")
 puts "PASS native legacy saver-only to dual-bundle migration"
 
+# Recovery must leave the native artifact ready for Homebrew's next upgrade.
+restore_saver
+verify_target("1.2.3")
+
 # AE4: successor evaluates while prior metadata exists, before native upgrade.
 successor = definition("1.2.4")
 OSASCRIPT_CALLS.clear
@@ -204,6 +261,43 @@ check(output.scan(COFFEE).length == 1, "Reinstall coffee output count wrong")
 verify_target("1.2.4")
 uninstall(reinstall)
 puts "PASS AE5 native uninstall and managed reinstall preference retention"
+
+# The receipt owns the old filename; native upgrade must restore it on failure.
+old_name = definition("1.2.1", legacy: :wallpaper)
+capture { Cask::Installer.new(old_name).install }
+verify_target("1.2.1", targets: [TARGET, LEGACY_APP_TARGET])
+APP_TARGET.mkpath
+(APP_TARGET/"manual-executable").write("manual sentinel")
+renamed = definition("1.2.4")
+failed = false
+output = capture do
+  begin
+    Cask::Upgrade.upgrade_cask(old_name, renamed, binaries: true, force: false,
+                             require_sha: true, quit: false, skip_cask_deps: false, verbose: false,
+                             download_queue: Homebrew::DownloadQueue.default,
+                             new_cask_installer: Cask::Installer.new(renamed, upgrade: true))
+  rescue Cask::CaskError
+    failed = true
+  end
+end
+check(failed, "Rename upgrade unexpectedly replaced an unrelated app")
+check((APP_TARGET/"manual-executable").read == "manual sentinel", "Rename upgrade changed unrelated app")
+verify_target("1.2.1", targets: [TARGET, LEGACY_APP_TARGET])
+check(output.include?("Reverting upgrade"), "Rename upgrade did not report rollback")
+FileUtils.remove_entry(APP_TARGET)
+renamed = definition("1.2.4")
+OSASCRIPT_CALLS.clear
+capture do
+  Cask::Upgrade.upgrade_cask(old_name, renamed, binaries: true, force: false,
+                           require_sha: true, quit: false, skip_cask_deps: false, verbose: false,
+                           download_queue: Homebrew::DownloadQueue.default,
+                           new_cask_installer: Cask::Installer.new(renamed, upgrade: true))
+end
+verify_target("1.2.4")
+check(!LEGACY_APP_TARGET.exist?, "Rename upgrade left the old app filename")
+check(OSASCRIPT_CALLS.none? { |args| args.join.include?("delete every login item") }, "Rename upgrade removed login items")
+uninstall(renamed)
+puts "PASS native old-name app upgrade, conflict rollback, and preference retention"
 
 # AE2/AE3: existing manual bundle survives native rejection, then explicit force replaces.
 TARGETS.each do |target|
@@ -238,26 +332,30 @@ TARGETS.each do |target|
 end
 puts "PASS AE2/AE3 native conflict rejection and explicit force replacement"
 
-# Homebrew 7.0.7's existence guard misses dangling symlinks, but its native
-# artifact rejects them. No custom deletion or unsandboxed fallback is added.
+# The lifecycle refuses redirected destinations even when native force would replace them.
 File.symlink(ROOT/"missing", TARGET)
 broken = definition("1.2.3")
 output = capture do
   begin
     Cask::Installer.new(broken).install
     raise "Native artifact accepted broken symlink without force"
-  rescue Cask::CaskError => error
-    check(error.message.include?("already"), "Unexpected broken-symlink rejection")
+  rescue StandardError => error
+    check(error.message.include?("symlink"), "Unexpected broken-symlink rejection")
   end
 end
 check(TARGET.symlink?, "Broken symlink was changed")
 check(!output.include?(COFFEE), "Broken-symlink conflict printed success")
 check(!output.include?("brew install --cask --force"), "Existence guard unexpectedly matched broken symlink")
 forced = definition("1.2.3")
-capture { Cask::Installer.new(forced, force: true).install }
-verify_target("1.2.3")
-uninstall(forced)
-puts "PASS native broken-symlink conflict and explicit force replacement"
+begin
+  capture { Cask::Installer.new(forced, force: true).install }
+  raise "Force unexpectedly accepted a symlink"
+rescue StandardError => error
+  check(error.message.include?("symlink"), "Unexpected force rejection")
+end
+check(TARGET.symlink?, "Force changed the rejected symlink")
+TARGET.unlink
+puts "PASS redirected destinations remain untouched with or without force"
 definition("1.2.3")
 puts "PASS developer-mode definition load and uninstall without legacy warnings"
 puts "PASS all native lifecycle checks; real apps, login items, installed bundles and Settings were never touched"

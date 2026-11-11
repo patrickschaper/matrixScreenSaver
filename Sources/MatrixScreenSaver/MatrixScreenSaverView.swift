@@ -245,6 +245,7 @@ final class MatrixScreenSaverView: ScreenSaverView {
         super.startAnimation()
         animationActive = true
         firstHiddenFrameTime = 0
+        updateScreenSaverLifecycleObservation()
         if shouldReloadOptionsOnStart {
             saverOptions = Self.loadSaverOptions()
         }
@@ -252,7 +253,6 @@ final class MatrixScreenSaverView: ScreenSaverView {
         wallpaperFrameReader = !isWallpaperHost && !isPreview && Self.isRunningInScreenSaverEngine ? WallpaperFrameReader() : nil
         NSLog("MatrixScreenSaver startAnimation bounds=%@", NSStringFromRect(bounds))
         appendDebugLog("[\(debugIdentifier)] startAnimation bounds=\(NSStringFromRect(bounds))")
-        updateScreenSaverLifecycleObservation()
         if let wallpaperFrameReader {
             nativeRenderer.stop()
             awaitingWallpaperUntil = ProcessInfo.processInfo.systemUptime + 1

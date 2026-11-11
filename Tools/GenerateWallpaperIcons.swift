@@ -132,11 +132,12 @@ private var bounds = CGRect(x: 0, y: 0, width: 18, height: 18)
 private let context = CGContext(consumer: consumer, mediaBox: &bounds, nil)!
 context.beginPDFPage(nil)
 context.addPath(glyph(in: CGRect(x: 2, y: 2, width: 14, height: 14)))
-context.clip()
+// Solid, slightly heavier strokes keep the small template legible at menu-bar size.
 context.setFillColor(NSColor.black.cgColor)
-for y in stride(from: 2.0, to: 16.0, by: 2.0) {
-    context.fill(CGRect(x: 0, y: y, width: 18, height: 1.35))
-}
+context.setStrokeColor(NSColor.black.cgColor)
+context.setLineWidth(0.45)
+context.setLineJoin(.round)
+context.drawPath(using: .fillStroke)
 context.endPDFPage()
 context.closePDF()
 try (pdf as Data).write(to: resources.appendingPathComponent("MenuBarIcon.pdf"))

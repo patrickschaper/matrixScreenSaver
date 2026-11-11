@@ -17,7 +17,11 @@ class FakeCaskDSL
     instance_eval(File.read(File.expand_path("../../../Homebrew/Casks/matrix-screen-saver.rb", __dir__)))
   end
 
-  def cask(_token, &block) = instance_eval(&block)
+  def cask(_token = nil, &block)
+    block ? instance_eval(&block) : self
+  end
+  def config = self
+  def screen_saverdir = @root/"custom savers"
   def version(value = nil)
     @version = value if value
     @version
@@ -29,20 +33,40 @@ class FakeCaskDSL
     @artifacts << Artifact.new(@root/"stage"/name, @root/"custom savers"/name)
   end
 
-  def app(name)
-    @artifacts << Artifact.new(@root/"stage"/name, @root/"custom apps"/name)
+  def app(name, target: name)
+    @artifacts << Artifact.new(@root/"stage"/name, @root/"custom apps"/target)
   end
 
   def uninstall(**directives) = @uninstall_directives = directives
 
-  def preflight_steps(&block)
+  # Records block or serialized steps without executing commands during definition loading.
+  def preflight_steps(steps = nil, &block)
     @steps = @preflight
-    instance_eval(&block)
+    if block
+      instance_eval(&block)
+    else
+      record_steps(steps)
+    end
   end
 
-  def postflight_steps(&block)
+  # Records block or serialized steps without executing commands during definition loading.
+  def postflight_steps(steps = nil, &block)
     @steps = @postflight
-    instance_eval(&block)
+    if block
+      instance_eval(&block)
+    else
+      record_steps(steps)
+    end
+  end
+
+  # Records block or serialized steps without executing commands during definition loading.
+  def uninstall_preflight_steps(steps = nil, &block)
+    @steps = []
+    if block
+      instance_eval(&block)
+    else
+      record_steps(steps)
+    end
   end
 
   def if_path_exists(path, base:, &block)
@@ -50,6 +74,17 @@ class FakeCaskDSL
     instance_eval(&block)
   ensure
     @guard = nil
+  end
+
+  # Models the serialized run/guard form used for paths captured from cask configuration.
+  def record_steps(steps)
+    steps.each do |step|
+      raise "Unsupported step" unless step.fetch(:type) == :run
+
+      guard = step.fetch(:guards, []).first
+      guard = expand("{{#{guard.fetch(:base)}}}/#{guard.fetch(:path)}") if guard
+      @steps << [step.fetch(:command), step.reject { |key, _| %i[type command guards].include?(key) }, guard]
+    end
   end
 
   def run(command, **options) = @steps << [command, options, @guard]
