@@ -12,6 +12,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+
+## [0.5.1] - 2026-11-11
+
+### Bug Fixes
+
+- allow Homebrew upgrades in the cask sandbox (#132)
+- prevent release back-merge failures (#131)
+
 ## [0.5.0] - 2026-11-11
 
 ### Features
