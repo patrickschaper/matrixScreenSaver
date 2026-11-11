@@ -445,28 +445,40 @@ jobs:
             --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" --keychain "$KEYCHAIN_PATH"
           rm -f "$RUNNER_TEMP/developer-id.p12"
 
-      - name: Build and sign screen saver and wallpaper app
+      - name: Build, sign, and notarize the recovery screen saver
+        if: steps.release.outputs.exists != 'true'
+        env:
+          SIGNING_IDENTITY: ${{ secrets.SIGNING_IDENTITY }}
+          NOTARY_KEYCHAIN_PROFILE: matrix-release
+          NOTARY_KEYCHAIN: ${{ runner.temp }}/matrix-signing.keychain-db
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf build
+          ./build.sh
+          bash Scripts/sign-bundle.sh "build/MatrixScreenSaver.saver"
+          codesign --verify --deep --strict "build/MatrixScreenSaver.saver"
+          bash Scripts/notarize.sh "build/MatrixScreenSaver.saver"
+
+      - name: Build and sign wallpaper with the stapled recovery saver
         if: steps.release.outputs.exists != 'true'
         env:
           SIGNING_IDENTITY: ${{ secrets.SIGNING_IDENTITY }}
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf build
-          ./build.sh
-          ./build-wallpaper.sh
-          bash Scripts/sign-bundle.sh "build/MatrixScreenSaver.saver"
+          ./build-wallpaper.sh --saver "build/MatrixScreenSaver.saver"
+          bash Scripts/sign-bundle.sh "build/Matrix Wallpaper.app/Contents/MacOS/MatrixScreenSaverInstaller"
           bash Scripts/sign-bundle.sh "build/Matrix Wallpaper.app"
-          codesign --verify --deep --strict "build/MatrixScreenSaver.saver"
           codesign --verify --deep --strict "build/Matrix Wallpaper.app"
 
-      - name: Notarize and staple both bundles
+      - name: Notarize and staple the wallpaper app
         if: steps.release.outputs.exists != 'true'
         env:
           NOTARY_KEYCHAIN_PROFILE: matrix-release
           NOTARY_KEYCHAIN: ${{ runner.temp }}/matrix-signing.keychain-db
         shell: bash
-        run: bash Scripts/notarize.sh
+        run: bash Scripts/notarize.sh "build/Matrix Wallpaper.app"
 
       - name: Remove signing credentials
         if: always()
@@ -492,6 +504,9 @@ jobs:
           mkdir -p "${release_dir}"
           ditto "build/MatrixScreenSaver.saver" "${release_dir}/MatrixScreenSaver.saver"
           ditto "build/Matrix Wallpaper.app" "${release_dir}/Matrix Wallpaper.app"
+          mkdir -p "${release_dir}/Scripts"
+          cp Scripts/product-lifecycle.sh "${release_dir}/Scripts/"
+          cp Install.command "${release_dir}/"
 
           echo "dir=${release_dir}" >> "$GITHUB_OUTPUT"
 

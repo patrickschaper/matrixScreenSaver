@@ -75,11 +75,15 @@ def render(archive_path, version, url, digest, provenance, output):
         if len(app_roots) != 1:
             raise ValueError("Expected exactly one wallpaper app bundle")
         app_root = app_roots.pop()
+        installer_files = {"Install.command", "Scripts/product-lifecycle.sh"}
+        if not installer_files.issubset(names):
+            raise ValueError("Release must include the combined installer")
         for entry in entries:
             path = PurePosixPath(entry.filename)
             if path.is_absolute() or ".." in path.parts or "\\" in entry.filename:
                 raise ValueError("Unsafe archive path")
-            if not path.parts or path.parts[0] not in ("MatrixScreenSaver.saver", app_root, "__MACOSX"):
+            if (not path.parts or (path.parts[0] not in ("MatrixScreenSaver.saver", app_root, "__MACOSX")
+                                  and entry.filename not in installer_files | {"Scripts/"})):
                 raise ValueError("Unexpected release archive layout")
             if (entry.external_attr >> 16) & 0o170000 == 0o120000:
                 raise ValueError("Symlinks are not supported in release archives")

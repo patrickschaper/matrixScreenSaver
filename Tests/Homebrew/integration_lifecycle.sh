@@ -6,6 +6,7 @@ cd "$(dirname "$0")/../.."
 test "$(uname -s)" = Darwin
 test "$(uname -m)" = arm64
 root="$(mktemp -d "${TMPDIR:-/tmp}/matrix-homebrew-integration.XXXXXX")"
+root="$(cd "$root" && pwd -P)"
 trap 'rm -rf "$root"' EXIT
 export HOMEBREW_CACHE="$root/cache"
 export HOMEBREW_LOGS="$root/logs"

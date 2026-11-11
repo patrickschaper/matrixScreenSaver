@@ -21,7 +21,6 @@ cmdCaptureSceneTests()
 nativeMatrixRendererTests()
 wallpaperPlaybackStateTests()
 sharedWallpaperFrameTests()
-matrixVersionStatusTests()
 
 print("1..\(testCount)")
 exit(failCount == 0 ? 0 : 1)

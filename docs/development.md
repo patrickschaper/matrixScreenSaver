@@ -17,7 +17,7 @@ See the [project roadmap](plans/2026-11-10-1812-project-roadmap-plan.md) for pla
 - `Sources/MatrixScreenSaver/CmdCaptureScene.swift` - streams command output into scrolling terminal rows before the full trace program
 - `Sources/MatrixScreenSaver/MatrixScreenSaverOptions.swift` - options model and native configure sheet
 - `Sources/MatrixScreenSaver/TerminalSupport.swift` - small shared terminal types used by the active renderer
-- `Scripts/install-saver.sh` - shared ditto-based installer used by local installs
+- `Scripts/product-lifecycle.sh` - shared pair installation, rollback, and removal lifecycle
 - `Tools/PreviewHost.swift` - local preview host used by `./preview.sh`
 - `Resources/Info.plist` - bundle metadata
 
@@ -46,6 +46,10 @@ Both build scripts read the current version from `./VERSION` and write it into t
 
 Local builds and ordinary CI use ad-hoc signing and do not need Apple credentials.
 Only the GitHub release publish job uses Developer ID signing and Apple notarization.
+
+`./build-wallpaper.sh` builds a fresh saver and embeds its recovery archive, lifecycle script, and native installer helper in the app. After explicitly building the saver, use `./build-wallpaper.sh --saver build/MatrixScreenSaver.saver` to reuse those verified bytes. The supplied saver must match `VERSION` in both bundle version fields.
+
+Releases sign, notarize, and staple the saver before assembling the recovery archive. The workflow then signs the installer helper and wallpaper app, notarizes/staples the app, and packages both top-level bundles. This keeps recovery independent of the original download and allows the embedded saver to retain its ticket.
 
 ## Test
 
@@ -87,10 +91,11 @@ open "build/Matrix Wallpaper.app"
 
 `install.sh`:
 
-1. rebuilds the saver bundle
-2. strips quarantine from the source bundle and copies it to `~/Library/Screen Savers/MatrixScreenSaver.saver`
-3. verifies the installed executable matches the build output
-4. stops running `ScreenSaverEngine` / `legacyScreenSaver` processes so macOS reloads the updated bundle
+1. rebuilds and validates matching wallpaper and saver bundles
+2. stages both copies, verifies signatures and executable bytes, and retains rollback backups
+3. installs the app in `~/Applications` and the saver in `~/Library/Screen Savers`
+4. registers a per-user cleanup LaunchAgent, then commits both replacements
+5. stops your saver hosts so macOS reloads the updated bundle
 
 After installing:
 
@@ -103,12 +108,20 @@ To relaunch the screen saver host manually:
 open -a ScreenSaverEngine
 ```
 
-To install and launch the wallpaper app in your user Applications folder:
+The compatibility entrypoint also installs both components:
 
 ```bash
 ./install-wallpaper.sh
 open "$HOME/Applications/Matrix Wallpaper.app"
 ```
+
+### Installation lifecycle checks
+
+Run `python3 Tests/Installation/lifecycle_test.py` for isolated failure, cleanup, and grace-period tests. Run `./wallpaper-install-tests.sh` after building both bundles for real-signature and migration coverage. System commands that could affect your desktop or launch services are mocked.
+
+`./uninstall.sh` removes a local pair. Homebrew owns its native artifacts and invokes the same lifecycle script only for validation, registration, and cleanup state. The cleanup record contains exact destinations and ownership; options are never deleted. A shared lock protects local operations, and a PID lock held by the outer Homebrew process protects native artifact replacement. Native upgrade rollback reruns the previous registration hook.
+
+Release bundles must have identical `CFBundleShortVersionString` and `CFBundleVersion`. There are no runtime companion-version warnings or playback restrictions. Shared-frame validation still rejects incompatible or malformed frames.
 
 ## Origin
 
@@ -142,6 +155,14 @@ the wallpaper menu shows **Sync with Screen Saver**. It is checked by default: t
 shares the wallpaper's animation. Uncheck it to let the saver animate independently.
 The choice survives app restarts and saver reinstallation; opening the menu refreshes
 installation detection. This does not change visual options or synchronization between monitors.
+
+When the saver is absent, that menu item becomes **Install Screen Saver**, and the wallpaper settings show the same action in a compact banner. `ScreenSaverInstallationController` refreshes both surfaces on menu opening, settings focus, app activation, and transaction completion without resetting pending options edits. The actual screen saver host has no installation controls.
+
+Recovery runs the app's bundled `product-lifecycle.sh install-saver APP` off the main thread. It uses the existing installation lock and recorded destination/owner, validates and stages only the saver, and leaves the app and preferences untouched. A small native helper validates archive entries and promotes with an exclusive rename so another process's destination is never overwritten. Failures preserve retry state and roll back only transaction-owned changes.
+
+A sibling `.installing` marker records the promoted bundle's device/inode until the transaction commits. If rollback cannot remove that bundle, discovery keeps the install action available and a retry can finish registration. A separately installed replacement has a different identity and remains discoverable.
+
+Run `./wallpaper-tests.sh --installation-tests` for isolated discovery, menu, and banner checks, and `python3 Tests/Installation/lifecycle_test.py` for recovery/rollback in a temporary home. Developer ID and offline Gatekeeper behavior must also be checked with an authorized signed release artifact; stubbed signing tests do not establish that result.
 
 ## Component version checks
 
