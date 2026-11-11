@@ -11,6 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+
+## [0.5.0] - 2026-11-11
+
+### Features
+
+- improve installation and wallpaper controls (#127)
+
 ## [0.4.3] - 2026-10-30
 
 ### Features
