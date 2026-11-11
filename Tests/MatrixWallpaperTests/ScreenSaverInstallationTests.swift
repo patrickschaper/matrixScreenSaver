@@ -140,7 +140,7 @@ func screenSaverInstallationTests() {
     } catch { check(false, "installation fixture: \(error)") }
 }
 
-/// Exercises the production subprocess boundary with a temporary script and output larger than a pipe buffer.
+/// Exercises recovery and activation arguments, bounded failures, and output larger than a pipe buffer.
 private func screenSaverInstallerProcessTests() {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).resolvingSymlinksInPath()
     defer { try? FileManager.default.removeItem(at: root) }
@@ -154,6 +154,10 @@ private func screenSaverInstallerProcessTests() {
         let script = #"""
         #!/bin/bash
         set -eu
+        if [[ "$1" == activate && $# == 2 ]]; then
+            touch "$2/activated"
+            exit 0
+        fi
         [[ "$1" == install-saver && $# == 2 ]]
         /usr/bin/head -c 131072 /dev/zero
         if [[ -f "$2/fail" ]]; then
@@ -164,6 +168,14 @@ private func screenSaverInstallerProcessTests() {
         /bin/cp "$2/Contents/Resources/ScreenSaver/fixture.plist" "$2/../savers/MatrixScreenSaver.saver/Contents/Info.plist"
         """#
         try script.write(to: resources.appendingPathComponent("product-lifecycle.sh"), atomically: true, encoding: .utf8)
+        var activation: Result<Void, Error>?
+        ScreenSaverInstallationController.runLifecycle(action: "activate", appURL: app) { result in
+            DispatchQueue.main.async { activation = result }
+        }
+        check(eventually(10) { activation != nil }, "cleanup activation finishes without blocking the main thread")
+        check(FileManager.default.fileExists(atPath: app.appendingPathComponent("activated").path) &&
+              !FileManager.default.fileExists(atPath: savers.path),
+              "startup activation passes the app path without installing a saver")
         let controller = ScreenSaverInstallationController(directories: [savers], appURL: app, recordURL: nil)
         var outcome: Result<Void, Error>?
         var onMain = false

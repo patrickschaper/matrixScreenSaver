@@ -97,13 +97,15 @@ class CaskLifecycleTest < TestHarness
     refute_includes dsl.messages, COFFEE
   end
 
+  # Native service removal must coexist with preference-preserving uninstall hooks.
   def test_no_preference_cleanup_artifact
     dsl = definition
     assert_equal ["MatrixWallpaper.app", "MatrixScreenSaver.saver"], dsl.artifacts.map { |a| a.source.basename.to_s }
     assert_equal ["Matrix Wallpaper.app", "MatrixScreenSaver.saver"], dsl.artifacts.map { |a| a.target.basename.to_s }
-    assert_equal({quit: "dev.patsch.MatrixWallpaper", login_item: "Matrix Wallpaper"}, dsl.uninstall_directives)
+    assert_equal({launchctl: "dev.patsch.MatrixWallpaper.cleanup",
+                  quit: "dev.patsch.MatrixWallpaper", login_item: "Matrix Wallpaper"}, dsl.uninstall_directives)
     source = File.read(File.expand_path("../../Homebrew/Casks/matrix-screen-saver.rb", __dir__))
-    refute_match(/\b(zap|defaults|launchctl)\b/, source)
+    refute_match(/\b(zap|defaults)\b/, source)
     assert source.include?("uninstall_preflight_steps")
     assert source.include?('"unregister"')
     refute_match(/\b(?:preflight|postflight|uninstall_preflight|uninstall_postflight)\s+do/, source)

@@ -45,7 +45,9 @@ final class ScreenSaverInstallationController {
         self.directories = directories
         self.appURL = appURL
         self.recordURL = recordURL
-        self.operation = operation ?? { completion in Self.runInstaller(appURL: appURL, completion: completion) }
+        self.operation = operation ?? { completion in
+            Self.runLifecycle(action: "install-saver", appURL: appURL, completion: completion)
+        }
         refresh()
     }
 
@@ -131,19 +133,20 @@ final class ScreenSaverInstallationController {
                 userInfo: [NSLocalizedDescriptionKey: message])
     }
 
-    /// Runs the bundled transaction off the UI thread and drains its output without pipe deadlock.
+    /// Runs recovery or cleanup activation off the UI thread, draining output without pipe deadlock.
     ///
     /// The child owns rollback and can finish safely even if the wallpaper app exits.
     /// - Parameters:
+    ///   - action: `install-saver` restores the saver; `activate` starts existing managed cleanup.
     ///   - appURL: App containing the signed recovery resources.
     ///   - completion: Receives process success or a bounded diagnostic on the worker queue.
-    private static func runInstaller(appURL: URL, completion: @escaping (Result<Void, Error>) -> Void) {
+    static func runLifecycle(action: String, appURL: URL, completion: @escaping (Result<Void, Error>) -> Void) {
         DispatchQueue.global(qos: .userInitiated).async {
             let process = Process()
             let pipe = Pipe()
             process.executableURL = URL(fileURLWithPath: "/bin/bash")
             process.arguments = [appURL.appendingPathComponent("Contents/Resources/ScreenSaver/product-lifecycle.sh").path,
-                                 "install-saver", appURL.path]
+                                 action, appURL.path]
             process.standardOutput = pipe
             process.standardError = pipe
             do {
@@ -161,7 +164,7 @@ final class ScreenSaverInstallationController {
                     completion(.success(()))
                 } else {
                     let message = String(decoding: output, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
-                    completion(.failure(failure(message.isEmpty ? "Could not install the screen saver. Try again." : message)))
+                    completion(.failure(failure(message.isEmpty ? "Could not complete \(action). Try again." : message)))
                 }
             } catch { completion(.failure(error)) }
         }

@@ -102,13 +102,15 @@ read_record() {
   [[ "$OWNER" == local || "$OWNER" == homebrew ]] || fail "Invalid installation owner."
 }
 
+# Retains the recorded owner and destinations; reports the conflicting installation on mismatch.
 check_destinations() {
   local app="$1" saver="$2" owner="$3"
   safe_path "$app"; safe_path "$saver"
   [[ "$(basename "$app")" == 'Matrix Wallpaper.app' && "$(basename "$saver")" == MatrixScreenSaver.saver ]] || fail "Invalid installation destinations."
   if [[ -e "$RECORD" ]]; then
     read_record
-    [[ "$APP" == "$app" && "$SAVER" == "$saver" && "$OWNER" == "$owner" ]] || fail "Uninstall the existing managed installation first."
+    [[ "$APP" == "$app" && "$SAVER" == "$saver" && "$OWNER" == "$owner" ]] ||
+      fail "Uninstall the existing managed installation first. Owner: $OWNER; app: $APP; screen saver: $SAVER."
   fi
   APP="$app"; SAVER="$saver"; OWNER="$owner"
 }
@@ -119,7 +121,8 @@ unload() {
   fi
 }
 
-# Build XML with plutil so paths remain data even if they contain shell or XML characters.
+# Writes the owned installation and cleanup agent using XML-safe paths.
+# Pass homebrew to defer launchctl until app launch or login; cask hooks are sandboxed.
 register() {
   mkdir -p "$STATE" "$(dirname "$AGENT")"
   local record="$STATE/installation.new.plist" agent="$STATE/agent.new.plist"
@@ -137,13 +140,13 @@ register() {
   /usr/bin/plutil -insert RunAtLoad -bool YES "$agent"
   /usr/bin/plutil -insert StartInterval -integer 60 "$agent"
   /usr/bin/plutil -insert StandardErrorPath -string "$STATE/cleanup.log" "$agent"
-  unload
+  if [[ "${1:-}" != homebrew ]]; then unload; fi
   if [[ "$SELF" != "$STATE/product-lifecycle.sh" ]]; then cp "$SELF" "$STATE/product-lifecycle.sh"; fi
   chmod 700 "$STATE/product-lifecycle.sh"
   mv "$record" "$RECORD"
   mv "$agent" "$AGENT"
   rm -f "$STATE/missing-since"
-  launchctl bootstrap "$DOMAIN" "$AGENT"
+  if [[ "${1:-}" != homebrew ]]; then launchctl bootstrap "$DOMAIN" "$AGENT"; fi
 }
 
 unregister() {
@@ -357,12 +360,22 @@ case "${1:-}" in
   validate) [[ $# == 3 ]] || fail "validate requires both bundles"; validate_pair "$2" "$3" ;;
   install) [[ $# == 3 ]] || fail "install requires both bundles"; install_pair "$2" "$3" ;;
   install-saver) [[ $# == 2 ]] || fail "install-saver requires the wallpaper app"; install_saver "$2" ;;
+  activate)
+    # Only the recorded app may activate deferred cleanup outside Homebrew's sandbox.
+    [[ $# == 2 ]] || fail "activate requires the wallpaper app"
+    lock
+    [[ -f "$RECORD" ]] || exit 0
+    read_record
+    [[ "$APP" == "$2" ]] || exit 0
+    verify_bundle "$APP" "$APP_ID" MatrixWallpaper || fail "Invalid wallpaper bundle: $APP"
+    if ! launchctl print "$DOMAIN/$LABEL" >/dev/null 2>&1; then register; fi
+    ;;
   register)
     [[ $# == 4 ]] || fail "register requires app, saver, and owner"
     validate_pair "$2" "$3"
     lock
     check_destinations "$2" "$3" "$4"
-    register
+    register "$OWNER"
     # Native artifacts and cleanup registration are now committed together.
     LOCKED=1
     unlock
@@ -385,8 +398,10 @@ case "${1:-}" in
     LOCKED=0
     ;;
   unregister)
+    [[ $# == 1 || ( $# == 2 && "$2" == homebrew ) ]] || fail "unregister accepts only homebrew"
     lock
-    unload
+    # Homebrew's native launchctl uninstall directive owns service removal.
+    if [[ "${2:-}" != homebrew ]]; then unload; fi
     unregister
     ;;
   check)
@@ -427,5 +442,5 @@ case "${1:-}" in
     rm -rf "$APP" "$SAVER"
     unregister
     ;;
-  *) fail "Usage: $0 {install|validate} APP SAVER | install-saver APP | register APP SAVER OWNER | suspend | unregister | check | uninstall" ;;
+  *) fail "Usage: $0 {install|validate} APP SAVER | {install-saver|activate} APP | register APP SAVER OWNER | suspend | unregister [homebrew] | check | uninstall" ;;
 esac

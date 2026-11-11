@@ -139,6 +139,10 @@ Run `python3 Tests/Installation/lifecycle_test.py` for isolated failure, cleanup
 
 Release bundles must have identical `CFBundleShortVersionString` and `CFBundleVersion`. There are no runtime companion-version warnings or playback restrictions. Shared-frame validation still rejects incompatible or malformed frames.
 
+Homebrew's sandbox cannot start or stop LaunchAgents. Its registration hook writes the cleanup files only; opening Matrix Wallpaper activates cleanup asynchronously. macOS also loads the agent at the next login. Local installation and explicit saver recovery still activate cleanup immediately. Homebrew's native `uninstall launchctl:` directive removes the running service, while the sandboxed hook removes its files.
+
+Homebrew integration tests use real `launchctl` in sandboxed hooks so an accidental bootstrap fails. App-side activation and native service-removal effects remain mocked to protect the logged-in user's installation. The tap updater accepts the reviewed 0.5.0 cask structure; the next release must publish both the updated cask and the archive containing the fixed app and lifecycle script.
+
 ## Origin
 
 This project started as an attempt to wrap `cxxmatrix` inside a macOS screen saver.
