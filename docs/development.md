@@ -47,6 +47,10 @@ Both build scripts read the current version from `./VERSION` and write it into t
 Local builds and ordinary CI use ad-hoc signing and do not need Apple credentials.
 Only the GitHub release publish job uses Developer ID signing and Apple notarization.
 
+`./build-wallpaper.sh` builds a fresh saver and embeds its recovery archive, lifecycle script, and native installer helper in the app. After explicitly building the saver, use `./build-wallpaper.sh --saver build/MatrixScreenSaver.saver` to reuse those verified bytes. The supplied saver must match `VERSION` in both bundle version fields.
+
+Releases sign, notarize, and staple the saver before assembling the recovery archive. The workflow then signs the installer helper and wallpaper app, notarizes/staples the app, and packages both top-level bundles. This keeps recovery independent of the original download and allows the embedded saver to retain its ticket.
+
 ## Test
 
 ```bash
@@ -151,6 +155,14 @@ the wallpaper menu shows **Sync with Screen Saver**. It is checked by default: t
 shares the wallpaper's animation. Uncheck it to let the saver animate independently.
 The choice survives app restarts and saver reinstallation; opening the menu refreshes
 installation detection. This does not change visual options or synchronization between monitors.
+
+When the saver is absent, that menu item becomes **Install Screen Saver**, and the wallpaper settings show the same action in a compact banner. `ScreenSaverInstallationController` refreshes both surfaces on menu opening, settings focus, app activation, and transaction completion without resetting pending options edits. The actual screen saver host has no installation controls.
+
+Recovery runs the app's bundled `product-lifecycle.sh install-saver APP` off the main thread. It uses the existing installation lock and recorded destination/owner, validates and stages only the saver, and leaves the app and preferences untouched. A small native helper validates archive entries and promotes with an exclusive rename so another process's destination is never overwritten. Failures preserve retry state and roll back only transaction-owned changes.
+
+A sibling `.installing` marker records the promoted bundle's device/inode until the transaction commits. If rollback cannot remove that bundle, discovery keeps the install action available and a retry can finish registration. A separately installed replacement has a different identity and remains discoverable.
+
+Run `./wallpaper-tests.sh --installation-tests` for isolated discovery, menu, and banner checks, and `python3 Tests/Installation/lifecycle_test.py` for recovery/rollback in a temporary home. Developer ID and offline Gatekeeper behavior must also be checked with an authorized signed release artifact; stubbed signing tests do not establish that result.
 
 ## Component version checks
 

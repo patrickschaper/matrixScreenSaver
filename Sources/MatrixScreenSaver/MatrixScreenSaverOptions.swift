@@ -361,6 +361,13 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
     private let onApply: (MatrixScreenSaverOptions) -> Void
     var onClose: (() -> Void)?
 
+    /// Optional wallpaper-host action; omitted by the saver and preview to hide installation UI.
+    var onInstallScreenSaver: (() -> Void)?
+    /// Host-controlled notice above all tabs, removed from layout when the saver is installed.
+    private let installationBanner = NSStackView()
+    /// Explicit recovery action that never replaces the settings window's default Save button.
+    private let installScreenSaverButton = NSButton(title: "Install Screen Saver", target: nil, action: nil)
+
     private let window: NSWindow
     private let rootStack = NSStackView()
     /// Scrolls settings on smaller displays while keeping actions visible.
@@ -516,6 +523,25 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         return window
     }
 
+    /// Updates the optional recovery notice without reloading or saving any edited options.
+    ///
+    /// - Parameters:
+    ///   - isMissing: Whether discovery found no installed companion saver.
+    ///   - isInstalling: Whether the host already has an installation in progress.
+    func updateScreenSaverInstallation(isMissing: Bool, isInstalling: Bool) {
+        let hidden = onInstallScreenSaver == nil || (!isMissing && !isInstalling)
+        let changedVisibility = installationBanner.isHidden != hidden
+        installationBanner.isHidden = hidden
+        installScreenSaverButton.title = isInstalling ? "Installing Screen Saver…" : "Install Screen Saver"
+        installScreenSaverButton.isEnabled = !isInstalling
+        if changedVisibility { sizeWindowToFitContent() }
+    }
+
+    /// Forwards an explicit install click to the wallpaper host without applying settings.
+    @objc private func installScreenSaver(_ sender: Any?) {
+        onInstallScreenSaver?()
+    }
+
     /// Validates and applies the edited options.
     @objc private func apply(_ sender: Any?) {
         do {
@@ -585,6 +611,22 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         rootStack.spacing = 16
         rootStack.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
         rootStack.translatesAutoresizingMaskIntoConstraints = false
+
+        let installationMessage = NSTextField(wrappingLabelWithString: "Screen saver isn’t installed.")
+        installationMessage.textColor = .secondaryLabelColor
+        installationBanner.orientation = .horizontal
+        installationBanner.alignment = .centerY
+        installationBanner.spacing = 12
+        installationBanner.isHidden = true
+        installScreenSaverButton.bezelStyle = .rounded
+        installScreenSaverButton.target = self
+        installScreenSaverButton.action = #selector(installScreenSaver(_:))
+        installScreenSaverButton.setContentHuggingPriority(.required, for: .horizontal)
+        installScreenSaverButton.setContentCompressionResistancePriority(.required, for: .horizontal)
+        installationBanner.addArrangedSubview(installationMessage)
+        installationBanner.addArrangedSubview(installScreenSaverButton)
+        rootStack.addArrangedSubview(installationBanner)
+        installationBanner.widthAnchor.constraint(equalToConstant: 640).isActive = true
 
         let aboutButton = NSButton(title: "About the project", target: self, action: #selector(openRepository(_:)))
         aboutButton.bezelStyle = .inline

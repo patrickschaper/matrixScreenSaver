@@ -34,7 +34,7 @@ func wallpaperAppTests() {
           settingsItem?.keyEquivalentModifierMask == .command,
           "Settings uses the standard macOS label and Command-comma shortcut")
     if let loginIndex = menuItems.firstIndex(where: { $0.title.hasPrefix("Launch at Login") }),
-       let syncIndex = menuItems.firstIndex(where: { $0.title == "Sync with Screen Saver" }) {
+       let syncIndex = menuItems.firstIndex(where: { $0.title == "Sync with Screen Saver" || $0.title == "Install Screen Saver" }) {
         check(syncIndex == loginIndex + 1 && loginIndex > 1 && menuItems[loginIndex - 1] === settingsItem &&
               menuItems[loginIndex - 2].isSeparatorItem &&
               syncIndex + 1 < menuItems.count && menuItems[syncIndex + 1].isSeparatorItem,
@@ -520,7 +520,7 @@ private func wallpaperSyncMenuTests() {
     host.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
     defer { host.applicationWillTerminate(Notification(name: NSApplication.willTerminateNotification)) }
     guard let status: NSStatusItem = stored("statusItem", in: host), let menu = status.menu,
-          let sync = menu.items.first(where: { $0.title == "Sync with Screen Saver" }) else {
+          let sync = menu.items.first(where: { $0.title == "Install Screen Saver" }) else {
         check(false, "host installs the screen saver sync menu control")
         return
     }
@@ -537,10 +537,11 @@ private func wallpaperSyncMenuTests() {
         return bundle
     }
     refresh()
-    check(sync.isHidden && sync.state == .on, "sync defaults on but is hidden without an installed saver")
+    check(!sync.isHidden && sync.title == "Install Screen Saver" && sync.state == .off &&
+          sync.action == NSSelectorFromString("installScreenSaver:"), "missing saver offers an unchecked installation action")
     let unrelated = install(user, name: "Other.saver", identifier: "test.other")
     refresh()
-    check(sync.isHidden, "unrelated saver bundles do not expose sync")
+    check(sync.title == "Install Screen Saver", "unrelated saver bundles do not expose sync")
     let installed = install(user, name: "Renamed.saver", identifier: "dev.patsch.MatrixScreenSaver")
     refresh()
     check(!sync.isHidden && sync.state == .on, "renamed user installation exposes default-enabled sync")
@@ -548,14 +549,14 @@ private func wallpaperSyncMenuTests() {
     check(sync.state == .off, "sync menu action unchecks the persisted preference")
     try! FileManager.default.removeItem(at: installed)
     refresh()
-    check(sync.isHidden && sync.state == .off, "removal hides sync without resetting its choice")
+    check(sync.title == "Install Screen Saver" && sync.state == .off, "removal offers installation without resetting sync choice")
     let localInstall = install(local, name: "Matrix.saver", identifier: "dev.patsch.MatrixScreenSaver")
     refresh()
     check(!sync.isHidden && sync.state == .off, "local installation restores visibility and preserves sync off")
     try! FileManager.default.removeItem(at: localInstall)
     try! Data("invalid plist".utf8).write(to: unrelated.appendingPathComponent("Contents/Info.plist"))
     refresh()
-    check(sync.isHidden, "malformed bundle metadata is ignored")
+    check(sync.title == "Install Screen Saver", "malformed bundle metadata is ignored")
     let target = install(root, name: "Target.saver", identifier: "dev.patsch.MatrixScreenSaver")
     try! FileManager.default.createSymbolicLink(at: local.appendingPathComponent("Linked.saver"), withDestinationURL: target)
     loginStatus = .enabled

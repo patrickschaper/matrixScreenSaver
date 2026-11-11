@@ -7,13 +7,29 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import zipfile
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "Scripts/product-lifecycle.sh"
 
 
 class LifecycleTests(unittest.TestCase):
+    """Exercise pair installation and saver recovery against isolated macOS-service fixtures."""
+
+    @classmethod
+    def setUpClass(cls):
+        """Compile the real exclusive-promotion helper outside the shared build directory."""
+        cls.helper_temp = tempfile.TemporaryDirectory(prefix="matrix-installer-helper-")
+        cls.helper = Path(cls.helper_temp.name) / "MatrixScreenSaverInstaller"
+        subprocess.run(["swiftc", str(ROOT / "Tools/ScreenSaverInstaller.swift"), "-o", str(cls.helper)], check=True)
+
+    @classmethod
+    def tearDownClass(cls):
+        """Remove the test-only native helper after all lifecycle cases finish."""
+        cls.helper_temp.cleanup()
+
     def setUp(self):
+        """Create an isolated HOME and injectable failures around the real filesystem tools."""
         self.temp = tempfile.TemporaryDirectory(prefix="matrix-lifecycle-")
         self.root = Path(self.temp.name).resolve()
         self.home = self.root / "home"
@@ -40,12 +56,22 @@ elif name == 'mv':
 elif name == 'rm':
     if (r/'fail-removal').exists() and any(a.endswith('/MatrixScreenSaver.saver') for a in args):
         sys.exit(1)
+    if (r/'fail-marker-removal').exists() and any(a.endswith('/MatrixScreenSaver.saver.installing') and pathlib.Path(a).exists() for a in args):
+        sys.exit(1)
+    if (r/'fail-state-removal').exists() and str(r/'home/Library/Application Support/MatrixWallpaper/Installation') in args:
+        sys.exit(1)
     sys.exit(subprocess.call(['/bin/rm', *args]))
 elif name == 'osascript':
     sys.stdin.read(); (r/'quit-request').touch()
-elif name not in ('codesign', 'pkill'): sys.exit(1)
+elif name == 'codesign':
+    if (r/'fail-signature').exists() and args[-1].endswith('.saver'): sys.exit(1)
+    if (r/'fail-final-validation').exists() and args[-1] == str(r/'home/Library/Screen Savers/MatrixScreenSaver.saver'): sys.exit(1)
+elif name == 'ditto':
+    if (r/'fail-extraction').exists() and args[0] == '-x': sys.exit(1)
+    sys.exit(subprocess.call(['/usr/bin/ditto', *args]))
+elif name != 'pkill': sys.exit(1)
 '''
-        for name in ["launchctl", "date", "mv", "rm", "osascript", "codesign", "pkill"]:
+        for name in ["launchctl", "date", "mv", "rm", "osascript", "codesign", "pkill", "ditto"]:
             path = self.bin / name
             path.write_text(stub)
             path.chmod(0o755)
@@ -88,6 +114,250 @@ elif name not in ('codesign', 'pkill'): sys.exit(1)
 
     def install(self):
         self.run_script("install", self.app, self.saver)
+
+    def recovery_payload(self, app=None):
+        """Embed the real helper and a ditto archive without altering fixture bundle metadata."""
+        app = app or self.app
+        helper = app / "Contents/MacOS/MatrixScreenSaverInstaller"
+        shutil.copy2(self.helper, helper)
+        archive = app / "Contents/Resources/ScreenSaver/MatrixScreenSaver.zip"
+        archive.parent.mkdir(parents=True, exist_ok=True)
+        archive.unlink(missing_ok=True)
+        subprocess.run(["/usr/bin/ditto", "-c", "-k", "--sequesterRsrc", "--keepParent",
+                        str(self.saver), str(archive)], check=True)
+        return archive
+
+    def test_restore_preserves_app_preferences_and_registration(self):
+        """Recovery changes only the missing saver and remains idempotent after success."""
+        self.recovery_payload()
+        self.install()
+        app_inode = self.installed_app.stat().st_ino
+        record = (self.state / "installation.plist").read_bytes()
+        agent = self.agent.read_bytes()
+        preferences = self.home / "Library/Preferences/sentinel"
+        preferences.parent.mkdir()
+        preferences.write_text("keep")
+        shutil.rmtree(self.installed_saver)
+        (self.root / "quit-request").unlink()
+        self.run_script("install-saver", self.installed_app)
+        self.assertEqual(self.installed_app.stat().st_ino, app_inode)
+        self.assertEqual((self.state / "installation.plist").read_bytes(), record)
+        self.assertEqual(self.agent.read_bytes(), agent)
+        self.assertEqual(preferences.read_text(), "keep")
+        self.assertFalse((self.root / "quit-request").exists())
+        self.assertTrue(self.installed_saver.exists())
+        saver_inode = self.installed_saver.stat().st_ino
+        self.run_script("install-saver", self.installed_app)
+        self.assertEqual(self.installed_saver.stat().st_ino, saver_inode)
+
+    def test_restore_keeps_homebrew_custom_destination_and_cleanup(self):
+        """A Homebrew recovery preserves its custom path and later app-removal cleanup."""
+        self.recovery_payload()
+        self.run_script("register", self.app, self.saver, "homebrew")
+        record = (self.state / "installation.plist").read_bytes()
+        shutil.rmtree(self.saver)
+        self.run_script("install-saver", self.app)
+        self.assertEqual((self.state / "installation.plist").read_bytes(), record)
+        self.assertTrue(self.saver.exists())
+        self.assertFalse(self.installed_saver.exists())
+        shutil.rmtree(self.app)
+        self.run_script("check")
+        self.clock(1300)
+        self.run_script("check")
+        self.assertFalse(self.saver.exists())
+
+    def test_first_restore_registers_pair_and_registration_failure_rolls_back(self):
+        """An unmanaged app gains cleanup only after restoration commits successfully."""
+        self.recovery_payload()
+        (self.root / "fail-register").touch()
+        self.run_script("install-saver", self.app, success=False)
+        self.assertFalse(self.installed_saver.exists() or self.agent.exists() or (self.state / "installation.plist").exists())
+        self.assertTrue(self.app.exists())
+        self.run_script("install-saver", self.app)
+        record = plistlib.loads((self.state / "installation.plist").read_bytes())
+        self.assertEqual(record, {"app": str(self.app), "saver": str(self.installed_saver), "owner": "local"})
+        self.assertFalse((self.root / "quit-request").exists())
+
+    def test_restore_rejects_missing_mismatched_and_unsafe_payload(self):
+        """Invalid recovery data never creates an installed saver or registration."""
+        self.run_script("install-saver", self.app, success=False)
+        for key, invalid, valid in [("CFBundleVersion", "9", "1.2.3"),
+                                    ("CFBundleShortVersionString", "9", "1.2.3"),
+                                    ("CFBundleIdentifier", "unrelated", "dev.patsch.MatrixScreenSaver")]:
+            self.metadata(self.saver, **{key: invalid})
+            self.recovery_payload()
+            self.run_script("install-saver", self.app, success=False)
+            self.metadata(self.saver, **{key: valid})
+        (self.saver / "escape").symlink_to(self.root)
+        self.recovery_payload()
+        self.run_script("install-saver", self.app, success=False)
+        self.assertFalse(self.installed_saver.exists() or self.agent.exists())
+
+    def test_restore_rejects_corrupt_and_traversing_archives(self):
+        """Archive validation fails before malformed paths can escape private staging."""
+        archive = self.recovery_payload()
+        archive.write_bytes(b"not a zip")
+        self.run_script("install-saver", self.app, success=False)
+        for name in ["../escaped", "MatrixScreenSaver.saver/../../escaped", "/tmp/escaped", "Unexpected/file"]:
+            with zipfile.ZipFile(archive, "w") as payload:
+                entry = zipfile.ZipInfo(name)
+                entry.create_system = 3
+                entry.external_attr = 0o100644 << 16
+                payload.writestr(entry, "unsafe")
+            self.run_script("install-saver", self.app, success=False)
+        self.assertFalse(self.installed_saver.exists() or self.agent.exists())
+
+    def test_restore_failures_leave_no_partial_installation(self):
+        """Extraction and signature failures leave the running app and destination intact."""
+        self.recovery_payload()
+        app_inode = self.app.stat().st_ino
+        for marker in ["fail-extraction", "fail-signature", "fail-final-validation"]:
+            (self.root / marker).touch()
+            self.run_script("install-saver", self.app, success=False)
+            (self.root / marker).unlink()
+            self.assertFalse(self.installed_saver.exists() or self.agent.exists())
+            self.assertEqual(self.app.stat().st_ino, app_inode)
+            self.assertEqual(list(self.installed_saver.parent.glob(".MatrixSaver-install.*")), [])
+
+    def test_restore_reports_failed_rollback(self):
+        """A failed cleanup retains an identity marker until retry completes registration."""
+        self.recovery_payload()
+        (self.root / "fail-final-validation").touch()
+        (self.root / "fail-removal").touch()
+        result = self.run_script("install-saver", self.app, success=False)
+        self.assertIn("recovery files preserved", result.stderr)
+        self.assertTrue(self.installed_saver.exists())
+        self.assertEqual(len(list(self.installed_saver.parent.glob(".MatrixSaver-install.*"))), 1)
+        marker = Path(str(self.installed_saver) + ".installing")
+        identity = self.installed_saver.stat()
+        self.assertEqual(marker.read_text(), f"{identity.st_dev}:{identity.st_ino}")
+        (self.root / "fail-final-validation").unlink()
+        (self.root / "fail-removal").unlink()
+        self.run_script("install-saver", self.app)
+        self.assertEqual(self.installed_saver.stat().st_ino, identity.st_ino)
+        self.assertTrue((self.state / "installation.plist").exists() and self.agent.exists())
+        self.assertFalse(marker.exists())
+
+    def test_restore_retries_failed_registration_without_replacing_saver(self):
+        """A leftover saver must not bypass registration merely because its plist is valid."""
+        self.recovery_payload()
+        (self.root / "fail-register").touch()
+        (self.root / "fail-removal").touch()
+        (self.root / "fail-state-removal").touch()
+        self.run_script("install-saver", self.app, success=False)
+        identity = self.installed_saver.stat()
+        marker = Path(str(self.installed_saver) + ".installing")
+        self.assertEqual(marker.read_text(), f"{identity.st_dev}:{identity.st_ino}")
+        self.assertTrue((self.state / "installation.plist").exists())
+        self.assertFalse(self.agent.exists())
+        (self.root / "fail-removal").unlink()
+        (self.root / "fail-state-removal").unlink()
+        self.run_script("install-saver", self.app)
+        self.assertEqual(self.installed_saver.stat().st_ino, identity.st_ino)
+        self.assertTrue((self.state / "installation.plist").exists() and self.agent.exists())
+        self.assertFalse(marker.exists())
+
+    def test_restore_marker_does_not_adopt_an_independent_replacement(self):
+        """A stale marker never grants ownership of a different installed saver inode."""
+        self.recovery_payload()
+        self.run_script("install-saver", self.app)
+        inode = self.installed_saver.stat().st_ino
+        marker = Path(str(self.installed_saver) + ".installing")
+        marker.write_text("1:2")
+        record = (self.state / "installation.plist").read_bytes()
+        self.run_script("install-saver", self.app)
+        self.assertEqual(self.installed_saver.stat().st_ino, inode)
+        self.assertEqual(marker.read_text(), "1:2")
+        self.assertEqual((self.state / "installation.plist").read_bytes(), record)
+        shutil.rmtree(self.installed_saver)
+        self.run_script("install-saver", self.app)
+        self.assertTrue(self.installed_saver.exists())
+        self.assertFalse(marker.exists())
+
+    def test_restore_repairs_partial_registration_after_bundle_rollback(self):
+        """An absent bundle with a prior receipt still retries incomplete registration."""
+        self.recovery_payload()
+        (self.root / "fail-register").touch()
+        (self.root / "fail-state-removal").touch()
+        self.run_script("install-saver", self.app, success=False)
+        marker = Path(str(self.installed_saver) + ".installing")
+        self.assertTrue(marker.exists())
+        self.assertFalse(self.installed_saver.exists())
+        self.assertTrue((self.state / "installation.plist").exists())
+        self.assertFalse(self.agent.exists())
+        (self.root / "fail-state-removal").unlink()
+        self.run_script("install-saver", self.app)
+        self.assertTrue(self.installed_saver.exists() and self.agent.exists())
+        self.assertTrue((self.root / "job").exists())
+        self.assertFalse(marker.exists())
+
+    def test_restore_does_not_commit_when_marker_cannot_be_cleared(self):
+        """A marker-clear failure reports failure and can be retried without adopting partial state."""
+        self.recovery_payload()
+        (self.root / "fail-marker-removal").touch()
+        self.run_script("install-saver", self.app, success=False)
+        marker = Path(str(self.installed_saver) + ".installing")
+        self.assertTrue(marker.exists())
+        self.assertFalse(self.installed_saver.exists())
+        (self.root / "fail-marker-removal").unlink()
+        self.run_script("install-saver", self.app)
+        self.assertTrue(self.installed_saver.exists())
+        self.assertFalse(marker.exists())
+
+    def test_restore_rejects_untrusted_marker_and_clears_successful_rollback(self):
+        """Only an exact regular-file identity marker can authorize retry or be removed."""
+        self.recovery_payload()
+        self.installed_saver.parent.mkdir(parents=True)
+        marker = Path(str(self.installed_saver) + ".installing")
+        for content in ["not an identity", "1:2\n", ""]:
+            marker.write_text(content)
+            self.run_script("install-saver", self.app, success=False)
+            self.assertEqual(marker.read_text(), content)
+            self.assertFalse(self.installed_saver.exists())
+        marker.unlink()
+        marker.symlink_to(self.root / "unrelated")
+        self.run_script("install-saver", self.app, success=False)
+        self.assertTrue(marker.is_symlink())
+        marker.unlink()
+        (self.root / "fail-register").touch()
+        self.run_script("install-saver", self.app, success=False)
+        self.assertFalse(marker.exists() or self.installed_saver.exists())
+
+    def test_restore_refuses_another_apps_managed_record(self):
+        """An obsolete or relocated app cannot adopt another managed installation."""
+        self.recovery_payload()
+        self.install()
+        shutil.rmtree(self.installed_saver)
+        record = (self.state / "installation.plist").read_bytes()
+        self.run_script("install-saver", self.app, success=False)
+        self.assertEqual((self.state / "installation.plist").read_bytes(), record)
+        self.assertFalse(self.installed_saver.exists())
+
+    def test_restore_refuses_conflicts_symlinks_and_busy_installation(self):
+        """The install action never replaces an occupied destination or bypasses the lock."""
+        self.recovery_payload()
+        self.installed_saver.parent.mkdir(parents=True)
+        self.installed_saver.write_text("unrelated")
+        self.run_script("install-saver", self.app, success=False)
+        self.assertEqual(self.installed_saver.read_text(), "unrelated")
+        self.installed_saver.unlink()
+        self.installed_saver.symlink_to(self.root / "missing")
+        self.run_script("install-saver", self.app, success=False)
+        self.assertTrue(self.installed_saver.is_symlink())
+        self.installed_saver.unlink()
+        self.state.parent.mkdir(parents=True, exist_ok=True)
+        (self.state.parent / ".installation-lock").write_text(str(os.getpid()))
+        self.run_script("install-saver", self.app, success=False)
+        self.assertFalse(self.installed_saver.exists())
+
+    def test_exclusive_promotion_rejects_raced_destination(self):
+        """Native promotion cannot overwrite a target or nest the saver inside it."""
+        destination = self.root / "occupied.saver"
+        destination.mkdir()
+        result = subprocess.run([str(self.helper), "promote", str(self.saver), str(destination)], capture_output=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertTrue(self.saver.exists())
+        self.assertEqual(list(destination.iterdir()), [])
 
     def test_pair_registration_and_explicit_removal_preserve_preferences(self):
         self.install()

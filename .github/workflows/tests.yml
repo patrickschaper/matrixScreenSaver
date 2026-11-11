@@ -31,7 +31,7 @@ jobs:
         run: ./build.sh
 
       - name: Build wallpaper app
-        run: ./build-wallpaper.sh
+        run: ./build-wallpaper.sh --saver build/MatrixScreenSaver.saver
 
       - name: Check wallpaper installation and rollback
         run: ./wallpaper-install-tests.sh

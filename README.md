@@ -30,6 +30,8 @@ brew install --cask patrickschaper/tap/matrix-screen-saver && open "/Application
 
 Download the release archive, extract it, and open **Install.command**. This installs both components for your user account. Both installers install and upgrade the app and screen saver together; separate installation is not supported.
 
+If you delete the screen saver later, choose **Install Screen Saver** from the Matrix Wallpaper menu or the banner in **Settings…**. This restores the bundled screen saver without interrupting the wallpaper or resetting your settings. You can then select it in System Settings; installation does not change your active screen saver.
+
 ## Uninstall
 
 For Homebrew installations:

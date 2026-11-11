@@ -73,6 +73,18 @@ install_app
 codesign --verify --deep --strict "$INSTALL_BUNDLE"
 cmp "$SOURCE_BUNDLE/Contents/MacOS/MatrixWallpaper" "$INSTALL_BUNDLE/Contents/MacOS/MatrixWallpaper"
 echo "ok - installs a verified app into user Applications"
+# Exercise the shipped payload with real signatures after removing only the isolated saver.
+INSTALLED_SAVER="$HOME/Library/Screen Savers/MatrixScreenSaver.saver"
+APP_INODE="$(stat -f %i "$INSTALL_BUNDLE")"
+cp "$HOME/Library/Application Support/MatrixWallpaper/Installation/installation.plist" "$TEST_DIR/registration-before.plist"
+rm -r "$INSTALLED_SAVER"
+rm "$QUIT_LOG"
+bash "$INSTALL_BUNDLE/Contents/Resources/ScreenSaver/product-lifecycle.sh" install-saver "$INSTALL_BUNDLE" > "$TEST_DIR/output" 2>&1
+[[ ! -e "$QUIT_LOG" && "$(stat -f %i "$INSTALL_BUNDLE")" == "$APP_INODE" ]]
+cmp "$TEST_DIR/registration-before.plist" "$HOME/Library/Application Support/MatrixWallpaper/Installation/installation.plist"
+codesign --verify --deep --strict "$INSTALLED_SAVER"
+codesign --verify --deep --strict "$INSTALL_BUNDLE"
+echo "ok - bundled recovery restores a signed saver without replacing or quitting the app"
 OLD_INODE="$(stat -f %i "$INSTALL_BUNDLE")"
 mkdir -p "$HOME/Library/Preferences"
 printf 'unchanged preferences' > "$HOME/Library/Preferences/dev.patsch.MatrixScreenSaver.plist"

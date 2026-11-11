@@ -1,12 +1,17 @@
 #!/usr/bin/env bash
-# Submit both signed build bundles to Apple, then staple their tickets in place.
+# Submit the supplied signed bundles to Apple, then staple their tickets in place.
+# With no arguments, submit both default build bundles for existing local callers.
 # Requires NOTARY_KEYCHAIN_PROFILE created with `xcrun notarytool store-credentials`.
 # NOTARY_KEYCHAIN optionally selects a non-default keychain (used by CI).
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 : "${NOTARY_KEYCHAIN_PROFILE:?Set NOTARY_KEYCHAIN_PROFILE to your notarytool credential profile.}"
-BUNDLES=("$ROOT_DIR/build/MatrixScreenSaver.saver" "$ROOT_DIR/build/Matrix Wallpaper.app")
+# Separate submissions let the app embed an already stapled recovery saver.
+BUNDLES=("$@")
+if [[ ${#BUNDLES[@]} -eq 0 ]]; then
+  BUNDLES=("$ROOT_DIR/build/MatrixScreenSaver.saver" "$ROOT_DIR/build/Matrix Wallpaper.app")
+fi
 
 for bundle in "${BUNDLES[@]}"; do
   codesign --verify --deep --strict "$bundle"

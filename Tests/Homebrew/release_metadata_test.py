@@ -187,16 +187,18 @@ class ReleaseMetadataTest(unittest.TestCase):
                 self.assertFalse((self.root / "out").exists())
 
     def test_release_workflow_builds_and_stages_both_bundles(self):
+        """Both release paths retain standalone bundles and prepare app recovery data."""
         workflow = (ROOT / ".github/workflows/release.yml").read_text()
         prepare, publish = workflow.split("  publish:", 1)
         for job in (prepare, publish):
             self.assertIn("./build.sh\n", job)
-            self.assertIn("./build-wallpaper.sh\n", job)
+            self.assertIn("./build-wallpaper.sh", job)
             for bundle in ("MatrixScreenSaver.saver", "Matrix Wallpaper.app"):
                 self.assertIn(f'codesign --verify --deep --strict "build/{bundle}"', job)
         self.assertLess(prepare.index('printf \'%s\\n\' "${{ steps.version.outputs.next }}" > VERSION'),
                         prepare.index("./build.sh\n"))
         self.assertIn('ditto "build/Matrix Wallpaper.app" "${release_dir}/Matrix Wallpaper.app"', publish)
+        self.assertIn('./build-wallpaper.sh --saver "build/MatrixScreenSaver.saver"', publish)
 
     def test_release_uses_highest_version_tag_not_nearest(self):
         repository = self.root / "repository"

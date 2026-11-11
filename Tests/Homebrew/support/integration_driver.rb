@@ -148,6 +148,27 @@ def uninstall(cask)
   check(!(FIXTURE_HOME/"Library/LaunchAgents/dev.patsch.MatrixWallpaper.cleanup.plist").exist?, "Cleanup registration survived uninstall")
 end
 
+# Restore the native artifact from app resources while retaining Homebrew's real receipt and paths.
+def restore_saver
+  recovery = APP_TARGET/"Contents/Resources/ScreenSaver"
+  recovery.mkpath
+  FileUtils.cp("Scripts/product-lifecycle.sh", recovery/"product-lifecycle.sh")
+  SystemCommand.run!("/usr/bin/xcrun", args: ["swiftc", "Tools/ScreenSaverInstaller.swift", "-o",
+                                            (APP_TARGET/"Contents/MacOS/MatrixScreenSaverInstaller").to_s])
+  SystemCommand.run!("/usr/bin/ditto", args: ["-c", "-k", "--sequesterRsrc", "--keepParent",
+                                            TARGET.to_s, (recovery/"MatrixScreenSaver.zip").to_s])
+  app_inode = APP_TARGET.stat.ino
+  record = FIXTURE_HOME/"Library/Application Support/MatrixWallpaper/Installation/installation.plist"
+  registration = record.binread
+  TARGET.rmtree
+  SystemCommand.run!("/bin/bash", args: [(recovery/"product-lifecycle.sh").to_s, "install-saver", APP_TARGET.to_s],
+                                 env: { "HOME" => FIXTURE_HOME.to_s,
+                                        "PATH" => "#{FIXTURE_BIN}:/usr/bin:/bin:/usr/sbin:/sbin" })
+  check(TARGET.directory?, "Recovery did not restore the configured Homebrew target")
+  check(APP_TARGET.stat.ino == app_inode, "Recovery replaced the wallpaper app")
+  check(record.binread == registration, "Recovery changed Homebrew ownership or registration")
+end
+
 # AE1: modern steps run in Homebrew's real sandbox, including actual echo stdout.
 fresh = definition("1.2.3")
 check(!fresh.installed?, "Fresh fixture unexpectedly managed")
@@ -172,6 +193,8 @@ verify_target("1.2.3")
 check(OSASCRIPT_CALLS.empty?, "Install attempted startup or cleanup")
 puts "PASS AE1 sandboxed native fresh install and actual coffee stdout"
 
+restore_saver
+verify_target("1.2.3")
 uninstall(fresh)
 OSASCRIPT_CALLS.clear
 legacy = definition("1.2.2", legacy: :saver)
@@ -209,6 +232,10 @@ verify_target("1.2.3")
 check(output.scan(COFFEE).length == 1, "Legacy migration coffee output count wrong")
 check(OSASCRIPT_CALLS.empty?, "Legacy migration attempted automation")
 puts "PASS native legacy saver-only to dual-bundle migration"
+
+# Recovery must leave the native artifact ready for Homebrew's next upgrade.
+restore_saver
+verify_target("1.2.3")
 
 # AE4: successor evaluates while prior metadata exists, before native upgrade.
 successor = definition("1.2.4")

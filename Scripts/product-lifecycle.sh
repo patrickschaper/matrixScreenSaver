@@ -1,5 +1,6 @@
 #!/bin/bash
-# Installs and removes the pair. The installed copy survives Finder removal of the app.
+# Installs/removes the pair and restores a missing saver from its app's recovery payload.
+# The installed copy survives Finder removal of the app; install-saver APP never quits it.
 set -euo pipefail
 umask 077
 
@@ -249,9 +250,113 @@ install_pair() {
   exit 0
 }
 
+# Restores a missing or incomplete saver, preserving an existing owner's destination and registration.
+# Takes the running app bundle path. Its sealed archive/helper are the only accepted payloads.
+# Failures roll back this operation's changes; incomplete rollback retains staging for recovery.
+install_saver() {
+  local source_app="$1" archive helper stage committed=0 promoted=0 registration_changed=0 identity=""
+  local marker marker_identity="" marker_owned=0 retry=0
+  source_app="$(cd "$(dirname "$source_app")" && pwd -P)/$(basename "$source_app")"
+  verify_bundle "$source_app" "$APP_ID" MatrixWallpaper || fail "Invalid wallpaper bundle: $source_app"
+  lock
+  if [[ -e "$RECORD" ]]; then
+    read_record
+    [[ "$APP" == "$source_app" ]] || fail "Open the installed Matrix Wallpaper app and try again."
+  else
+    check_destinations "$source_app" "$HOME/Library/Screen Savers/MatrixScreenSaver.saver" local
+  fi
+  marker="$SAVER.installing"
+  safe_path "$marker"
+  if [[ -e "$marker" ]]; then
+    [[ -f "$marker" ]] || fail "Invalid screen saver recovery marker: $marker"
+    marker_identity="$(cat "$marker")"
+    [[ "$marker_identity" =~ ^[0-9]+:[0-9]+$ ]] && printf '%s' "$marker_identity" | cmp -s - "$marker" ||
+      fail "Invalid screen saver recovery marker: $marker"
+    if [[ -d "$SAVER" && ! -L "$SAVER" && "$(stat -f '%d:%i' "$SAVER")" == "$marker_identity" ]]; then
+      retry=1
+      identity="$marker_identity"
+      marker_owned=1
+    fi
+  fi
+  if [[ ( -e "$SAVER" || -L "$SAVER" ) && "$retry" == 0 ]]; then
+    verify_bundle "$SAVER" "$SAVER_ID" MatrixScreenSaver || fail "The screen saver destination is occupied. Move the conflicting item and try again."
+    echo "MatrixScreenSaver is already installed."
+    return
+  fi
+  if [[ "$retry" == 0 ]]; then
+    archive="$source_app/Contents/Resources/ScreenSaver/MatrixScreenSaver.zip"
+    helper="$source_app/Contents/MacOS/MatrixScreenSaverInstaller"
+    safe_path "$archive"; safe_path "$helper"
+    [[ -f "$archive" && -x "$helper" ]] || fail "The recovery payload is missing. Reinstall Matrix Wallpaper."
+    "$helper" validate-archive "$archive"
+  fi
+  mkdir -p "$(dirname "$SAVER")" || fail "Cannot write to the screen saver folder. Check its permissions and try again."
+  stage="$(mktemp -d "$(dirname "$SAVER")/.MatrixSaver-install.XXXXXX")"
+
+  # Removes only our promoted inode; a replacement created by another installer is never deleted.
+  restore_saver_rollback() {
+    local result=$? restored=1
+    trap - EXIT
+    if [[ "$committed" == 0 ]]; then
+      if [[ "$promoted" == 1 ]]; then
+        if [[ ! -L "$SAVER" && -d "$SAVER" && "$(stat -f '%d:%i' "$SAVER")" == "$identity" ]]; then
+          rm -rf "$SAVER" || restored=0
+        else
+          restored=0
+        fi
+      fi
+      if [[ "$registration_changed" == 1 ]]; then
+        unload || restored=0
+        rm -rf "$STATE" || restored=0
+        rm -f "$AGENT" || restored=0
+        if [[ -d "$stage/registration" ]]; then cp -R "$stage/registration" "$STATE" || restored=0; fi
+        if [[ -f "$stage/agent.plist" ]]; then
+          cp "$stage/agent.plist" "$AGENT" && launchctl bootstrap "$DOMAIN" "$AGENT" || restored=0
+        fi
+      fi
+      # Retain the receipt when registration rollback fails, even if our bundle was removed.
+      if [[ "$restored" == 1 && "$marker_owned" == 1 ]] &&
+         [[ ! -d "$SAVER" || -L "$SAVER" || "$(stat -f '%d:%i' "$SAVER")" != "$identity" ]]; then
+        rm -f "$marker" || restored=0
+      fi
+    fi
+    if [[ "$restored" == 1 ]] && ! rm -rf "$stage"; then restored=0; fi
+    if [[ "$restored" != 1 ]]; then
+      echo "Restore failed; recovery files preserved at $stage" >&2
+      result=1
+    fi
+    unlock
+    exit "$result"
+  }
+  trap restore_saver_rollback EXIT
+  if [[ "$retry" == 0 ]]; then
+    ditto -x -k "$archive" "$stage"
+    validate_pair "$source_app" "$stage/MatrixScreenSaver.saver"
+    identity="$(stat -f '%d:%i' "$stage/MatrixScreenSaver.saver")"
+    # A validated stale marker with no matching target cannot block a new recovery attempt.
+    rm -f "$marker"
+    (set -C; printf '%s' "$identity" > "$marker") || fail "Cannot create the screen saver recovery marker."
+    marker_owned=1
+    "$helper" promote "$stage/MatrixScreenSaver.saver" "$SAVER"
+  fi
+  promoted=1
+  validate_pair "$source_app" "$SAVER"
+  if [[ -n "$marker_identity" || ! -e "$RECORD" || ! -f "$AGENT" ]] || ! launchctl print "$DOMAIN/$LABEL" >/dev/null 2>&1; then
+    [[ ! -d "$STATE" ]] || cp -R "$STATE" "$stage/registration"
+    [[ ! -f "$AGENT" ]] || cp "$AGENT" "$stage/agent.plist"
+    registration_changed=1
+    register
+  fi
+  rm -f "$marker" || fail "Cannot finish the screen saver recovery. Check folder permissions and retry."
+  committed=1
+  echo "Installed MatrixScreenSaver. Select it in System Settings to use it."
+  exit 0
+}
+
 case "${1:-}" in
   validate) [[ $# == 3 ]] || fail "validate requires both bundles"; validate_pair "$2" "$3" ;;
   install) [[ $# == 3 ]] || fail "install requires both bundles"; install_pair "$2" "$3" ;;
+  install-saver) [[ $# == 2 ]] || fail "install-saver requires the wallpaper app"; install_saver "$2" ;;
   register)
     [[ $# == 4 ]] || fail "register requires app, saver, and owner"
     validate_pair "$2" "$3"
@@ -322,5 +427,5 @@ case "${1:-}" in
     rm -rf "$APP" "$SAVER"
     unregister
     ;;
-  *) fail "Usage: $0 {install|validate} APP SAVER | register APP SAVER OWNER | suspend | unregister | check | uninstall" ;;
+  *) fail "Usage: $0 {install|validate} APP SAVER | install-saver APP | register APP SAVER OWNER | suspend | unregister | check | uninstall" ;;
 esac

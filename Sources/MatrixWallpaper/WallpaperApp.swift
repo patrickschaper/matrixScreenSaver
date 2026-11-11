@@ -16,12 +16,12 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// Wallpaper-only preferences, separate from shared rendering options.
     private let defaults: UserDefaults
-    /// Locations used only to determine whether synchronization is available.
-    private let screenSaverDirectories: [URL]
+    /// Shares companion discovery and explicit recovery between menu and settings.
+    private let screenSaverInstallation: ScreenSaverInstallationController
 
     /// Persists user intent even while no saver is installed.
     private static let syncPreferenceKey = "syncWithScreenSaver"
-    /// Reflects whether the wallpaper may serve frames to the saver.
+    /// Offers synchronization when installed, or explicit recovery when the saver is missing.
     private let syncItem = NSMenuItem(title: "Sync with Screen Saver", action: #selector(toggleScreenSaverSync(_:)), keyEquivalent: "")
 
     /// Creates the host with system login operations, or an isolated test controller.
@@ -31,17 +31,20 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     ///   - defaults: Store for wallpaper-only preferences.
     ///   - screenSaverDirectories: User and local installed-saver directories.
     ///   - desktopWallpaper: Durable desktop settings controller, isolated in tests.
+    ///   - screenSaverInstallation: Optional isolated discovery and installation controller.
     init(loginItems: LoginItemController = LoginItemController(), defaults: UserDefaults = .standard,
          screenSaverDirectories: [URL] = [
              FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Screen Savers"),
              URL(fileURLWithPath: "/Library/Screen Savers")],
-         desktopWallpaper: DesktopWallpaperController = DesktopWallpaperController()) {
+         desktopWallpaper: DesktopWallpaperController = DesktopWallpaperController(),
+         screenSaverInstallation: ScreenSaverInstallationController? = nil) {
         self.loginItems = loginItems
         self.defaults = defaults
-        self.screenSaverDirectories = screenSaverDirectories
+        self.screenSaverInstallation = screenSaverInstallation ?? ScreenSaverInstallationController(directories: screenSaverDirectories)
         self.desktopWallpaper = desktopWallpaper
         super.init()
         defaults.register(defaults: [Self.syncPreferenceKey: true])
+        self.screenSaverInstallation.onChange = { [weak self] in self?.updateScreenSaverControls() }
     }
 
     /// Owns the native desktop surfaces until playback ends.
@@ -191,23 +194,53 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         NSApp.mainMenu = mainMenu
     }
 
-    /// Refreshes both optional controls when installations or system settings change.
+    /// Refreshes login status and companion presence each time the menu is opened.
     func menuWillOpen(_ menu: NSMenu) {
         loginItems.menuWillOpen(menu)
-        syncItem.state = defaults.bool(forKey: Self.syncPreferenceKey) ? .on : .off
-        syncItem.isHidden = !screenSaverDirectories.contains { directory in
-            let urls = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
-            return urls.filter { $0.pathExtension.lowercased() == "saver" }.contains { url in
-                guard let data = try? Data(contentsOf: url.appendingPathComponent("Contents/Info.plist")),
-                      let metadata = (try? PropertyListSerialization.propertyList(from: data, format: nil)) as? [String: Any]
-                else { return false }
-                return metadata["CFBundleIdentifier"] as? String == "dev.patsch.MatrixScreenSaver"
+        screenSaverInstallation.refresh()
+        updateScreenSaverControls()
+    }
+
+    /// Updates both native surfaces without changing persisted sync intent or edited options.
+    private func updateScreenSaverControls() {
+        guard !isTerminating else { return }
+        let state = screenSaverInstallation.state
+        syncItem.isEnabled = state != .installing
+        syncItem.state = state == .installed && defaults.bool(forKey: Self.syncPreferenceKey) ? .on : .off
+        switch state {
+        case .installed:
+            syncItem.title = "Sync with Screen Saver"
+            syncItem.action = #selector(toggleScreenSaverSync(_:))
+        case .missing, .installing:
+            syncItem.title = state == .installing ? "Installing Screen Saver…" : "Install Screen Saver"
+            syncItem.action = #selector(installScreenSaver(_:))
+        }
+        optionsController?.updateScreenSaverInstallation(isMissing: state == .missing, isInstalling: state == .installing)
+    }
+
+    /// Restores the companion without interrupting wallpaper playback or saving settings edits.
+    @objc private func installScreenSaver(_ sender: Any?) {
+        guard !isTerminating else { return }
+        statusItem?.menu?.cancelTracking()
+        screenSaverInstallation.install { [weak self] result in
+            guard let self, !self.isTerminating, case .failure(let error) = result else { return }
+            let alert = NSAlert()
+            alert.messageText = "Couldn’t install the screen saver"
+            alert.informativeText = error.localizedDescription
+            alert.addButton(withTitle: "OK")
+            NSApp.activate(ignoringOtherApps: true)
+            if let window = self.optionsController?.configureSheet(), window.isVisible {
+                alert.beginSheetModal(for: window)
+            } else {
+                alert.runModal()
             }
         }
     }
 
     /// Stores the choice without changing the wallpaper's requested playback state.
     @objc private func toggleScreenSaverSync(_ sender: Any?) {
+        screenSaverInstallation.refresh()
+        guard screenSaverInstallation.state == .installed else { return }
         let enabled = !defaults.bool(forKey: Self.syncPreferenceKey)
         defaults.set(enabled, forKey: Self.syncPreferenceKey)
         syncItem.state = enabled ? .on : .off
@@ -239,6 +272,7 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// Presents the shared native options window; only this explicit action activates the app.
     @objc private func showOptions(_ sender: Any?) {
+        screenSaverInstallation.refresh()
         if let optionsController {
             optionsController.configureSheet().makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
@@ -248,8 +282,10 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self?.applyOptions(options)
         }
         controller.onClose = { [weak self] in self?.optionsController = nil }
+        controller.onInstallScreenSaver = { [weak self] in self?.installScreenSaver(nil) }
         controller.prepare(using: MatrixScreenSaverView.loadSaverOptions())
         optionsController = controller
+        updateScreenSaverControls()
         controller.configureSheet().center()
         controller.configureSheet().makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -379,6 +415,16 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// Observes documented workspace state plus best-effort lock/saver distributed signals.
     private func observeSystemState() {
+        observe(NotificationCenter.default, name: NSApplication.didBecomeActiveNotification) { [weak self] in
+            self?.screenSaverInstallation.refresh()
+        }
+        let settingsFocus = NotificationCenter.default.addObserver(forName: NSWindow.didBecomeKeyNotification,
+            object: nil, queue: .main) { [weak self] notification in
+                guard let self, let window = notification.object as? NSWindow,
+                      window === self.optionsController?.configureSheet() else { return }
+                self.screenSaverInstallation.refresh()
+            }
+        observers.append((NotificationCenter.default, settingsFocus))
         let workspace = NSWorkspace.shared.notificationCenter
         for (start, end, reason) in [
             (NSWorkspace.willSleepNotification, NSWorkspace.didWakeNotification, WallpaperPlaybackState.Suspension.sleeping),
@@ -463,6 +509,7 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Removes observers and native animation work before the process exits.
     func applicationWillTerminate(_ notification: Notification) {
         isTerminating = true
+        screenSaverInstallation.onChange = nil
         pendingLaunch?.cancel()
         pendingLaunch = nil
         playback.isRequested = false
