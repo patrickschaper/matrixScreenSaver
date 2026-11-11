@@ -10,6 +10,8 @@ The iconic Matrix digital rain for your Mac.
 - Highly customizable: change the font, characters, speed, density, glow, and scan lines.
 - Classic and Resurrections glyph styles, plus personalized intro messages.
 
+Only use trusted custom commands: they run with the app's permissions, and their text and output are visible even on the lock screen.
+
 ## Including animated Wallpaper
 
 Run the animation on your desktop with the included **Matrix Wallpaper** app. Use its menu bar icon to pause, stop, or open **Settings…**.
@@ -22,9 +24,7 @@ brew install --cask patrickschaper/tap/matrix-screen-saver && open "/Application
 ```
 
 - **Wallpaper:** open **Matrix Wallpaper** in Applications.
-- **Screen saver:** select **MatrixScreenSaver** in **System Settings → Wallpaper → Screen Saver**. Choose **Options…** to customize it.
-
-Only use trusted custom commands: they run with the app's permissions, and their text and output are visible even on the lock screen.
+- **Screen saver options:** **System Settings → Wallpaper → Screen Saver → MatrixScreenSaver → Options…**.
 
 ## Buy me a coffee
 
