@@ -48,11 +48,8 @@ swiftc \
 cp "$INPUT_RESOURCES_DIR/Info.plist" "$CONTENTS_DIR/Info.plist"
 cp -R "$INPUT_RESOURCES_DIR/Fonts" "$RESOURCES_DIR/Fonts"
 cp "$INPUT_RESOURCES_DIR/BuyMeACoffee.png" "$RESOURCES_DIR/BuyMeACoffee.png"
-for f in Preview.png "Preview@2x.png"; do
-  if [[ -f "$INPUT_RESOURCES_DIR/$f" ]]; then
-    cp "$INPUT_RESOURCES_DIR/$f" "$RESOURCES_DIR/$f"
-  fi
-done
+# System Settings looks for these names; missing artwork must fail packaging.
+cp "$INPUT_RESOURCES_DIR/thumbnail.png" "$INPUT_RESOURCES_DIR/thumbnail@2x.png" "$RESOURCES_DIR/"
 if command -v /usr/libexec/PlistBuddy >/dev/null 2>&1; then
   /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $BUNDLE_VERSION" "$CONTENTS_DIR/Info.plist"
   /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUNDLE_VERSION" "$CONTENTS_DIR/Info.plist"

@@ -51,6 +51,22 @@ Only the GitHub release publish job uses Developer ID signing and Apple notariza
 
 Releases sign, notarize, and staple the saver before assembling the recovery archive. The workflow then signs the installer helper and wallpaper app, notarizes/staples the app, and packages both top-level bundles. This keeps recovery independent of the original download and allows the embedded saver to retain its ticket.
 
+### Screen saver gallery artwork
+
+System Settings uses `thumbnail.png` (90×58) and `thumbnail@2x.png` (180×116) from the saver's `Contents/Resources`. The original 2493×1406 screenshot is preserved as `Resources/ThumbnailSource.png` and is not bundled. Both exports share a centered 2160×1392 crop (45:29); the extra pixel from the odd horizontal margin is removed on the right.
+
+Regenerate the checked-in exports with macOS `sips`:
+
+```bash
+thumbnail_crop="$(mktemp -t matrix-thumbnail)"
+sips --cropToHeightWidth 1392 2160 --cropOffset 7 166 Resources/ThumbnailSource.png --out "$thumbnail_crop"
+sips --resampleHeightWidth 58 90 "$thumbnail_crop" --out Resources/thumbnail.png
+sips --resampleHeightWidth 116 180 "$thumbnail_crop" --out Resources/thumbnail@2x.png
+rm "$thumbnail_crop"
+```
+
+The build requires both exports. `./wallpaper-install-tests.sh` compares their bytes in the standalone saver and a saver restored from the app's recovery archive. Reopen System Settings and reselect the saver to check the tile; if an old tile persists, verify in a fresh macOS user or VM before investigating a specific cache. The gallery image is separate from the live preview, and changing it does not require renderer or preference changes.
+
 ## Test
 
 ```bash
