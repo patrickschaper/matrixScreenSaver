@@ -57,6 +57,15 @@ SCRIPT
 chmod +x "$TEST_DIR/bin/launchctl" "$TEST_DIR/bin/pkill"
 chmod +x "$TEST_DIR/bin/osascript" "$TEST_DIR/bin/ditto" "$TEST_DIR/bin/mv"
 
+# Checks that a saver carries the exported picker images, without the full-size source.
+# Takes the standalone or recovered saver bundle path.
+check_thumbnails() {
+  local bundle="$1" image
+  for image in thumbnail.png thumbnail@2x.png; do
+    cmp "$ROOT_DIR/Resources/$image" "$bundle/Contents/Resources/$image"
+  done
+  [[ ! -e "$bundle/Contents/Resources/ThumbnailSource.png" ]]
+}
 install_app() { bash "$ROOT_DIR/install-wallpaper.sh" "$SOURCE_BUNDLE" > "$TEST_DIR/output" 2>&1; }
 expect_failure() {
   if install_app; then
@@ -68,6 +77,8 @@ expect_failure() {
   echo "ok - $1 preserves the working installation"
 }
 
+check_thumbnails "$(dirname "$SOURCE_BUNDLE")/MatrixScreenSaver.saver"
+echo "ok - standalone saver packages the current picker thumbnails"
 install_app
 [[ -f "$QUIT_LOG" ]]
 codesign --verify --deep --strict "$INSTALL_BUNDLE"
@@ -84,6 +95,8 @@ bash "$INSTALL_BUNDLE/Contents/Resources/ScreenSaver/product-lifecycle.sh" insta
 cmp "$TEST_DIR/registration-before.plist" "$HOME/Library/Application Support/MatrixWallpaper/Installation/installation.plist"
 codesign --verify --deep --strict "$INSTALLED_SAVER"
 codesign --verify --deep --strict "$INSTALL_BUNDLE"
+check_thumbnails "$INSTALLED_SAVER"
+echo "ok - bundled recovery retains the current picker thumbnails"
 echo "ok - bundled recovery restores a signed saver without replacing or quitting the app"
 OLD_INODE="$(stat -f %i "$INSTALL_BUNDLE")"
 mkdir -p "$HOME/Library/Preferences"

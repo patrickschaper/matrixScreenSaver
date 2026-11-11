@@ -71,7 +71,8 @@ This repository is hosted on GitHub. When relevant, assume GitHub-native feature
 ### Resources
 
 - `Resources/Info.plist` — bundle metadata; version injected at build time from `VERSION`
-- `Resources/Preview.png`, `Resources/Preview@2x.png` — saver thumbnail assets
+- `Resources/thumbnail.png`, `Resources/thumbnail@2x.png` — System Settings gallery thumbnails
+- `Resources/ThumbnailSource.png` — original screenshot used to export the thumbnails; not bundled
 - `VERSION` — single source of truth for the bundle and release version
 
 ## Build
