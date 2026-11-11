@@ -97,6 +97,10 @@ Tests cover:
 
 ## README audience
 
+- Ask before editing `README.md`, unless the user explicitly requested the edit.
+- Keep sentences very short. Skip obvious explanations, such as what uninstallation does.
+- Keep "Buy me a coffee" directly below "Quick install".
+- Keep both screen saver and animated wallpaper in the README title.
 - Change `README.md` only when end-user information changes, such as installation, usage, or compatibility guidance.
 - Keep implementation details and contributor reference in `docs/development.md`, plans in `docs/plans/`, and agent instructions in `AGENTS.md`.
 
