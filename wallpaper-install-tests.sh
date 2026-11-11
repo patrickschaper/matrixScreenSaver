@@ -8,7 +8,8 @@ if [[ ! -d "$SOURCE_BUNDLE" ]]; then
   exit 1
 fi
 TEST_DIR="$(mktemp -d "${TMPDIR:-/tmp}/matrix-wallpaper-install-tests.XXXXXX")"
-trap 'rm -rf "$TEST_DIR"' EXIT
+TEST_DIR="$(cd "$TEST_DIR" && pwd -P)"
+trap 'result=$?; if [[ $result != 0 && -f "$TEST_DIR/output" ]]; then cat "$TEST_DIR/output" >&2; fi; rm -rf "$TEST_DIR"' EXIT
 export HOME="$TEST_DIR/home"
 INSTALL_BUNDLE="$HOME/Applications/Matrix Wallpaper.app"
 LEGACY_BUNDLE="$HOME/Applications/MatrixWallpaper.app"
@@ -17,6 +18,7 @@ mkdir -p "$HOME" "$TEST_DIR/bin"
 export PATH="$TEST_DIR/bin:$PATH"
 
 # Test copies never start an app or interact with real running processes.
+export MOCK_JOB="$TEST_DIR/job"
 export QUIT_LOG="$TEST_DIR/quit-request"
 cat > "$TEST_DIR/bin/osascript" <<'SCRIPT'
 #!/bin/bash
@@ -39,6 +41,20 @@ if [[ "${FAIL_PROMOTION:-0}" == 1 && "$1" == */.MatrixWallpaper-install.*/"Matri
 fi
 /bin/mv "$@"
 SCRIPT
+cat > "$TEST_DIR/bin/launchctl" <<'SCRIPT'
+#!/bin/bash
+case "$1" in
+  print) [[ -f "$MOCK_JOB" ]];;
+  bootstrap) [[ "${FAIL_REGISTER:-0}" != 1 ]] || exit 1; touch "$MOCK_JOB";;
+  bootout) rm -f "$MOCK_JOB";;
+  *) exit 1;;
+esac
+SCRIPT
+cat > "$TEST_DIR/bin/pkill" <<'SCRIPT'
+#!/bin/bash
+exit 0
+SCRIPT
+chmod +x "$TEST_DIR/bin/launchctl" "$TEST_DIR/bin/pkill"
 chmod +x "$TEST_DIR/bin/osascript" "$TEST_DIR/bin/ditto" "$TEST_DIR/bin/mv"
 
 install_app() { bash "$ROOT_DIR/install-wallpaper.sh" "$SOURCE_BUNDLE" > "$TEST_DIR/output" 2>&1; }

@@ -16,17 +16,9 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// Wallpaper-only preferences, separate from shared rendering options.
     private let defaults: UserDefaults
-    /// Shared discovery also drives synchronization availability without a second directory scan.
-    private let readVersionStatus: () -> MatrixVersionStatus
-    /// Keeps the modal side effect replaceable in native host tests.
-    private let presentVersionAlert: (NSAlert) -> NSApplication.ModalResponse
-    private var versionStatus: MatrixVersionStatus?
-    private var versionRefreshTimer: Timer?
-    private var versionAlert: NSAlert?
-    private var normalStatusImage: NSImage?
-    private var warningStatusImage: NSImage?
-    private let versionWarningItem = NSMenuItem(title: "Version Mismatch…", action: #selector(showVersionWarning(_:)), keyEquivalent: "")
-    private let versionSeparator = NSMenuItem.separator()
+    /// Locations used only to determine whether synchronization is available.
+    private let screenSaverDirectories: [URL]
+
     /// Persists user intent even while no saver is installed.
     private static let syncPreferenceKey = "syncWithScreenSaver"
     /// Reflects whether the wallpaper may serve frames to the saver.
@@ -39,19 +31,14 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     ///   - defaults: Store for wallpaper-only preferences.
     ///   - screenSaverDirectories: User and local installed-saver directories.
     ///   - desktopWallpaper: Durable desktop settings controller, isolated in tests.
-    ///   - readVersionStatus: Optional isolated discovery, shared with the options sheet.
-    ///   - presentVersionAlert: Presents the native alert and returns the chosen action.
     init(loginItems: LoginItemController = LoginItemController(), defaults: UserDefaults = .standard,
-         screenSaverDirectories: [URL] = MatrixVersionStatus.screenSaverDirectories,
-         desktopWallpaper: DesktopWallpaperController = DesktopWallpaperController(),
-         readVersionStatus: (() -> MatrixVersionStatus)? = nil,
-         presentVersionAlert: @escaping (NSAlert) -> NSApplication.ModalResponse = { $0.runModal() }) {
+         screenSaverDirectories: [URL] = [
+             FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Screen Savers"),
+             URL(fileURLWithPath: "/Library/Screen Savers")],
+         desktopWallpaper: DesktopWallpaperController = DesktopWallpaperController()) {
         self.loginItems = loginItems
         self.defaults = defaults
-        self.readVersionStatus = readVersionStatus ?? {
-            MatrixVersionStatus.current(hostBundle: Bundle(for: WallpaperApp.self), screenSaverDirectories: screenSaverDirectories)
-        }
-        self.presentVersionAlert = presentVersionAlert
+        self.screenSaverDirectories = screenSaverDirectories
         self.desktopWallpaper = desktopWallpaper
         super.init()
         defaults.register(defaults: [Self.syncPreferenceKey: true])
@@ -118,34 +105,9 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
             item.button?.title = "M"
         }
         item.button?.setAccessibilityLabel("Matrix Wallpaper")
-        normalStatusImage = item.button?.image
-        let warningSymbol = NSImage(systemSymbolName: "exclamationmark.triangle.fill", accessibilityDescription: "Version mismatch")
-        if let normalStatusImage, let warningSymbol {
-            warningStatusImage = NSImage(size: NSSize(width: 32, height: 18), flipped: false) { rect in
-                normalStatusImage.draw(in: NSRect(x: 0, y: 0, width: 18, height: 18))
-                warningSymbol.draw(in: NSRect(x: 19, y: 2, width: 13, height: 14))
-                return true
-            }
-            warningStatusImage?.isTemplate = true
-        } else {
-            warningStatusImage = warningSymbol
-            item.button?.imagePosition = .imageRight
-        }
         let menu = NSMenu()
         menu.autoenablesItems = false
         menu.delegate = self
-        versionWarningItem.target = self
-        versionWarningItem.image = MatrixVersionStatus.warningImage?.copy() as? NSImage
-        versionWarningItem.image?.size = NSSize(width: 18, height: 18)
-        versionWarningItem.image?.isTemplate = false
-        // macOS 27 hides menu images by default; KVC keeps builds compatible with older SDKs.
-        if versionWarningItem.responds(to: NSSelectorFromString("setPreferredImageVisibility:")) {
-            versionWarningItem.setValue(1, forKey: "preferredImageVisibility") // NSMenuItem.ImageVisibility.visible
-        }
-        for warningItem in [versionWarningItem, versionSeparator] {
-            warningItem.isHidden = true
-            menu.addItem(warningItem)
-        }
         pauseItem.target = self
         playbackItem.target = self
         updatePlaybackMenu()
@@ -178,10 +140,6 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menuWillOpen(menu)
 
         observeSystemState()
-        versionRefreshTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
-            self?.refreshVersionStatus()
-        }
-        versionRefreshTimer?.tolerance = 10
         frameLeaseTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             guard let self else { return }
             let now = ProcessInfo.processInfo.systemUptime
@@ -207,9 +165,6 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         })
         let startup = DispatchWorkItem { [weak self] in
             guard let self, !self.isTerminating, self.pendingLaunch != nil else { return }
-            self.showVersionWarning(nil)
-            // A modal warning can receive Stop or Quit before desktop recovery starts.
-            guard !self.isTerminating, self.pendingLaunch != nil else { return }
             if self.playback.isRequested { self.updateDesktopWallpaper(restoring: true) }
             // Recovery alerts can pump the run loop and receive Stop or Quit.
             guard !self.isTerminating, self.pendingLaunch != nil else { return }
@@ -240,50 +195,15 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func menuWillOpen(_ menu: NSMenu) {
         loginItems.menuWillOpen(menu)
         syncItem.state = defaults.bool(forKey: Self.syncPreferenceKey) ? .on : .off
-        refreshVersionStatus()
-    }
-
-    /// Refreshes persistent warnings independently of animation and pending option edits.
-    private func refreshVersionStatus() {
-        guard !isTerminating else { return }
-        let status = readVersionStatus()
-        syncItem.isHidden = status.screenSavers.isEmpty
-        if status != versionStatus {
-            let hadStatus = versionStatus != nil
-            let wasMismatch = versionStatus?.state == .mismatch
-            versionStatus = status
-            let mismatch = status.state == .mismatch
-            for item in [versionWarningItem, versionSeparator] {
-                item.isHidden = !mismatch
+        syncItem.isHidden = !screenSaverDirectories.contains { directory in
+            let urls = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
+            return urls.filter { $0.pathExtension.lowercased() == "saver" }.contains { url in
+                guard let data = try? Data(contentsOf: url.appendingPathComponent("Contents/Info.plist")),
+                      let metadata = (try? PropertyListSerialization.propertyList(from: data, format: nil)) as? [String: Any]
+                else { return false }
+                return metadata["CFBundleIdentifier"] as? String == "dev.patsch.MatrixScreenSaver"
             }
-            statusItem?.button?.image = mismatch ? warningStatusImage : normalStatusImage
-            statusItem?.button?.setAccessibilityLabel(mismatch ? "Matrix Wallpaper — version mismatch" : "Matrix Wallpaper")
-            if mismatch { endFrameSharing() }
-            if hadStatus { reconcilePlayback(restart: wasMismatch != mismatch) }
         }
-        optionsController?.refreshVersionStatus()
-    }
-
-    /// Automatic presentation occurs only in queued launch; the menu can reopen it explicitly.
-    @objc private func showVersionWarning(_ sender: Any?) {
-        refreshVersionStatus()
-        guard !isTerminating, versionAlert == nil, let status = versionStatus, status.state == .mismatch else { return }
-        let alert = NSAlert()
-        alert.alertStyle = .warning
-        alert.icon = MatrixVersionStatus.warningImage
-        alert.messageText = status.title
-        alert.informativeText = status.message
-        alert.addButton(withTitle: "View Releases…")
-        alert.addButton(withTitle: "Close")
-        versionAlert = alert
-        NSApp.activate(ignoringOtherApps: true)
-        let response = presentVersionAlert(alert)
-        versionAlert = nil
-        if !isTerminating && response == .alertFirstButtonReturn { openReleases(nil) }
-    }
-
-    @objc private func openReleases(_ sender: Any?) {
-        NSWorkspace.shared.open(MatrixVersionStatus.releasesURL)
     }
 
     /// Stores the choice without changing the wallpaper's requested playback state.
@@ -324,7 +244,7 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
             NSApp.activate(ignoringOtherApps: true)
             return
         }
-        let controller = MatrixScreenSaverOptionsSheetController(readVersionStatus: readVersionStatus) { [weak self] options in
+        let controller = MatrixScreenSaverOptionsSheetController { [weak self] options in
             self?.applyOptions(options)
         }
         controller.onClose = { [weak self] in self?.optionsController = nil }
@@ -382,7 +302,6 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     return
                 }
                 saver.isWallpaperHost = true
-                saver.readVersionStatus = readVersionStatus
                 saver.rendersWallpaperWhileHidden = playback.isServingScreenSaver
                 let window = DesktopWindow(screen: screen, saverView: saver)
                 windows.append(window)
@@ -513,7 +432,7 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     ///
     /// - Parameter displayID: Display requested through the sandbox-safe discovery notification.
     private func shareFrames(for displayID: UInt32) {
-        guard versionStatus?.state != .mismatch, defaults.bool(forKey: Self.syncPreferenceKey), playback.isRequested,
+        guard defaults.bool(forKey: Self.syncPreferenceKey), playback.isRequested,
               currentDisplayLayout.contains(where: { $0.id == displayID }) else { return }
         let starting = !playback.isServingScreenSaver
         if starting {
@@ -549,12 +468,6 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         playback.isRequested = false
         frameLeaseTimer?.invalidate()
         frameLeaseTimer = nil
-        versionRefreshTimer?.invalidate()
-        versionRefreshTimer = nil
-        if let versionAlert {
-            NSApp.abortModal()
-            versionAlert.window.orderOut(nil)
-        }
         for (center, token) in observers { center.removeObserver(token) }
         observers.removeAll()
         // Installers request Quit too; a recovery error must not hold termination in a modal loop.

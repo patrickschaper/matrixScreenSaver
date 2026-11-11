@@ -22,6 +22,23 @@ TARGET = CONFIG.screen_saverdir/"MatrixScreenSaver.saver"
 APP_TARGET = CONFIG.appdir/"Matrix Wallpaper.app"
 LEGACY_APP_TARGET = CONFIG.appdir/"MatrixWallpaper.app"
 TARGETS = [TARGET, APP_TARGET].freeze
+# Lifecycle commands run against a temporary home and mocked launch services.
+FIXTURE_HOME = ROOT/"home"
+FIXTURE_BIN = ROOT/"bin"
+FIXTURE_HOME.mkpath
+FIXTURE_BIN.mkpath
+(FIXTURE_BIN/"codesign").write("#!/bin/sh\nexit 0\n")
+(FIXTURE_BIN/"launchctl").write(<<~SH)
+  #!/bin/bash
+  case "$1" in
+    print) test -f "#{ROOT}/job";;
+    bootstrap) touch "#{ROOT}/job";;
+    bootout) rm -f "#{ROOT}/job";;
+    *) exit 1;;
+  esac
+SH
+(FIXTURE_BIN/"codesign").chmod(0755)
+(FIXTURE_BIN/"launchctl").chmod(0755)
 PREFS = ROOT/"preferences-sentinel"
 PREFS.write("saved options\x00")
 COFFEE = "There is no spoon. There is coffee: https://www.buymeacoffee.com/yesman82".freeze
@@ -56,6 +73,7 @@ module StageObservation
       raise "Source or target escaped isolation" unless [artifact.source, artifact.target].all? { |p| p.to_s.start_with?("#{ROOT}/") }
 
       executable = artifact.source.extname == ".app" ? "MatrixWallpaper" : "MatrixScreenSaver"
+      (artifact.source/"Contents/MacOS"/executable).chmod(0755)
       [artifact.source, artifact.source/"Contents/MacOS"/executable].each do |path|
         SystemCommand.run!("/usr/bin/xattr", args: ["-w", "com.apple.quarantine", "0081;00000000;fixture;", path.to_s])
       end
@@ -85,6 +103,8 @@ def definition(version, legacy: nil)
   else ROOT/"handoff-#{version}/Casks/matrix-screen-saver.rb"
   end
   content = source.read
+  content.gsub!('"HOME" => user_home', '"HOME" => user_home, "PATH" => "' + FIXTURE_BIN.to_s + ':/usr/bin:/bin:/usr/sbin:/sbin"')
+  content.sub!("user_home = Dir.home", "user_home = #{FIXTURE_HOME.to_s.inspect}")
   content.sub!('version "0.2.0"', "version \"#{version}\"")
   content.sub!(/sha256 "[0-9a-f]+"/, "sha256 \"#{Digest::SHA256.file(ROOT/"#{version}.zip").hexdigest}\"")
   content.sub!(/^  url .+$/, "  url \"file://#{ROOT}/#{version}.zip\"")
@@ -108,6 +128,9 @@ def verify_target(version, targets: TARGETS)
     end
   end
   check(PREFS.read == "saved options\x00", "Preferences changed")
+  if targets == TARGETS
+    check((FIXTURE_HOME/"Library/LaunchAgents/dev.patsch.MatrixWallpaper.cleanup.plist").exist?, "Cleanup registration missing")
+  end
 end
 
 def uninstall(cask)
@@ -122,6 +145,7 @@ def uninstall(cask)
   check(login_calls.any? { |args| args.last.include?("Matrix Wallpaper".inspect) }, "Native named login removal not attempted")
   check(output.include?("failed"), "Failed login cleanup did not warn")
   check(PREFS.read == "saved options\x00", "Uninstall changed preferences")
+  check(!(FIXTURE_HOME/"Library/LaunchAgents/dev.patsch.MatrixWallpaper.cleanup.plist").exist?, "Cleanup registration survived uninstall")
 end
 
 # AE1: modern steps run in Homebrew's real sandbox, including actual echo stdout.
@@ -281,26 +305,30 @@ TARGETS.each do |target|
 end
 puts "PASS AE2/AE3 native conflict rejection and explicit force replacement"
 
-# Homebrew 7.0.7's existence guard misses dangling symlinks, but its native
-# artifact rejects them. No custom deletion or unsandboxed fallback is added.
+# The lifecycle refuses redirected destinations even when native force would replace them.
 File.symlink(ROOT/"missing", TARGET)
 broken = definition("1.2.3")
 output = capture do
   begin
     Cask::Installer.new(broken).install
     raise "Native artifact accepted broken symlink without force"
-  rescue Cask::CaskError => error
-    check(error.message.include?("already"), "Unexpected broken-symlink rejection")
+  rescue StandardError => error
+    check(error.message.include?("symlink"), "Unexpected broken-symlink rejection")
   end
 end
 check(TARGET.symlink?, "Broken symlink was changed")
 check(!output.include?(COFFEE), "Broken-symlink conflict printed success")
 check(!output.include?("brew install --cask --force"), "Existence guard unexpectedly matched broken symlink")
 forced = definition("1.2.3")
-capture { Cask::Installer.new(forced, force: true).install }
-verify_target("1.2.3")
-uninstall(forced)
-puts "PASS native broken-symlink conflict and explicit force replacement"
+begin
+  capture { Cask::Installer.new(forced, force: true).install }
+  raise "Force unexpectedly accepted a symlink"
+rescue StandardError => error
+  check(error.message.include?("symlink"), "Unexpected force rejection")
+end
+check(TARGET.symlink?, "Force changed the rejected symlink")
+TARGET.unlink
+puts "PASS redirected destinations remain untouched with or without force"
 definition("1.2.3")
 puts "PASS developer-mode definition load and uninstall without legacy warnings"
 puts "PASS all native lifecycle checks; real apps, login items, installed bundles and Settings were never touched"

@@ -9,6 +9,7 @@ SCRIPT = ROOT / "Scripts/update-homebrew-tap.py"
 TEMPLATE = (ROOT / "Homebrew/Casks/matrix-screen-saver.rb").read_text()
 LEGACY = (ROOT / "Tests/Homebrew/fixtures/legacy-screen-saver.rb").read_text()
 LEGACY_WALLPAPER = (ROOT / "Tests/Homebrew/fixtures/legacy-wallpaper.rb").read_text()
+LEGACY_PAIR = (ROOT / "Tests/Homebrew/fixtures/legacy-pair.rb").read_text()
 
 
 def cask(version="1.2.3", digest="a" * 64, floor="sequoia", app="Matrix Wallpaper.app"):
@@ -70,6 +71,17 @@ class TapUpdateTest(unittest.TestCase):
         api = FakeAPI(cask("1.2.3", app="MatrixWallpaper.app"))
         self.module.update(api, "owner/homebrew-test", "1.2.4", cask("1.2.4"))
         self.assertEqual(cask("1.2.4"), api.content)
+
+    def test_pair_without_cleanup_migrates_only_when_unmodified(self):
+        for app in ("MatrixWallpaper.app", "Matrix Wallpaper.app"):
+            previous = LEGACY_PAIR.replace("MatrixWallpaper.app", app)
+            api = FakeAPI(previous)
+            self.module.update(api, "owner/homebrew-test", "1.2.3", cask())
+            self.assertEqual(cask(), api.content)
+            api = FakeAPI(previous + "# unreviewed change\n")
+            with self.assertRaises(ValueError):
+                self.module.update(api, "owner/homebrew-test", "1.2.3", cask())
+            self.assertTrue(all(method == "GET" for method, _, _ in api.calls))
 
     def test_legacy_migration_never_rewrites_same_or_newer_version(self):
         for version in ("0.1.0", "0.2.0"):

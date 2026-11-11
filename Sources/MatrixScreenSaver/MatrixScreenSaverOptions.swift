@@ -363,14 +363,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
 
     private let window: NSWindow
     private let rootStack = NSStackView()
-    /// The same detector is used in either host; refreshes never replace pending option edits.
-    private let readVersionStatus: () -> MatrixVersionStatus
-    private var versionStatus: MatrixVersionStatus?
-    private let versionBanner = NSStackView()
-    private let versionHeading = NSTextField(wrappingLabelWithString: "")
-    private let versionDescription = NSTextField(wrappingLabelWithString: "")
-    private let versionSymbol = NSImageView()
-    /// Only the tab content scrolls when the warning would push actions below the screen.
+    /// Scrolls settings on smaller displays while keeping actions visible.
     private let optionsScrollView = NSScrollView()
     private var optionsHeight: NSLayoutConstraint?
     private let neoMessageSceneCheckbox = NSButton(checkboxWithTitle: "Show Neo message", target: nil, action: nil)
@@ -467,12 +460,8 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
     /// Creates native options UI with a host-owned apply action.
     ///
     /// - Parameters:
-    ///   - readVersionStatus: Reads companion versions independently of pending preference edits.
     ///   - onApply: Receives validated options when the user chooses Save.
-    init(readVersionStatus: @escaping () -> MatrixVersionStatus = {
-        MatrixVersionStatus.current(hostBundle: Bundle(for: MatrixScreenSaverOptionsSheetController.self))
-    }, onApply: @escaping (MatrixScreenSaverOptions) -> Void) {
-        self.readVersionStatus = readVersionStatus
+    init(onApply: @escaping (MatrixScreenSaverOptions) -> Void) {
         self.onApply = onApply
         window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1, height: 1),
@@ -524,31 +513,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
 
     /// Returns the native sheet window presented by ScreenSaver.framework.
     func configureSheet() -> NSWindow {
-        refreshVersionStatus()
         return window
-    }
-
-    /// Rechecks installations without reloading preferences or disturbing unsaved controls.
-    func refreshVersionStatus() {
-        let status = readVersionStatus()
-        guard status != versionStatus else { return }
-        versionStatus = status
-        versionBanner.isHidden = status.state != .mismatch && status.state != .unverified
-        versionHeading.stringValue = status.title
-        versionDescription.stringValue = status.message
-        versionSymbol.image = status.state == .mismatch ? MatrixVersionStatus.warningImage
-            : NSImage(systemSymbolName: "info.circle", accessibilityDescription: "Version unavailable")
-        versionSymbol.setAccessibilityLabel(status.state == .mismatch ? "Version mismatch" : "Version unavailable")
-        sizeWindowToFitContent()
-    }
-
-    /// Reopening a retained sheet must reflect installations changed while it was inactive.
-    func windowDidBecomeKey(_ notification: Notification) {
-        refreshVersionStatus()
-    }
-
-    @objc private func openReleases(_ sender: Any?) {
-        NSWorkspace.shared.open(MatrixVersionStatus.releasesURL)
     }
 
     /// Validates and applies the edited options.
@@ -620,31 +585,6 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         rootStack.spacing = 16
         rootStack.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
         rootStack.translatesAutoresizingMaskIntoConstraints = false
-
-        versionHeading.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
-        versionDescription.font = .systemFont(ofSize: NSFont.systemFontSize)
-        versionDescription.isSelectable = true
-        let warningText = NSStackView(views: [versionHeading, versionDescription])
-        warningText.orientation = .vertical
-        warningText.alignment = .leading
-        warningText.spacing = 4
-        let releaseButton = NSButton(title: "View Releases…", target: self, action: #selector(openReleases(_:)))
-        warningText.addArrangedSubview(releaseButton)
-        versionBanner.orientation = .horizontal
-        versionBanner.alignment = .top
-        versionBanner.spacing = 12
-        versionBanner.addArrangedSubview(versionSymbol)
-        versionBanner.addArrangedSubview(warningText)
-        versionBanner.isHidden = true
-        rootStack.addArrangedSubview(versionBanner)
-        NSLayoutConstraint.activate([
-            versionBanner.widthAnchor.constraint(equalToConstant: 640),
-            versionSymbol.widthAnchor.constraint(equalToConstant: 24),
-            versionSymbol.heightAnchor.constraint(equalToConstant: 24),
-            warningText.widthAnchor.constraint(equalTo: versionBanner.widthAnchor, constant: -36),
-            versionHeading.widthAnchor.constraint(equalTo: warningText.widthAnchor),
-            versionDescription.widthAnchor.constraint(equalTo: warningText.widthAnchor),
-        ])
 
         let aboutButton = NSButton(title: "About the project", target: self, action: #selector(openRepository(_:)))
         aboutButton.bezelStyle = .inline
@@ -1814,7 +1754,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         }
 
         contentView.layoutSubtreeIfNeeded()
-        // Keep the warning and Save/Cancel on screen; only the fixed-size tab document scrolls.
+        // Keep Save/Cancel on screen; only the fixed-size tab document scrolls.
         let currentHeight = optionsHeight?.constant ?? 620
         let chromeHeight = window.frame.height - window.contentRect(forFrameRect: window.frame).height
         let availableHeight = (window.screen ?? NSScreen.main)?.visibleFrame.height ?? 1000

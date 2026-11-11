@@ -17,7 +17,11 @@ class FakeCaskDSL
     instance_eval(File.read(File.expand_path("../../../Homebrew/Casks/matrix-screen-saver.rb", __dir__)))
   end
 
-  def cask(_token, &block) = instance_eval(&block)
+  def cask(_token = nil, &block)
+    block ? instance_eval(&block) : self
+  end
+  def config = self
+  def screen_saverdir = @root/"custom savers"
   def version(value = nil)
     @version = value if value
     @version
@@ -42,6 +46,11 @@ class FakeCaskDSL
 
   def postflight_steps(&block)
     @steps = @postflight
+    instance_eval(&block)
+  end
+
+  def uninstall_preflight_steps(&block)
+    @steps = []
     instance_eval(&block)
   end
 

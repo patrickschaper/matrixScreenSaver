@@ -524,6 +524,8 @@ private func wallpaperSyncMenuTests() {
         check(false, "host installs the screen saver sync menu control")
         return
     }
+    check(!menu.items.contains { $0.title == "Version Mismatch…" }, "menu has no companion-version warning")
+    check(status.button?.accessibilityLabel() == "Matrix Wallpaper", "status icon has no version-warning state")
     func refresh() { menu.delegate?.menuWillOpen?(menu) }
     func install(_ directory: URL, name: String, identifier: String) -> URL {
         let bundle = directory.appendingPathComponent(name)

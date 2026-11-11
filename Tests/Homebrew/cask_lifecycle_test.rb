@@ -103,7 +103,9 @@ class CaskLifecycleTest < TestHarness
     assert_equal ["Matrix Wallpaper.app", "MatrixScreenSaver.saver"], dsl.artifacts.map { |a| a.target.basename.to_s }
     assert_equal({quit: "dev.patsch.MatrixWallpaper", login_item: "Matrix Wallpaper"}, dsl.uninstall_directives)
     source = File.read(File.expand_path("../../Homebrew/Casks/matrix-screen-saver.rb", __dir__))
-    refute_match(/\b(zap|defaults|unregister|launchctl)\b/, source)
+    refute_match(/\b(zap|defaults|launchctl)\b/, source)
+    assert source.include?("uninstall_preflight_steps")
+    assert source.include?('"unregister"')
     refute_match(/\b(?:preflight|postflight|uninstall_preflight|uninstall_postflight)\s+do/, source)
     refute_match(/\/usr\/bin\/open|osascript|--register/, source)
   end

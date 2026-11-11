@@ -26,6 +26,28 @@ brew install --cask patrickschaper/tap/matrix-screen-saver && open "/Application
 - **Wallpaper:** open **Matrix Wallpaper** in Applications.
 - **Screen saver options:** **System Settings → Wallpaper → Screen Saver → MatrixScreenSaver → Options…**.
 
+## Install from a download
+
+Download the release archive, extract it, and open **Install.command**. This installs both components for your user account. Both installers install and upgrade the app and screen saver together; separate installation is not supported.
+
+## Uninstall
+
+For Homebrew installations:
+
+```bash
+brew uninstall --cask matrix-screen-saver
+```
+
+For installations made with **Install.command** or the local scripts:
+
+```bash
+/bin/bash "$HOME/Library/Application Support/MatrixWallpaper/Installation/product-lifecycle.sh" uninstall
+```
+
+Both commands remove the app and screen saver while keeping your preferences. Moving the app to Trash, or away from its installed location, also removes the screen saver after about five to six minutes while you are logged in. A short macOS background job checks once a minute and removes itself after cleanup; it does not run continuously. Disabling that job prevents automatic cleanup. Restoring the app before cleanup cancels removal.
+
+After manually removing a Homebrew installation, run the Homebrew uninstall command to clear its installation receipt.
+
 ## Buy me a coffee
 
 There is no spoon. There is coffee. Donations help cover the Apple Developer membership and ongoing development.

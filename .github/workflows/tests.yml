@@ -36,5 +36,8 @@ jobs:
       - name: Check wallpaper installation and rollback
         run: ./wallpaper-install-tests.sh
 
+      - name: Test combined installation lifecycle
+        run: python3 Tests/Installation/lifecycle_test.py
+
       - name: Run wallpaper AppKit checks
         run: ./wallpaper-tests.sh

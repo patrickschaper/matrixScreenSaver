@@ -17,7 +17,7 @@ See the [project roadmap](plans/2026-11-10-1812-project-roadmap-plan.md) for pla
 - `Sources/MatrixScreenSaver/CmdCaptureScene.swift` - streams command output into scrolling terminal rows before the full trace program
 - `Sources/MatrixScreenSaver/MatrixScreenSaverOptions.swift` - options model and native configure sheet
 - `Sources/MatrixScreenSaver/TerminalSupport.swift` - small shared terminal types used by the active renderer
-- `Scripts/install-saver.sh` - shared ditto-based installer used by local installs
+- `Scripts/product-lifecycle.sh` - shared pair installation, rollback, and removal lifecycle
 - `Tools/PreviewHost.swift` - local preview host used by `./preview.sh`
 - `Resources/Info.plist` - bundle metadata
 
@@ -87,10 +87,11 @@ open "build/Matrix Wallpaper.app"
 
 `install.sh`:
 
-1. rebuilds the saver bundle
-2. strips quarantine from the source bundle and copies it to `~/Library/Screen Savers/MatrixScreenSaver.saver`
-3. verifies the installed executable matches the build output
-4. stops running `ScreenSaverEngine` / `legacyScreenSaver` processes so macOS reloads the updated bundle
+1. rebuilds and validates matching wallpaper and saver bundles
+2. stages both copies, verifies signatures and executable bytes, and retains rollback backups
+3. installs the app in `~/Applications` and the saver in `~/Library/Screen Savers`
+4. registers a per-user cleanup LaunchAgent, then commits both replacements
+5. stops your saver hosts so macOS reloads the updated bundle
 
 After installing:
 
@@ -103,12 +104,20 @@ To relaunch the screen saver host manually:
 open -a ScreenSaverEngine
 ```
 
-To install and launch the wallpaper app in your user Applications folder:
+The compatibility entrypoint also installs both components:
 
 ```bash
 ./install-wallpaper.sh
 open "$HOME/Applications/Matrix Wallpaper.app"
 ```
+
+### Installation lifecycle checks
+
+Run `python3 Tests/Installation/lifecycle_test.py` for isolated failure, cleanup, and grace-period tests. Run `./wallpaper-install-tests.sh` after building both bundles for real-signature and migration coverage. System commands that could affect your desktop or launch services are mocked.
+
+`./uninstall.sh` removes a local pair. Homebrew owns its native artifacts and invokes the same lifecycle script only for validation, registration, and cleanup state. The cleanup record contains exact destinations and ownership; options are never deleted. A shared lock protects local operations, and a PID lock held by the outer Homebrew process protects native artifact replacement. Native upgrade rollback reruns the previous registration hook.
+
+Release bundles must have identical `CFBundleShortVersionString` and `CFBundleVersion`. There are no runtime companion-version warnings or playback restrictions. Shared-frame validation still rejects incompatible or malformed frames.
 
 ## Origin
 

@@ -17,7 +17,6 @@ swiftc \
   -framework AppKit \
   -framework ScreenSaver \
   "$SRC/TerminalSupport.swift" \
-  "$SRC/MatrixVersionStatus.swift" \
   "$SRC/Xorshift64.swift" \
   "$SRC/NeoMessageScene.swift" \
   "$SRC/CmdCaptureScene.swift" \
@@ -33,7 +32,6 @@ swiftc \
   "$TESTS/NativeMatrixRendererTests.swift" \
   "$TESTS/WallpaperPlaybackStateTests.swift" \
   "$TESTS/SharedWallpaperFrameTests.swift" \
-  "$TESTS/MatrixVersionStatusTests.swift" \
   "$TESTS/main.swift" \
   -o "$TEST_BIN"
 

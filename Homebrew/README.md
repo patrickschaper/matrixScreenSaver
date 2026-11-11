@@ -153,8 +153,7 @@ after validating the published asset and uploading the handoff. It writes only
 `Casks/matrix-screen-saver.rb` on the tap's default branch; no tap PR or merge is
 required. This replaces the previous optional, human-merged tap PR behavior.
 Only version, SHA-256, minimum macOS metadata, and the validated old/new archive
-source name may differ from the source template. The exact frozen saver-only and
-old-name dual-bundle predecessors are also accepted for a strictly newer version,
+source name may differ from the source template. The exact frozen saver-only, old-name dual-bundle, and pre-cleanup pair predecessors are also accepted for a strictly newer version,
 using their normalized structure hashes. These reviewed transitions do not allow arbitrary structural edits. Unrelated
 cask edits or a missing cask fail closed for manual review.
 Identical reruns make no commit, older versions are skipped, and conflicting
@@ -175,6 +174,14 @@ The workflow emits a warning and recovery instructions in its summary on failure
 Tests use mock API calls and do not receive this
 credential, including on fork pull requests. No repository or secret is provisioned
 by these scripts.
+
+## Combined installation lifecycle
+
+New release archives include `Install.command` and `Scripts/product-lifecycle.sh` alongside both bundles. The metadata renderer rejects archives missing either installer file; older immutable releases must use their existing handoff rather than the new renderer.
+
+The cask validates matching versions before native artifact installation, then registers cleanup using the configured app and saver destinations. Uninstall removes that registration before removing native artifacts. Upgrade rollback reinstalls the previous hooks. Redirected destination paths are refused even with `--force`; remove the symlink explicitly before retrying.
+
+The native integration harness executes lifecycle scripts with temporary destinations and mocked signature/launch-service commands. It verifies Homebrew’s real sandbox and artifact rollback without registering jobs in the current login session. `wallpaper-install-tests.sh` separately checks real bundle signatures.
 
 ## Verification
 

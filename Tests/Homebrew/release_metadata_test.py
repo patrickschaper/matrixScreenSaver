@@ -114,6 +114,19 @@ class ReleaseMetadataTest(unittest.TestCase):
         self.assertNotEqual(0, self.run_render().returncode)
         self.assertFalse((self.root / "out").exists())
 
+    def test_requires_combined_installer_payload(self):
+        for missing in ["Install.command", "Scripts/product-lifecycle.sh"]:
+            with self.subTest(missing=missing):
+                write_archive(self.archive)
+                with zipfile.ZipFile(self.archive) as archive:
+                    entries = [(entry, archive.read(entry)) for entry in archive.infolist()
+                               if entry.filename != missing]
+                with zipfile.ZipFile(self.archive, "w") as archive:
+                    for entry, data in entries:
+                        archive.writestr(entry, data)
+                self.assertNotEqual(0, self.run_render().returncode)
+                self.assertFalse((self.root / "out").exists())
+
     def test_rejects_invalid_wallpaper_metadata_and_binary(self):
         plist_path = "Matrix Wallpaper.app/Contents/Info.plist"
         binary_path = "Matrix Wallpaper.app/Contents/MacOS/MatrixWallpaper"

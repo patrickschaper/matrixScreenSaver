@@ -2,6 +2,7 @@
 import plistlib
 import struct
 import zipfile
+from pathlib import Path
 
 
 def write_archive(path, version="1.2.3", cpu=0x0100000C, minimum=15, root="MatrixScreenSaver.saver",
@@ -12,6 +13,9 @@ def write_archive(path, version="1.2.3", cpu=0x0100000C, minimum=15, root="Matri
                           "CFBundleShortVersionString": version, "CFBundleVersion": version,
                           "CFBundleExecutable": "MatrixScreenSaver"})
     with zipfile.ZipFile(path, "w") as archive:
+        repo = Path(__file__).resolve().parents[3]
+        for installer in ["Install.command", "Scripts/product-lifecycle.sh"]:
+            archive.write(repo / installer, installer)
         for name, data in [(f"{root}/Contents/Info.plist", info),
                            (f"{root}/Contents/MacOS/MatrixScreenSaver", binary)]:
             archive.writestr(zipfile.ZipInfo(name, (2026, 1, 1, 0, 0, 0)), data)

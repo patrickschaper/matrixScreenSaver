@@ -13,7 +13,21 @@ cask "matrix-screen-saver" do
   app "MatrixWallpaper.app", target: "Matrix Wallpaper.app"
   screen_saver "MatrixScreenSaver.saver"
 
+  # These configured paths are not supported as install-step template tokens.
+  saver_destination = "#{self.cask.config.screen_saverdir}/MatrixScreenSaver.saver"
+  user_home = Dir.home
+
   preflight_steps do
+    run "/bin/bash",
+        args: ["{{staged_path}}/Scripts/product-lifecycle.sh", "validate",
+               "{{staged_path}}/MatrixWallpaper.app", "{{staged_path}}/MatrixScreenSaver.saver"],
+        env: { "HOME" => user_home }
+    run "/bin/bash",
+        args: ["{{staged_path}}/Scripts/product-lifecycle.sh", "suspend",
+               "{{appdir}}/Matrix Wallpaper.app", saver_destination, "homebrew"],
+        env: { "HOME" => user_home },
+        writable_paths: ["#{user_home}/Library/Application Support/MatrixWallpaper",
+                         "#{user_home}/Library/LaunchAgents/dev.patsch.MatrixWallpaper.cleanup.plist"]
     if_path_exists "MatrixScreenSaver.saver", base: :screen_saverdir do
       # Homebrew also grants read access here when the native target is under HOME.
       run "/bin/echo",
@@ -46,6 +60,13 @@ cask "matrix-screen-saver" do
   end
 
   postflight_steps do
+    run "/bin/bash",
+        args: ["{{staged_path}}/Scripts/product-lifecycle.sh", "register",
+               "{{appdir}}/Matrix Wallpaper.app", saver_destination, "homebrew"],
+        env: { "HOME" => user_home },
+        writable_paths: ["{{appdir}}/Matrix Wallpaper.app", saver_destination,
+                         "#{user_home}/Library/Application Support/MatrixWallpaper",
+                         "#{user_home}/Library/LaunchAgents"]
     run "/bin/echo",
         args:         ["There is no spoon. There is coffee: https://www.buymeacoffee.com/yesman82"],
         print_stdout: true
@@ -56,6 +77,20 @@ cask "matrix-screen-saver" do
         args:         ["Open {{appdir}}/Matrix Wallpaper.app to start Matrix Wallpaper. " \
                        "Launch at Login is optional in its Matrix menu."],
         print_stdout: true
+  end
+
+  uninstall_preflight_steps do
+    run "/bin/bash",
+        args: ["{{staged_path}}/Scripts/product-lifecycle.sh", "suspend",
+               "{{appdir}}/Matrix Wallpaper.app", saver_destination, "homebrew"],
+        env: { "HOME" => user_home },
+        writable_paths: ["#{user_home}/Library/Application Support/MatrixWallpaper",
+                         "#{user_home}/Library/LaunchAgents/dev.patsch.MatrixWallpaper.cleanup.plist"]
+    run "/bin/bash",
+        args: ["{{staged_path}}/Scripts/product-lifecycle.sh", "unregister"],
+        env: { "HOME" => user_home },
+        writable_paths: ["#{user_home}/Library/Application Support/MatrixWallpaper",
+                         "#{user_home}/Library/LaunchAgents/dev.patsch.MatrixWallpaper.cleanup.plist"]
   end
 
   uninstall quit: "dev.patsch.MatrixWallpaper", login_item: "Matrix Wallpaper"

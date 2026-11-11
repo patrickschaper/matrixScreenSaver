@@ -492,6 +492,9 @@ jobs:
           mkdir -p "${release_dir}"
           ditto "build/MatrixScreenSaver.saver" "${release_dir}/MatrixScreenSaver.saver"
           ditto "build/Matrix Wallpaper.app" "${release_dir}/Matrix Wallpaper.app"
+          mkdir -p "${release_dir}/Scripts"
+          cp Scripts/product-lifecycle.sh "${release_dir}/Scripts/"
+          cp Install.command "${release_dir}/"
 
           echo "dir=${release_dir}" >> "$GITHUB_OUTPUT"
 
