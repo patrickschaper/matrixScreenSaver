@@ -42,6 +42,8 @@ class LifecycleTests(unittest.TestCase):
 r = pathlib.Path(os.environ['FIXTURE'])
 name, args = pathlib.Path(sys.argv[0]).name, sys.argv[1:]
 if name == 'launchctl':
+    if (r/'deny-launchctl').exists():
+        print('Bootstrap failed: 5: Input/output error', file=sys.stderr); sys.exit(5)
     if args[0] == 'print': sys.exit(0 if (r/'job').exists() else 1)
     if args[0] == 'bootstrap':
         if (r/'fail-register').exists():
@@ -454,14 +456,46 @@ elif name != 'pkill': sys.exit(1)
         self.assertFalse(self.installed_saver.exists())
 
     def test_custom_destinations_and_conflicting_installation(self):
+        """Cross-owner installs report the existing destination without adopting or deleting it."""
         self.run_script("register", self.app, self.saver, "homebrew")
-        self.run_script("install", self.app, self.saver, success=False)
+        result = self.run_script("install", self.app, self.saver, success=False)
+        self.assertIn(f"Owner: homebrew; app: {self.app}; screen saver: {self.saver}", result.stderr)
         self.run_script("uninstall", success=False)
         shutil.rmtree(self.app)
         self.run_script("check")
         self.clock(1300)
         self.run_script("check")
         self.assertFalse(self.saver.exists())
+
+    def test_homebrew_registration_defers_launch_services_until_app_launch(self):
+        """Sandboxed hooks retain ownership without launchctl; app activation starts cleanup."""
+        (self.root / "deny-launchctl").touch()
+        self.run_script("register", self.app, self.saver, "homebrew")
+        record = (self.state / "installation.plist").read_bytes()
+        self.assertTrue(self.agent.exists())
+        self.assertFalse((self.root / "job").exists())
+        (self.root / "deny-launchctl").unlink()
+        self.run_script("activate", self.installed_app)
+        self.assertFalse((self.root / "job").exists())
+        self.run_script("activate", self.app)
+        self.assertTrue((self.root / "job").exists())
+        self.assertEqual((self.state / "installation.plist").read_bytes(), record)
+        (self.root / "fail-register").touch()
+        self.run_script("activate", self.app)
+        self.assertTrue((self.root / "fail-register").exists(), "Activation must be idempotent")
+        (self.root / "deny-launchctl").touch()
+        self.run_script("unregister", "homebrew")
+        self.assertFalse(self.agent.exists() or (self.state / "installation.plist").exists())
+        self.assertTrue(self.app.exists() and self.saver.exists())
+
+    def test_cleanup_activation_requires_an_existing_valid_managed_app(self):
+        """Unmanaged launches are inert; a matching record cannot bypass bundle verification."""
+        self.run_script("activate", self.app)
+        self.assertFalse(self.agent.exists())
+        self.run_script("register", self.app, self.saver, "homebrew")
+        self.metadata(self.app, CFBundleIdentifier="unrelated")
+        self.run_script("activate", self.app, success=False)
+        self.assertFalse((self.root / "job").exists())
 
     def test_symlink_and_malformed_record_are_rejected(self):
         self.install()

@@ -70,6 +70,14 @@ jobs:
           git -C "$repository" checkout --detach FETCH_HEAD
       - name: Sandboxed native lifecycle in isolated directories
         run: bash Tests/Homebrew/integration_lifecycle.sh
+      - name: Update Homebrew on disposable runner
+        run: |
+          repository="$(brew --repository)"
+          # Homebrew derives its version from reachable tags, which shallow main lacks.
+          git -C "$repository" fetch --unshallow --tags origin main
+          git -C "$repository" checkout --detach FETCH_HEAD
+      - name: Sandboxed native lifecycle with current Homebrew
+        run: bash Tests/Homebrew/integration_lifecycle.sh
       - name: Full cask style
         env:
           HOMEBREW_DEVELOPER: '1'

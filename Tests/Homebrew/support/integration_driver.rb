@@ -22,13 +22,16 @@ TARGET = CONFIG.screen_saverdir/"MatrixScreenSaver.saver"
 APP_TARGET = CONFIG.appdir/"Matrix Wallpaper.app"
 LEGACY_APP_TARGET = CONFIG.appdir/"MatrixWallpaper.app"
 TARGETS = [TARGET, APP_TARGET].freeze
-# Lifecycle commands run against a temporary home and mocked launch services.
+# Sandboxed cask hooks use real launchctl; only app-side activation uses mocked services.
 FIXTURE_HOME = ROOT/"home"
 FIXTURE_BIN = ROOT/"bin"
+# Outside-sandbox service fixtures cannot affect the logged-in user's LaunchAgents.
+FIXTURE_SERVICES = ROOT/"services"
 FIXTURE_HOME.mkpath
 FIXTURE_BIN.mkpath
+FIXTURE_SERVICES.mkpath
 (FIXTURE_BIN/"codesign").write("#!/bin/sh\nexit 0\n")
-(FIXTURE_BIN/"launchctl").write(<<~SH)
+(FIXTURE_SERVICES/"launchctl").write(<<~SH)
   #!/bin/bash
   case "$1" in
     print) test -f "#{ROOT}/job";;
@@ -38,7 +41,7 @@ FIXTURE_BIN.mkpath
   esac
 SH
 (FIXTURE_BIN/"codesign").chmod(0755)
-(FIXTURE_BIN/"launchctl").chmod(0755)
+(FIXTURE_SERVICES/"launchctl").chmod(0755)
 PREFS = ROOT/"preferences-sentinel"
 PREFS.write("saved options\x00")
 COFFEE = "There is no spoon. There is coffee: https://www.buymeacoffee.com/yesman82".freeze
@@ -48,8 +51,19 @@ raise "Cask must not launch Settings" if check_source.include?("/usr/bin/open")
 # Keep native directive dispatch and successor checks, but never cross the
 # AppleScript boundary into the user's running app or real login items.
 OSASCRIPT_CALLS = []
+# Records native service-removal dispatch without unloading the user's real cleanup agent.
+LAUNCHCTL_CALLS = []
 FAILED_STATUS = SystemCommand.run("/usr/bin/false").status
+# Intercepts desktop/service effects after Homebrew's real uninstall directive dispatch.
 module IsolatedUninstallAutomation
+  # Models service removal without consulting or changing the real user's launchd domain.
+  def uninstall_launchctl(*services, command:, **_kwargs)
+    raise "Unexpected service removal" unless services == ["dev.patsch.MatrixWallpaper.cleanup"]
+
+    LAUNCHCTL_CALLS.concat(services)
+    FileUtils.rm_f(ROOT/"job")
+  end
+
   def system_command(executable, **options)
     return super unless File.basename(executable.to_s) == "osascript"
 
@@ -133,8 +147,10 @@ def verify_target(version, targets: TARGETS)
   end
 end
 
+# Verifies native uninstall dispatch and filesystem cleanup while retaining preference sentinels.
 def uninstall(cask)
   OSASCRIPT_CALLS.clear
+  LAUNCHCTL_CALLS.clear
   output = capture { Cask::Installer.new(cask).uninstall }
   check(!output.match?(/deprecated/i), "Uninstall emitted deprecation warnings")
   check(!output.include?(COFFEE), "Uninstall printed install success")
@@ -146,6 +162,8 @@ def uninstall(cask)
   check(output.include?("failed"), "Failed login cleanup did not warn")
   check(PREFS.read == "saved options\x00", "Uninstall changed preferences")
   check(!(FIXTURE_HOME/"Library/LaunchAgents/dev.patsch.MatrixWallpaper.cleanup.plist").exist?, "Cleanup registration survived uninstall")
+  check(LAUNCHCTL_CALLS == ["dev.patsch.MatrixWallpaper.cleanup"], "Native cleanup service removal not dispatched")
+  check(!(ROOT/"job").exist?, "Cleanup service survived uninstall")
 end
 
 # Restore the native artifact from app resources while retaining Homebrew's real receipt and paths.
@@ -160,10 +178,14 @@ def restore_saver
   app_inode = APP_TARGET.stat.ino
   record = FIXTURE_HOME/"Library/Application Support/MatrixWallpaper/Installation/installation.plist"
   registration = record.binread
+  SystemCommand.run!("/bin/bash", args: [(recovery/"product-lifecycle.sh").to_s, "activate", APP_TARGET.to_s],
+                     env: { "HOME" => FIXTURE_HOME.to_s,
+                            "PATH" => "#{FIXTURE_SERVICES}:#{FIXTURE_BIN}:/usr/bin:/bin:/usr/sbin:/sbin" })
+  check((ROOT/"job").exist?, "App launch did not activate deferred cleanup")
   TARGET.rmtree
   SystemCommand.run!("/bin/bash", args: [(recovery/"product-lifecycle.sh").to_s, "install-saver", APP_TARGET.to_s],
                                  env: { "HOME" => FIXTURE_HOME.to_s,
-                                        "PATH" => "#{FIXTURE_BIN}:/usr/bin:/bin:/usr/sbin:/sbin" })
+                            "PATH" => "#{FIXTURE_SERVICES}:#{FIXTURE_BIN}:/usr/bin:/bin:/usr/sbin:/sbin" })
   check(TARGET.directory?, "Recovery did not restore the configured Homebrew target")
   check(APP_TARGET.stat.ino == app_inode, "Recovery replaced the wallpaper app")
   check(record.binread == registration, "Recovery changed Homebrew ownership or registration")
@@ -190,6 +212,7 @@ check(output.include?("Open System Settings > Wallpaper > Screen Saver"), "Manua
 check(output.include?("Open #{APP_TARGET} to start Matrix Wallpaper."), "Wallpaper launch guidance missing configured app path")
 check(!output.match?(/deprecated/i), "Install emitted deprecation warnings")
 verify_target("1.2.3")
+check(!(ROOT/"job").exist?, "Sandboxed install unexpectedly activated cleanup")
 check(OSASCRIPT_CALLS.empty?, "Install attempted startup or cleanup")
 puts "PASS AE1 sandboxed native fresh install and actual coffee stdout"
 
