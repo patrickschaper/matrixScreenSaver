@@ -93,6 +93,21 @@ class TapUpdateTest(unittest.TestCase):
                 self.module.update(api, "owner/homebrew-test", version, cask(version))
             self.assertTrue(all(method == "GET" for method, _, _ in api.calls))
 
+    def test_synchronous_cleanup_cask_migrates_only_when_unmodified(self):
+        """Accept the reviewed 0.5.0 hooks, but never overwrite independent tap edits."""
+        previous = TEMPLATE.replace('"unregister", "homebrew"', '"unregister"').replace(
+            'uninstall launchctl: "dev.patsch.MatrixWallpaper.cleanup",\n            quit:',
+            'uninstall quit:')
+        for app in ("MatrixWallpaper.app", "Matrix Wallpaper.app"):
+            content = previous.replace("MatrixWallpaper.app", app)
+            api = FakeAPI(content)
+            self.module.update(api, "owner/homebrew-test", "1.2.3", cask())
+            self.assertEqual(cask(), api.content)
+            api = FakeAPI(content + "# unreviewed change\n")
+            with self.assertRaises(ValueError):
+                self.module.update(api, "owner/homebrew-test", "1.2.3", cask())
+            self.assertTrue(all(method == "GET" for method, _, _ in api.calls))
+
     def test_newer_release_is_published_once_to_default_branch(self):
         api = FakeAPI()
         content = cask(floor="tahoe")
