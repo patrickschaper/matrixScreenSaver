@@ -7,6 +7,7 @@ import struct
 import subprocess
 import sys
 import tempfile
+import textwrap
 import unittest
 import warnings
 import zipfile
@@ -199,6 +200,33 @@ class ReleaseMetadataTest(unittest.TestCase):
                         prepare.index("./build.sh\n"))
         self.assertIn('ditto "build/Matrix Wallpaper.app" "${release_dir}/Matrix Wallpaper.app"', publish)
         self.assertIn('./build-wallpaper.sh --saver "build/MatrixScreenSaver.saver"', publish)
+
+    def test_back_merge_accepts_unstable_publishing_check(self):
+        """Sync uses a normal merge while its own publishing check is still running."""
+        workflow = (ROOT / ".github/workflows/release.yml").read_text()
+        step = workflow.split("      - name: Back-merge main into development\n", 1)[1]
+        script = textwrap.dedent(step.split("        run: |\n", 1)[1])
+        script = script.replace("${{ steps.version.outputs.value }}", "1.2.3")
+        url = "https://github.com/patrickschaper/matrixScreenSaver/pull/130"
+        shell_stub = f"""
+        # Simulate the UNSTABLE auto-merge error and accept only a normal merge.
+        gh() {{
+          if [[ "$1 $2" == "pr list" ]]; then
+            printf '%s\\n' '{url}'
+          elif [[ "$1 $2" == "pr merge" && "$3" == "{url}" && "$#" == 4 && "$4" == "--merge" ]]; then
+            return 0
+          else
+            printf '%s\\n' 'UNSTABLE: auto-merge is unavailable during publishing' >&2
+            return 1
+          fi
+        }}
+        """
+        summary = self.root / "summary"
+        result = subprocess.run(["bash", "-euo", "pipefail", "-c", shell_stub + script],
+                                env={"GITHUB_STEP_SUMMARY": str(summary)},
+                                capture_output=True, text=True)
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn(f"Back-merge PR: {url}", summary.read_text())
 
     def test_release_uses_highest_version_tag_not_nearest(self):
         repository = self.root / "repository"
