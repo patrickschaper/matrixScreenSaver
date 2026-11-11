@@ -9,9 +9,17 @@ func wallpaperAppTests() {
     let suite = "MatrixWallpaperPlaybackTests.\(UUID().uuidString)"
     let defaults = UserDefaults(suiteName: suite)!
     defer { defaults.removePersistentDomain(forName: suite) }
+    let saverDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let saverContents = saverDirectory.appendingPathComponent("MatrixScreenSaver.saver/Contents")
+    try! FileManager.default.createDirectory(at: saverContents, withIntermediateDirectories: true)
+    let saverMetadata = try! PropertyListSerialization.data(
+        fromPropertyList: ["CFBundleIdentifier": "dev.patsch.MatrixScreenSaver"], format: .xml, options: 0)
+    try! saverMetadata.write(to: saverContents.appendingPathComponent("Info.plist"))
+    defer { try? FileManager.default.removeItem(at: saverDirectory) }
     let desktop = DesktopWallpaperFixture()
     let desktopController = desktop.controller()
-    let host = WallpaperApp(defaults: defaults, desktopWallpaper: desktopController)
+    let host = WallpaperApp(defaults: defaults, screenSaverDirectories: [saverDirectory],
+                            desktopWallpaper: desktopController)
     host.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
     defer { host.applicationWillTerminate(Notification(name: NSApplication.willTerminateNotification)) }
     let status: NSStatusItem? = stored("statusItem", in: host)
