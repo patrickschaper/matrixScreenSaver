@@ -1,4 +1,4 @@
-# macOS Matrix Screen Saver
+# macOS Matrix Screen Saver and Animated Wallpaper
 
 The iconic Matrix digital rain for your Mac.
 
@@ -7,12 +7,12 @@ The iconic Matrix digital rain for your Mac.
 ## Features
 
 - Digital rain, “Wake up, Neo” messages, trace program, and custom command scenes.
-- Highly customizable: change the font, characters, speed, density, glow, and scan lines.
+- Customize the font, characters, speed, density, glow, and scan lines.
 - Classic and Resurrections glyph styles, plus personalized intro messages.
 
-Only use trusted custom commands: they run with the app's permissions, and their text and output are visible even on the lock screen.
+Only use trusted custom commands. They run with the app's permissions. Their text and output are visible on the lock screen.
 
-## Including animated Wallpaper
+## Animated wallpaper
 
 Run the animation on your desktop with the included **Matrix Wallpaper** app. Use its menu bar icon to pause, stop, or open **Settings…**.
 
@@ -26,36 +26,38 @@ brew install --cask patrickschaper/tap/matrix-screen-saver && open "/Application
 - **Wallpaper:** open **Matrix Wallpaper** in Applications.
 - **Screen saver options:** **System Settings → Wallpaper → Screen Saver → MatrixScreenSaver → Options…**.
 
+## Buy me a coffee
+
+There is no spoon. There is coffee. Donations help fund the Apple Developer membership and development.
+
+<a href="https://www.buymeacoffee.com/yesman82"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" width="150"></a><br>
+<img src="docs/bmc_qr.png" alt="Buy Me a Coffee QR code" width="150">
+
 ## Install from a download
 
-Download the release archive, extract it, and open **Install.command**. This installs both components for your user account. Both installers install and upgrade the app and screen saver together; separate installation is not supported.
+Download and extract the release archive. Open **Install.command** to install for your user account. Both installation methods install and update the app and screen saver together.
 
-If you delete the screen saver later, choose **Install Screen Saver** from the Matrix Wallpaper menu or the banner in **Settings…**. This restores the bundled screen saver without interrupting the wallpaper or resetting your settings. You can then select it in System Settings; installation does not change your active screen saver.
+To restore a deleted screen saver, choose **Install Screen Saver** in the app menu or **Settings…**. Your settings and wallpaper stay unchanged. Select the restored saver in System Settings.
 
 ## Uninstall
 
-For Homebrew installations:
+Homebrew:
 
 ```bash
 brew uninstall --cask matrix-screen-saver
 ```
 
-For installations made with **Install.command** or the local scripts:
+**Install.command** or local scripts:
 
 ```bash
 /bin/bash "$HOME/Library/Application Support/MatrixWallpaper/Installation/product-lifecycle.sh" uninstall
 ```
 
-Both commands remove the app and screen saver while keeping your preferences. Moving the app to Trash, or away from its installed location, also removes the screen saver after about five to six minutes while you are logged in. A short macOS background job checks once a minute and removes itself after cleanup; it does not run continuously. Disabling that job prevents automatic cleanup. Restoring the app before cleanup cancels removal.
+Preferences are kept.
 
-After manually removing a Homebrew installation, run the Homebrew uninstall command to clear its installation receipt.
+Moving or deleting the app also removes the screen saver. Allow 5–6 minutes while logged in. Restoring the app before cleanup cancels removal.
 
-## Buy me a coffee
-
-There is no spoon. There is coffee. Donations help cover the Apple Developer membership and ongoing development.
-
-<a href="https://www.buymeacoffee.com/yesman82"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" width="150"></a><br>
-<img src="docs/bmc_qr.png" alt="Buy Me a Coffee QR code" width="150">
+For Homebrew installs, run its uninstall command after manual removal.
 
 ## Requirements
 
@@ -65,4 +67,4 @@ There is no spoon. There is coffee. Donations help cover the Apple Developer mem
 
 ## Development
 
-Want to build or contribute? See the [developer documentation](docs/development.md) for setup, testing, and project details.
+See the [developer documentation](docs/development.md) for setup and testing.
