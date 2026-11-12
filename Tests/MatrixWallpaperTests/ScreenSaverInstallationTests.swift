@@ -2,6 +2,8 @@ import AppKit
 
 /// Exercises recovery state and both UI entry points using only temporary bundles and a fake installer.
 func screenSaverInstallationTests() {
+    screenSaverSelectionTests()
+    screenSaverSelectionOperationTests()
     screenSaverInstallerProcessTests()
     let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         .resolvingSymlinksInPath()
@@ -18,7 +20,8 @@ func screenSaverInstallationTests() {
     var operations = 0
     var pending: ((Result<Void, Error>) -> Void)?
     let installation = ScreenSaverInstallationController(
-        directories: [user], appURL: app, recordURL: record
+        directories: [user], appURL: app, recordURL: record,
+        selectionURL: root.appendingPathComponent("selection.plist")
     ) { completion in
         operations += 1
         pending = completion
@@ -144,8 +147,8 @@ func screenSaverInstallationTests() {
         try writeInstallationBundle(at: saver)
         pending?(.success(()))
         check(
-            eventually { item.title == "Sync with Screen Saver" },
-            "verified restoration restores sync action")
+            eventually { item.title == "Set Matrix Screen Saver" },
+            "verified restoration offers selection before sync")
         check(
             banner.isHidden && item.state == .off && name.stringValue == "Unsaved name",
             "restoration preserves sync-off and unsaved edits while hiding the banner")
@@ -169,7 +172,7 @@ func screenSaverInstallationTests() {
         try writeInstallationBundle(at: saver)
         pending?(.success(()))
         check(
-            eventually { item.title == "Sync with Screen Saver" },
+            eventually { item.title == "Set Matrix Screen Saver" },
             "installation completes after settings closes")
         check(
             stored("optionsController", in: host, as: MatrixScreenSaverOptionsSheetController.self)
@@ -193,6 +196,166 @@ func screenSaverInstallationTests() {
             "actual screen saver options have no wallpaper recovery banner")
         saverOptions.configureSheet().close()
     } catch { check(false, "installation fixture: \(error)") }
+}
+
+/// Verifies current selection from nested macOS plists without modifying system preferences.
+private func screenSaverSelectionTests() {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let saver = root.appendingPathComponent("Renamed Matrix.saver")
+    let selection = root.appendingPathComponent("selection.plist")
+    let controller = ScreenSaverInstallationController(
+        directories: [root], recordURL: nil, selectionURL: selection)
+    do {
+        try writeInstallationBundle(at: saver)
+        controller.refresh()
+        check(
+            controller.state == .installed && !controller.isSelected,
+            "installed saver with unreadable selection is not treated as current")
+        try writeScreenSaverSelection(at: selection, saver: saver)
+        check(
+            controller.isSelected,
+            "current selection recognizes renamed Matrix bundle and encoded file URL")
+        try writeScreenSaverSelection(at: selection, saver: nil)
+        check(!controller.isSelected, "built-in selection overrides previously selected Matrix")
+        try writeScreenSaverSelection(at: selection, saver: saver, rootKey: "SystemDefault")
+        check(
+            controller.isSelected,
+            "system default selection is used when no all-spaces override exists")
+        try writeScreenSaverSelection(at: selection, saver: saver, linked: true)
+        check(
+            controller.isSelected, "linked wallpaper and screen saver selection recognizes Matrix")
+        try Data("invalid plist".utf8).write(to: selection)
+        check(!controller.isSelected, "malformed selection store does not expose sync")
+        try writeScreenSaverSelection(at: selection, saver: saver)
+        try Data("invalid metadata".utf8).write(
+            to: saver.appendingPathComponent("Contents/Info.plist"))
+        check(!controller.isSelected, "a selected path alone cannot identify a Matrix saver")
+    } catch { check(false, "selection fixture: \(error)") }
+}
+
+/// Writes a minimal modern selection store using a real nested binary plist configuration.
+/// - Parameters:
+///   - url: Temporary store destination.
+///   - saver: Selected bundle, or `nil` for the built-in Sequoia saver.
+///   - rootKey: All-spaces override or system-default settings container.
+///   - linked: Whether the desktop and idle screen share one selection.
+/// - Throws: A property-list encoding or temporary-file write error.
+func writeScreenSaverSelection(
+    at url: URL, saver: URL?, rootKey: String = "AllSpacesAndDisplays", linked: Bool = false
+) throws {
+    let configuration =
+        try saver.map {
+            try PropertyListSerialization.data(
+                fromPropertyList: ["module": ["relative": $0.absoluteString]], format: .binary,
+                options: 0)
+        } ?? Data()
+    let choice: [String: Any] = [
+        "Provider": saver == nil
+            ? "com.apple.wallpaper.choice.sequoia" : "com.apple.wallpaper.choice.screen-saver",
+        "Configuration": configuration,
+    ]
+    let settings: [String: Any] = [
+        "Type": linked ? "linked" : "idle",
+        linked ? "Linked" : "Idle": ["Content": ["Choices": [choice]]],
+    ]
+    try PropertyListSerialization.data(
+        fromPropertyList: [rootKey: settings], format: .binary, options: 0
+    )
+    .write(to: url)
+}
+
+/// Exercises the real selector subprocess boundary without changing the user's wallpaper store.
+private func screenSaverSelectionOperationTests() {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        .resolvingSymlinksInPath()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let saver = root.appendingPathComponent("Renamed Matrix.saver")
+    let selection = root.appendingPathComponent("selection.plist")
+    let app = root.appendingPathComponent("Test App.app")
+    do {
+        try writeInstallationBundle(at: saver)
+        try writeSelectionHelper(at: app)
+        try writeScreenSaverSelection(
+            at: root.appendingPathComponent("selected.plist"), saver: saver)
+        let controller = ScreenSaverInstallationController(
+            directories: [root], appURL: app, recordURL: nil, selectionURL: selection)
+        var result: Result<Void, Error>?
+        controller.select { result = $0 }
+        controller.select { _ in check(false, "duplicate selection must not launch another helper")
+        }
+        check(controller.isSelecting, "selection returns immediately with a busy state")
+        let completed = eventually(10) { result != nil }
+        check(completed, "selection completes on the main run loop")
+        guard completed else { return }
+        if case .success = result {
+            check(
+                !controller.isSelecting && controller.isSelected,
+                "successful helper result refreshes the selected state")
+        } else {
+            check(false, "selector fixture succeeds")
+        }
+        let arguments = try String(
+            contentsOf: root.appendingPathComponent("arguments"), encoding: .utf8)
+        let paths = arguments.split(separator: "\n")
+        check(
+            paths.count == 1
+                && URL(fileURLWithPath: String(paths[0])).resolvingSymlinksInPath()
+                    == saver.resolvingSymlinksInPath(),
+            "helper receives the exact renamed saver path once, including spaces")
+        result = nil
+        controller.select { result = $0 }
+        check(
+            result != nil && !controller.isSelecting, "already selected saver needs no new process")
+
+        try writeScreenSaverSelection(at: selection, saver: nil)
+        try Data().write(to: root.appendingPathComponent("fail"))
+        result = nil
+        controller.select { result = $0 }
+        check(eventually(10) { result != nil }, "helper failure returns without blocking the UI")
+        if case .failure(let error) = result {
+            check(
+                !controller.isSelecting && !controller.isSelected
+                    && error.localizedDescription.contains("Fixture selection failed"),
+                "failed selection clears busy state and retains a useful diagnostic")
+        } else {
+            check(false, "selector failure is reported")
+        }
+        try FileManager.default.removeItem(at: root.appendingPathComponent("fail"))
+        try writeScreenSaverSelection(at: root.appendingPathComponent("selected.plist"), saver: nil)
+        result = nil
+        controller.select { result = $0 }
+        check(eventually(10) { result != nil }, "unverified helper success completes")
+        if case .failure = result {
+            check(
+                !controller.isSelecting,
+                "helper exit zero alone cannot report a successful selection")
+        } else {
+            check(false, "unchanged selection must report failure")
+        }
+    } catch { check(false, "selection subprocess fixture: \(error)") }
+}
+
+/// Creates a fake bundled selector that only writes adjacent temporary fixture files.
+/// - Parameter app: Temporary app bundle whose parent holds selection.plist and selected.plist.
+/// - Throws: A fixture directory, executable, or permission write error.
+func writeSelectionHelper(at app: URL) throws {
+    let executable = app.appendingPathComponent("Contents/MacOS/MatrixScreenSaverSelector")
+    try FileManager.default.createDirectory(
+        at: executable.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try #"""
+    #!/bin/bash
+    set -eu
+    root="$(cd "$(dirname "$0")/../../.." && pwd)"
+    [[ $# == 1 ]]
+    printf '%s\n' "$1" >> "$root/arguments"
+    if [[ -f "$root/fail" ]]; then
+      echo 'Fixture selection failed. Open Screen Saver Settings.' >&2
+      exit 1
+    fi
+    /bin/cp "$root/selected.plist" "$root/selection.plist"
+    """#.write(to: executable, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
 }
 
 /// Exercises recovery and activation arguments, bounded failures, and output larger than a pipe buffer.

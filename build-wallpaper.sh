@@ -63,6 +63,15 @@ swiftc -O -module-name MatrixWallpaper \
 swiftc -O "$ROOT_DIR/Tools/ScreenSaverInstaller.swift" \
   -o "$BUNDLE_DIR/Contents/MacOS/MatrixScreenSaverInstaller"
 
+# PaperSaver is linked into a helper so the native host retains its existing deployment target.
+SELECTOR_PACKAGE="$ROOT_DIR/Tools/ScreenSaverSelector"
+swift build --package-path "$SELECTOR_PACKAGE" -c release --product MatrixScreenSaverSelector
+# Ask SwiftPM for the architecture-specific output directory instead of assuming its layout.
+SELECTOR_BIN="$(swift build --package-path "$SELECTOR_PACKAGE" -c release --show-bin-path)"
+cp "$SELECTOR_BIN/MatrixScreenSaverSelector" "$BUNDLE_DIR/Contents/MacOS/MatrixScreenSaverSelector"
+mkdir -p "$BUNDLE_DIR/Contents/Resources/ThirdParty"
+cp "$ROOT_DIR/Resources/ThirdParty/PaperSaver-LICENSE.txt" "$BUNDLE_DIR/Contents/Resources/ThirdParty/"
+
 cp "$ROOT_DIR/Resources/Wallpaper-Info.plist" "$BUNDLE_DIR/Contents/Info.plist"
 mkdir -p "$BUNDLE_DIR/Contents/Resources/Fonts"
 cp "$ROOT_DIR/Resources/Fonts/"* "$BUNDLE_DIR/Contents/Resources/Fonts/"

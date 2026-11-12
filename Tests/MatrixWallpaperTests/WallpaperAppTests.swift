@@ -54,6 +54,7 @@ func wallpaperAppTests() {
     if let loginIndex = menuItems.firstIndex(where: { $0.title.hasPrefix("Launch at Login") }),
         let syncIndex = menuItems.firstIndex(where: {
             $0.title == "Sync with Screen Saver" || $0.title == "Install Screen Saver"
+                || $0.title == "Set Matrix Screen Saver"
         })
     {
         check(
@@ -583,7 +584,7 @@ private func wallpaperDeferredLaunchTests() {
         "resuming deferred launch starts one session using the current displays")
 }
 
-/// Exercises installation discovery and persistent menu state without touching real installations.
+/// Exercises installation, selection, and persistent menu state using temporary bundles and stores.
 private func wallpaperSyncMenuTests() {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     let user = root.appendingPathComponent("user")
@@ -596,8 +597,13 @@ private func wallpaperSyncMenuTests() {
     }
     var loginStatus = LoginItemController.Status.notRegistered
     let login = LoginItemController(readStatus: { loginStatus })
+    let selection = root.appendingPathComponent("selection.plist")
+    let app = root.appendingPathComponent("Test App.app")
+    try! writeSelectionHelper(at: app)
+    let installation = ScreenSaverInstallationController(
+        directories: [user, local], appURL: app, recordURL: nil, selectionURL: selection)
     let host = WallpaperApp(
-        loginItems: login, defaults: defaults, screenSaverDirectories: [user, local])
+        loginItems: login, defaults: defaults, screenSaverInstallation: installation)
     NSApp.sendAction(NSSelectorFromString("togglePlayback:"), to: host, from: nil)
     host.applicationDidFinishLaunching(
         Notification(name: NSApplication.didFinishLaunchingNotification))
@@ -616,7 +622,10 @@ private func wallpaperSyncMenuTests() {
     check(
         status.button?.accessibilityLabel() == "Matrix Wallpaper",
         "status icon has no version-warning state")
+    /// Reopens the menu so external installation and selection changes are rediscovered.
     func refresh() { menu.delegate?.menuWillOpen?(menu) }
+    /// Creates a discoverable fixture bundle without installing a real screen saver.
+    /// - Returns: The temporary bundle URL used by the selection fixture.
     func install(_ directory: URL, name: String, identifier: String) -> URL {
         let bundle = directory.appendingPathComponent(name)
         let contents = bundle.appendingPathComponent("Contents")
@@ -638,10 +647,36 @@ private func wallpaperSyncMenuTests() {
     let installed = install(user, name: "Renamed.saver", identifier: "dev.patsch.MatrixScreenSaver")
     refresh()
     check(
-        !sync.isHidden && sync.state == .on,
+        sync.title == "Set Matrix Screen Saver" && sync.state == .off && sync.isEnabled
+            && sync.action == NSSelectorFromString("selectScreenSaver:"),
+        "installed but unselected saver offers a direct unchecked selection action")
+    check(
+        defaults.bool(forKey: "syncWithScreenSaver"),
+        "selection action preserves default sync intent")
+    try! writeScreenSaverSelection(
+        at: root.appendingPathComponent("selected.plist"), saver: installed)
+    menu.performActionForItem(at: menu.index(of: sync))
+    check(
+        !sync.isEnabled && sync.title == "Setting Matrix Screen Saver…",
+        "direct selection disables repeat clicks while the helper runs")
+    check(
+        eventually(10) { sync.title == "Sync with Screen Saver" && sync.isEnabled },
+        "successful selection restores the sync menu without reopening it")
+    refresh()
+    check(
+        !sync.isHidden && sync.title == "Sync with Screen Saver" && sync.state == .on
+            && sync.action == NSSelectorFromString("toggleScreenSaverSync:"),
         "renamed user installation exposes default-enabled sync")
     menu.performActionForItem(at: menu.index(of: sync))
     check(sync.state == .off, "sync menu action unchecks the persisted preference")
+    try! writeScreenSaverSelection(at: selection, saver: nil)
+    refresh()
+    check(
+        sync.title == "Set Matrix Screen Saver" && sync.state == .off,
+        "switching to a built-in saver replaces sync with selection")
+    check(
+        !defaults.bool(forKey: "syncWithScreenSaver"),
+        "changing selection preserves explicit sync-off intent")
     try! FileManager.default.removeItem(at: installed)
     refresh()
     check(
@@ -649,6 +684,7 @@ private func wallpaperSyncMenuTests() {
         "removal offers installation without resetting sync choice")
     let localInstall = install(
         local, name: "Matrix.saver", identifier: "dev.patsch.MatrixScreenSaver")
+    try! writeScreenSaverSelection(at: selection, saver: localInstall)
     refresh()
     check(
         !sync.isHidden && sync.state == .off,
@@ -661,6 +697,7 @@ private func wallpaperSyncMenuTests() {
     let target = install(root, name: "Target.saver", identifier: "dev.patsch.MatrixScreenSaver")
     try! FileManager.default.createSymbolicLink(
         at: local.appendingPathComponent("Linked.saver"), withDestinationURL: target)
+    try! writeScreenSaverSelection(at: selection, saver: target)
     loginStatus = .enabled
     refresh()
     check(
@@ -668,7 +705,7 @@ private func wallpaperSyncMenuTests() {
         "menu refresh follows saver symlinks and refreshes Launch at Login")
     host.applicationWillTerminate(Notification(name: NSApplication.willTerminateNotification))
     let relaunched = WallpaperApp(
-        defaults: UserDefaults(suiteName: suite)!, screenSaverDirectories: [user, local])
+        defaults: UserDefaults(suiteName: suite)!, screenSaverInstallation: installation)
     NSApp.sendAction(NSSelectorFromString("togglePlayback:"), to: relaunched, from: nil)
     relaunched.applicationDidFinishLaunching(
         Notification(name: NSApplication.didFinishLaunchingNotification))

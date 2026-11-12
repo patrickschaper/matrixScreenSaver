@@ -216,11 +216,26 @@ Unrelated bundles and symlinks at the old path are left alone. The executable re
 
 ## Screen saver synchronization
 
-When MatrixScreenSaver is installed in `~/Library/Screen Savers` or `/Library/Screen Savers`,
+When MatrixScreenSaver is installed and selected in macOS,
 the wallpaper menu shows **Sync with Screen Saver**. It is checked by default: the saver
 shares the wallpaper's animation. Uncheck it to let the saver animate independently.
 The choice survives app restarts and saver reinstallation; opening the menu refreshes
 installation detection. This does not change visual options or synchronization between monitors.
+
+If another saver is selected, **Set Matrix Screen Saver** selects Matrix on every display
+and Space. The app runs the bundled `MatrixScreenSaverSelector` helper asynchronously.
+Its Swift package in `Tools/ScreenSaverSelector` pins [PaperSaver](https://github.com/AerialScreensaver/PaperSaver)
+0.4.3; `build-wallpaper.sh` resolves and compiles it, and releases sign it before the outer app.
+PaperSaver backs up the wallpaper store, preserves desktop choices, restarts `WallpaperAgent`,
+and verifies the selection, restoring the backup if verification fails. The restart can briefly
+redraw the desktop. Sync intent and animation playback are retained.
+
+PaperSaver requires macOS 14 and resolves traditional savers by name in standard directories.
+The helper checks that the resolved bundle is the exact Matrix installation discovered by the app.
+Older macOS uses **Set Matrix Screen Saver…** to open settings; failed selection, custom locations,
+or shadowed bundle names offer settings as recovery. These operations use an undocumented macOS
+store format. Run `swift run --package-path Tools/ScreenSaverSelector SelectionChecks` for isolated
+package checks. Like the main test suite, these need only Command Line Tools, not Xcode.
 
 When the saver is absent, that menu item becomes **Install Screen Saver**, and the wallpaper settings show the same action in a compact banner. `ScreenSaverInstallationController` refreshes both surfaces on menu opening, settings focus, app activation, and transaction completion without resetting pending options edits. The actual screen saver host has no installation controls.
 

@@ -16,7 +16,7 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// Persists user intent even while no saver is installed.
     private static let syncPreferenceKey = "syncWithScreenSaver"
-    /// Offers synchronization when installed, or explicit recovery when the saver is missing.
+    /// Offers selection before synchronization, or recovery when the saver is missing.
     private let syncItem = NSMenuItem(
         title: "Sync with Screen Saver", action: #selector(toggleScreenSaverSync(_:)),
         keyEquivalent: "")
@@ -213,7 +213,7 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         NSApp.mainMenu = mainMenu
     }
 
-    /// Refreshes login status and companion presence each time the menu is opened.
+    /// Refreshes login status, companion presence, and current selection when the menu opens.
     func menuWillOpen(_ menu: NSMenu) {
         loginItems.menuWillOpen(menu)
         screenSaverInstallation.refresh()
@@ -224,13 +224,26 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func updateScreenSaverControls() {
         guard !isTerminating else { return }
         let state = screenSaverInstallation.state
-        syncItem.isEnabled = state != .installing
+        let isSelected = state == .installed && screenSaverInstallation.isSelected
+        let isSelecting = screenSaverInstallation.isSelecting
+        syncItem.isEnabled = state != .installing && !isSelecting
         syncItem.state =
-            state == .installed && defaults.bool(forKey: Self.syncPreferenceKey) ? .on : .off
+            isSelected && !isSelecting && defaults.bool(forKey: Self.syncPreferenceKey) ? .on : .off
         switch state {
         case .installed:
-            syncItem.title = "Sync with Screen Saver"
-            syncItem.action = #selector(toggleScreenSaverSync(_:))
+            if isSelecting {
+                syncItem.title = "Setting Matrix Screen Saver…"
+                syncItem.action = #selector(selectScreenSaver(_:))
+            } else if isSelected {
+                syncItem.title = "Sync with Screen Saver"
+                syncItem.action = #selector(toggleScreenSaverSync(_:))
+            } else if #available(macOS 14, *) {
+                syncItem.title = "Set Matrix Screen Saver"
+                syncItem.action = #selector(selectScreenSaver(_:))
+            } else {
+                syncItem.title = "Set Matrix Screen Saver…"
+                syncItem.action = #selector(openScreenSaverSettings(_:))
+            }
         case .missing, .installing:
             syncItem.title =
                 state == .installing ? "Installing Screen Saver…" : "Install Screen Saver"
@@ -238,6 +251,32 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         optionsController?.updateScreenSaverInstallation(
             isMissing: state == .missing, isInstalling: state == .installing)
+    }
+
+    /// Selects Matrix directly; a failed operation offers the native Screen Saver settings as recovery.
+    @objc private func selectScreenSaver(_ sender: Any?) {
+        guard !isTerminating else { return }
+        statusItem?.menu?.cancelTracking()
+        screenSaverInstallation.select { [weak self] result in
+            guard let self, !self.isTerminating, case .failure(let error) = result else { return }
+            let alert = NSAlert()
+            alert.messageText = "Couldn’t select Matrix Screen Saver"
+            alert.informativeText = error.localizedDescription
+            alert.addButton(withTitle: "Open Screen Saver Settings…")
+            alert.addButton(withTitle: "Cancel")
+            NSApp.activate(ignoringOtherApps: true)
+            if alert.runModal() == .alertFirstButtonReturn {
+                self.openScreenSaverSettings(nil)
+            }
+        }
+    }
+
+    /// Opens native Screen Saver settings on older macOS versions or after automatic selection fails.
+    @objc private func openScreenSaverSettings(_ sender: Any?) {
+        guard !isTerminating else { return }
+        statusItem?.menu?.cancelTracking()
+        NSWorkspace.shared.open(
+            URL(string: "x-apple.systempreferences:com.apple.ScreenSaver-Settings.extension")!)
     }
 
     /// Restores the companion without interrupting wallpaper playback or saving settings edits.
