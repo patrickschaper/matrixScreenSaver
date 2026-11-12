@@ -150,8 +150,9 @@ func screenSaverInstallationTests() {
             eventually { item.title == "Set Matrix Screen Saver" },
             "verified restoration offers selection before sync")
         check(
-            banner.isHidden && item.state == .off && name.stringValue == "Unsaved name",
-            "restoration preserves sync-off and unsaved edits while hiding the banner")
+            !banner.isHidden && button.title == "Set Matrix Screen Saver" && button.isEnabled
+                && item.state == .off && name.stringValue == "Unsaved name",
+            "restoration offers selection while preserving sync-off and unsaved edits")
         check(
             stored("windows", in: host, as: [DesktopWindow].self)?.isEmpty == true,
             "restoration does not start a stopped wallpaper")
@@ -190,7 +191,9 @@ func screenSaverInstallationTests() {
         check(NSApp.modalWindow == nil, "late failure after Quit does not present an alert")
 
         let saverOptions = MatrixScreenSaverOptionsSheetController { _ in }
-        saverOptions.updateScreenSaverInstallation(isMissing: true, isInstalling: false)
+        saverOptions.updateScreenSaverNotice(
+            message: "Screen saver isn’t installed.", actionTitle: "Install Screen Saver",
+            isEnabled: true)
         check(
             stored("installationBanner", in: saverOptions, as: NSStackView.self)?.isHidden == true,
             "actual screen saver options have no wallpaper recovery banner")

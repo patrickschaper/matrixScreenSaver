@@ -18,7 +18,12 @@ func wallpaperAppTests() {
         options: 0)
     try! saverMetadata.write(to: saverContents.appendingPathComponent("Info.plist"))
     defer { try? FileManager.default.removeItem(at: saverDirectory) }
-    let host = WallpaperApp(defaults: defaults, screenSaverDirectories: [saverDirectory])
+    let selectionURL = saverDirectory.appendingPathComponent("selection.plist")
+    try! writeScreenSaverSelection(
+        at: selectionURL, saver: saverContents.deletingLastPathComponent())
+    let installation = ScreenSaverInstallationController(
+        directories: [saverDirectory], recordURL: nil, selectionURL: selectionURL)
+    let host = WallpaperApp(defaults: defaults, screenSaverInstallation: installation)
     host.applicationDidFinishLaunching(
         Notification(name: NSApplication.didFinishLaunchingNotification))
     defer {
@@ -46,6 +51,12 @@ func wallpaperAppTests() {
         ] && menuItems.allSatisfy { $0.view == nil } && pauseItem?.image != nil
             && stopItem?.image != nil,
         "playback commands lead the menu as native items with symbols")
+    for item in [pauseItem, stopItem].compactMap({ $0 })
+    where item.responds(to: NSSelectorFromString("preferredImageVisibility")) {
+        check(
+            item.value(forKey: "preferredImageVisibility") as? Int == 1,
+            "playback symbols explicitly stay visible on macOS 27")
+    }
     let settingsItem = menuItems.first { $0.action == NSSelectorFromString("showOptions:") }
     check(
         settingsItem?.title == "Settings…" && settingsItem?.keyEquivalent == ","
@@ -653,15 +664,37 @@ private func wallpaperSyncMenuTests() {
     check(
         defaults.bool(forKey: "syncWithScreenSaver"),
         "selection action preserves default sync intent")
+    NSApp.sendAction(NSSelectorFromString("showOptions:"), to: host, from: nil)
+    guard
+        let options: MatrixScreenSaverOptionsSheetController = stored(
+            "optionsController", in: host),
+        let banner: NSStackView = stored("installationBanner", in: options),
+        let button: NSButton = stored("installScreenSaverButton", in: options),
+        let name: NSTextField = stored("nameField", in: options)
+    else {
+        check(false, "settings exposes the screen saver selection banner")
+        return
+    }
+    name.stringValue = "Unsaved selection edit"
+    check(
+        !banner.isHidden && button.title == "Set Matrix Screen Saver" && button.isEnabled
+            && button.keyEquivalent.isEmpty
+            && banner.arrangedSubviews.compactMap { ($0 as? NSTextField)?.stringValue }
+                .contains("Matrix isn’t the selected screen saver."),
+        "installed but unselected saver offers a non-default selection button in settings")
     try! writeScreenSaverSelection(
         at: root.appendingPathComponent("selected.plist"), saver: installed)
     menu.performActionForItem(at: menu.index(of: sync))
     check(
-        !sync.isEnabled && sync.title == "Setting Matrix Screen Saver…",
-        "direct selection disables repeat clicks while the helper runs")
+        !sync.isEnabled && sync.title == "Setting Matrix Screen Saver…"
+            && !button.isEnabled && button.title == "Setting Matrix Screen Saver…",
+        "direct selection disables both surfaces while the helper runs")
     check(
         eventually(10) { sync.title == "Sync with Screen Saver" && sync.isEnabled },
         "successful selection restores the sync menu without reopening it")
+    check(
+        banner.isHidden && name.stringValue == "Unsaved selection edit",
+        "verified selection hides the settings banner without applying edits")
     refresh()
     check(
         !sync.isHidden && sync.title == "Sync with Screen Saver" && sync.state == .on
@@ -677,6 +710,21 @@ private func wallpaperSyncMenuTests() {
     check(
         !defaults.bool(forKey: "syncWithScreenSaver"),
         "changing selection preserves explicit sync-off intent")
+    check(
+        !banner.isHidden && button.isEnabled,
+        "external selection changes restore the settings banner")
+    button.performClick(nil)
+    check(
+        !sync.isEnabled && !button.isEnabled,
+        "settings selection uses the same busy operation as the menu")
+    check(
+        eventually(10) { installation.isSelected && banner.isHidden && sync.isEnabled },
+        "settings button selects Matrix and hides the banner")
+    check(
+        !defaults.bool(forKey: "syncWithScreenSaver")
+            && name.stringValue == "Unsaved selection edit",
+        "settings selection retains sync-off intent and unsaved edits")
+    options.configureSheet().close()
     try! FileManager.default.removeItem(at: installed)
     refresh()
     check(

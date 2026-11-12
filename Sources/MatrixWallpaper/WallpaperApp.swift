@@ -249,8 +249,14 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 state == .installing ? "Installing Screen Saver…" : "Install Screen Saver"
             syncItem.action = #selector(installScreenSaver(_:))
         }
-        optionsController?.updateScreenSaverInstallation(
-            isMissing: state == .missing, isInstalling: state == .installing)
+        let message: String?
+        if state != .installed {
+            message = "Screen saver isn’t installed."
+        } else {
+            message = isSelected && !isSelecting ? nil : "Matrix isn’t the selected screen saver."
+        }
+        optionsController?.updateScreenSaverNotice(
+            message: message, actionTitle: syncItem.title, isEnabled: syncItem.isEnabled)
     }
 
     /// Selects Matrix directly; a failed operation offers the native Screen Saver settings as recovery.
@@ -342,7 +348,16 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self?.applyOptions(options)
         }
         controller.onClose = { [weak self] in self?.optionsController = nil }
-        controller.onInstallScreenSaver = { [weak self] in self?.installScreenSaver(nil) }
+        controller.onScreenSaverAction = { [weak self] in
+            guard let self, !self.isTerminating else { return }
+            self.screenSaverInstallation.refresh()
+            guard self.syncItem.isEnabled,
+                self.screenSaverInstallation.state == .missing
+                    || !self.screenSaverInstallation.isSelected,
+                let action = self.syncItem.action
+            else { return }
+            NSApp.sendAction(action, to: self, from: nil)
+        }
         controller.prepare(using: MatrixScreenSaverView.loadSaverOptions())
         optionsController = controller
         updateScreenSaverControls()
@@ -446,6 +461,11 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
             systemSymbolName: playback.isPaused ? "play.fill" : "pause.fill",
             accessibilityDescription: nil)
         pauseItem.isEnabled = playback.isRequested
+        // macOS 27 normally hides menu images; use the same explicit preference as the coffee icon.
+        for item in [playbackItem, pauseItem]
+        where item.responds(to: NSSelectorFromString("setPreferredImageVisibility:")) {
+            item.setValue(1, forKey: "preferredImageVisibility")
+        }
     }
 
     /// Unregisters every view before closing any window or starting a replacement session.
