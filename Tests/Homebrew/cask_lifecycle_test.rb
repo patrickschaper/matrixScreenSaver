@@ -3,7 +3,8 @@ require_relative "support/fake_cask_dsl"
 require_relative "support/test_harness"
 
 class CaskLifecycleTest < TestHarness
-  COFFEE = "There is no spoon. There is coffee: https://www.buymeacoffee.com/yesman82".freeze
+  # Expected post-install donation message, including the shared guidance prefix.
+  COFFEE = "➡️ There is no spoon. There is coffee: https://www.buymeacoffee.com/yesman82".freeze
 
   def setup
     @root = Dir.mktmpdir("matrix-cask-")
@@ -44,6 +45,15 @@ class CaskLifecycleTest < TestHarness
     end
     assert dsl.messages.any? { |m| m.include?("Open System Settings") }
     assert dsl.messages.any? { |m| m.include?("Open #{dsl.artifacts.first.target} to start Matrix Wallpaper.") }
+  end
+
+  # Checks the prefix on install notices and both artifact-conflict messages.
+  def test_all_homebrew_messages_have_arrow_prefix
+    [0, 1].each do |artifact_index|
+      dsl = definition(occupied: true, artifact_index: artifact_index)
+      dsl.install(force: true)
+      dsl.messages.each { |message| assert message.start_with?("➡️ "), message }
+    end
   end
 
   def test_modern_definition_is_inert_until_install

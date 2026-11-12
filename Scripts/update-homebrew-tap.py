@@ -12,8 +12,10 @@ import urllib.parse
 import urllib.request
 
 TEMPLATE = Path(__file__).resolve().parents[1] / "Homebrew/Casks/matrix-screen-saver.rb"
-# Reviewed predecessors, including synchronous cleanup registration; arbitrary edits fail closed.
+# Reviewed predecessors, including messages without arrows; arbitrary edits fail closed.
 LEGACY_STRUCTURE_SHA256 = {
+    "205fa58f0e03521d7c6a4189478a4950d8df896f581fda33303f17818837375f",
+    "0a14b0d5190ed1490e5c5dae4990d2de05be752298ae6c2fbae991bd90cda05d",
     "707ca722f9cd52aa6516dcb7e01e41123d0ad80c4dde8a8506445fab8a1810ad",
     "6452539ad202b33b03f5721682890e97b37a0cb1d5f8276fa96f206eae18bc04",
     "50a5ece5568455daecf75599184116853d5fa05698d7ba0a2e58f3a9d3c6408d",
