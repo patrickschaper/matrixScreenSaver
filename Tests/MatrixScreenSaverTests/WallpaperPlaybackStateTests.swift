@@ -5,15 +5,24 @@ func wallpaperPlaybackStateTests() {
     var state = WallpaperPlaybackState()
     ok(state.shouldRun, "WallpaperPlaybackState: launches with playback requested")
     state.isPaused = true
-    ok(!state.shouldRun && state.shouldShowDesktop, "WallpaperPlaybackState: manual pause keeps the desktop visible")
+    ok(
+        !state.shouldRun && state.shouldShowDesktop,
+        "WallpaperPlaybackState: manual pause keeps the desktop visible")
     state.setSuspended(.sleeping, true)
-    ok(!state.shouldRun && !state.shouldShowDesktop, "WallpaperPlaybackState: sleep hides a paused desktop")
+    ok(
+        !state.shouldRun && !state.shouldShowDesktop,
+        "WallpaperPlaybackState: sleep hides a paused desktop")
     state.setSuspended(.sleeping, false)
-    ok(!state.shouldRun && state.shouldShowDesktop, "WallpaperPlaybackState: wake preserves manual pause")
+    ok(
+        !state.shouldRun && state.shouldShowDesktop,
+        "WallpaperPlaybackState: wake preserves manual pause")
     state.isServingScreenSaver = true
     state.setSuspended(.locked, true)
-    ok(state.shouldRun && state.isPaused && !state.shouldShowDesktop, "WallpaperPlaybackState: saver sharing temporarily advances a manually paused scene")
-    for reason in [WallpaperPlaybackState.Suspension.sleeping, .displaysSleeping, .sessionInactive] {
+    ok(
+        state.shouldRun && state.isPaused && !state.shouldShowDesktop,
+        "WallpaperPlaybackState: saver sharing temporarily advances a manually paused scene")
+    for reason in [WallpaperPlaybackState.Suspension.sleeping, .displaysSleeping, .sessionInactive]
+    {
         state.setSuspended(reason, true)
         ok(!state.shouldRun, "WallpaperPlaybackState: paused sharing respects \(reason)")
         state.setSuspended(reason, false)
@@ -23,16 +32,22 @@ func wallpaperPlaybackStateTests() {
     state.isRequested = true
     state.isServingScreenSaver = false
     state.setSuspended(.locked, false)
-    ok(!state.shouldRun && state.isPaused && state.shouldShowDesktop, "WallpaperPlaybackState: saver exit restores the paused desktop")
+    ok(
+        !state.shouldRun && state.isPaused && state.shouldShowDesktop,
+        "WallpaperPlaybackState: saver exit restores the paused desktop")
     state.setSuspended(.locked, true)
     state.isPaused = false
     ok(!state.shouldRun, "WallpaperPlaybackState: manual resume cannot override lock")
     state.setSuspended(.locked, false)
-    ok(state.shouldRun && state.shouldShowDesktop, "WallpaperPlaybackState: resume runs after system suspension clears")
+    ok(
+        state.shouldRun && state.shouldShowDesktop,
+        "WallpaperPlaybackState: resume runs after system suspension clears")
     state.setSuspended(.locked, true)
     state.setSuspended(.locked, true)
     state.setSuspended(.sleeping, true)
-    ok(!state.shouldRun, "WallpaperPlaybackState: duplicate and overlapping suspension is idempotent")
+    ok(
+        !state.shouldRun,
+        "WallpaperPlaybackState: duplicate and overlapping suspension is idempotent")
     state.setSuspended(.sleeping, false)
     ok(!state.shouldRun, "WallpaperPlaybackState: waking does not override lock")
     state.isRequested = false
@@ -47,20 +62,28 @@ func wallpaperPlaybackStateTests() {
         state.setSuspended(reason, true)
     }
     state.setSuspended(.sessionInactive, false)
-    ok(!state.shouldRun, "WallpaperPlaybackState: session activation does not override display sleep")
+    ok(
+        !state.shouldRun,
+        "WallpaperPlaybackState: session activation does not override display sleep")
     state.setSuspended(.displaysSleeping, false)
     state.setSuspended(.displaysSleeping, false)
     ok(state.shouldRun, "WallpaperPlaybackState: duplicate resume notifications are harmless")
     state.setSuspended(.screenSaver, true)
     state.setSuspended(.locked, true)
     state.isServingScreenSaver = true
-    ok(state.shouldRun && !state.shouldShowDesktop, "WallpaperPlaybackState: shared saver keeps rendering behind the lock screen")
+    ok(
+        state.shouldRun && !state.shouldShowDesktop,
+        "WallpaperPlaybackState: shared saver keeps rendering behind the lock screen")
     state.setSuspended(.displaysSleeping, true)
     ok(!state.shouldRun, "WallpaperPlaybackState: sharing never overrides display sleep")
     state.setSuspended(.displaysSleeping, false)
     state.setSuspended(.sessionInactive, true)
-    ok(!state.shouldRun, "WallpaperPlaybackState: sharing never overrides an inactive login session")
+    ok(
+        !state.shouldRun,
+        "WallpaperPlaybackState: sharing never overrides an inactive login session")
     state.setSuspended(.sessionInactive, false)
     state.isServingScreenSaver = false
-    ok(!state.shouldRun, "WallpaperPlaybackState: expired consumers restore ordinary lock and saver suspension")
+    ok(
+        !state.shouldRun,
+        "WallpaperPlaybackState: expired consumers restore ordinary lock and saver suspension")
 }

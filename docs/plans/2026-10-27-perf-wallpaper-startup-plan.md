@@ -88,6 +88,7 @@ flowchart TB
 **Approach:** Apply KTD1 at the cache builder, retaining layout and frame-buffer work. Follow the existing `rebuildNativeFrameContext` reuse guard and wallpaper test inspection helpers. Prefer comparing cached image identities or a small test seam over permanent timing counters. Do not extend the signature to settings that do not affect glyph images.
 
 **Test scenarios:**
+
 1. Construct a real view, repeat layout/attachment/start with unchanged inputs, and verify glyph-image identity is retained.
 2. Resize only window bounds: grid/frame buffer updates while glyph images remain reusable.
 3. Change character width and height independently, palette colors, and a glyph pool containing an additional scalar: images rebuild and the new scalar is available.
@@ -105,6 +106,7 @@ flowchart TB
 **Approach:** Apply KTD2 using the existing playback state and desktop-controller fixture. Audit every `reconcilePlayback` caller and the termination path. Update synchronous launch assertions to distinguish menu-ready from playback-ready, using the existing `eventually`/run-loop helpers instead of arbitrary sleeps. Keep menu Start semantics unless measurement proves a separate change necessary.
 
 **Test scenarios:**
+
 1. Immediately after launch returns, the status item/menu exists and no playback windows or black-desktop acquisition have occurred; draining queued work starts one coordinated session.
 2. Stop before queued startup runs, then drain it: no windows, registration, or black-desktop acquisition occurs.
 3. Quit before queued startup runs, then drain it: no windows or desktop reacquisition occurs and observers remain removed.
@@ -123,6 +125,7 @@ flowchart TB
 **Approach:** Apply KTD3 at `startNativeRenderer` registration. Keep ordinary callers source-compatible and the wallpaper opt-in explicit. Preserve excluded-participant handling and timeline shifting. Document that the delay is initial-start-only.
 
 **Test scenarios:**
+
 1. Default registration still resolves one second after readiness; wallpaper registration uses the shorter session delay.
 2. Multiple participants get no start before the expected group is ready, then receive identical start/content timestamps.
 3. Registration-timeout fallback uses the selected initial delay; exclusion/unregistration still allows the remaining group to resolve correctly.

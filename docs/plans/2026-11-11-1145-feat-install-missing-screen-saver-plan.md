@@ -62,15 +62,15 @@ These are proposed defaults where the request did not specify behavior:
 
 ### Acceptance Examples
 
-| ID | Situation | Expected result |
-|---|---|---|
-| AE1 | Delete the saver in System Settings, then open the Matrix menu | Install action replaces sync; no checkmark (R1, R4). |
-| AE2 | Open Settings while no saver exists | One compact banner appears above the settings tabs (R3). |
-| AE3 | Install from either surface | Both controls become busy; wallpaper keeps running; verified completion hides the banner (R5–R7). |
-| AE4 | Disable sync, delete, then reinstall the saver | Sync returns unchecked and all rendering settings remain intact (R2, R8). |
-| AE5 | Another process installs the saver before the user clicks Install | Recheck presence and refresh the UI without replacing that installation (R4, R8). |
-| AE6 | Copy, validation, permissions, or registration fails | No partial installation is presented as success; error allows retry and preserves prior state (R7, R8). |
-| AE7 | Saver exists under a renamed bundle or in the system directory | Existing discovery semantics continue to expose Sync (R2). |
+| ID  | Situation                                                         | Expected result                                                                                         |
+| --- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| AE1 | Delete the saver in System Settings, then open the Matrix menu    | Install action replaces sync; no checkmark (R1, R4).                                                    |
+| AE2 | Open Settings while no saver exists                               | One compact banner appears above the settings tabs (R3).                                                |
+| AE3 | Install from either surface                                       | Both controls become busy; wallpaper keeps running; verified completion hides the banner (R5–R7).       |
+| AE4 | Disable sync, delete, then reinstall the saver                    | Sync returns unchecked and all rendering settings remain intact (R2, R8).                               |
+| AE5 | Another process installs the saver before the user clicks Install | Recheck presence and refresh the UI without replacing that installation (R4, R8).                       |
+| AE6 | Copy, validation, permissions, or registration fails              | No partial installation is presented as success; error allows retry and preserves prior state (R7, R8). |
+| AE7 | Saver exists under a renamed bundle or in the system directory    | Existing discovery semantics continue to expose Sync (R2).                                              |
 
 ---
 
@@ -114,11 +114,11 @@ flowchart TD
     State --> Settings
 ```
 
-| State | Menu | Settings banner | Transition |
-|---|---|---|---|
-| Installed | Sync toggle with saved checkmark | Hidden | Refresh finds removal → missing |
-| Missing | Install Screen Saver, unchecked | Message and enabled install button | Click and recheck → installing, or installed if already restored |
-| Installing | Installing Screen Saver…, disabled | Busy text and disabled button | Verified completion → installed; failure → refreshed presence plus error |
+| State      | Menu                               | Settings banner                    | Transition                                                               |
+| ---------- | ---------------------------------- | ---------------------------------- | ------------------------------------------------------------------------ |
+| Installed  | Sync toggle with saved checkmark   | Hidden                             | Refresh finds removal → missing                                          |
+| Missing    | Install Screen Saver, unchecked    | Message and enabled install button | Click and recheck → installing, or installed if already restored         |
+| Installing | Installing Screen Saver…, disabled | Busy text and disabled button      | Verified completion → installed; failure → refreshed presence plus error |
 
 Failure is a result reported to the user, not a persistent fourth presence state.
 An error should be presented as a sheet on an open settings window, or an ordinary app alert from the menu; do not force Settings open.
@@ -271,18 +271,18 @@ Use an isolated account or VM for deletion and managed-installation checks; do n
 
 These checks are planned, not executed by this planning task.
 
-| Check | Scope | Required evidence |
-|---|---|---|
-| `python3 Tests/Installation/lifecycle_test.py` | U1 | Restoration, ownership, locking, collision handling, rollback, and cleanup pass in isolated HOME. |
-| `python3 Tests/Signing/signing_test.py` | U2 | Updated release sequence and failure propagation pass with stubbed Apple tools. |
-| `./build.sh` and `./build-wallpaper.sh` | U2–U4 | Both native products compile; packaged payload matches the app. |
-| `./tests.sh` | Shared saver/options code | Existing saver tests pass. |
-| `./wallpaper-tests.sh` | U3–U4 | Presence transitions, actions, banner, preference preservation, and existing wallpaper tests pass. |
-| `./wallpaper-install-tests.sh` | U1–U2 | Existing pair installation and recovery packaging remain compatible. |
-| `ruby Tests/Homebrew/cask_lifecycle_test.rb` and `python3 Tests/Homebrew/release_metadata_test.py` | U1–U2 | Cask lifecycle and archive/build-order expectations remain compatible. |
-| `bash Tests/Homebrew/integration_lifecycle.sh` | U1–U2 | Isolated real Homebrew restore followed by upgrade/uninstall preserves owner/path and artifact lifecycle on supported ARM64 macOS. |
-| Manual AppKit walkthrough | U3–U5 | Both entry points, focus refresh, errors, accessibility, and small-display layout behave as specified. |
-| Signed release-artifact check in isolated macOS | U2, U5 | Remove download folder, delete installed saver, disconnect network, restore from installed app, and run saver successfully; app and saver validation remain intact. |
+| Check                                                                                              | Scope                     | Required evidence                                                                                                                                                   |
+| -------------------------------------------------------------------------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `python3 Tests/Installation/lifecycle_test.py`                                                     | U1                        | Restoration, ownership, locking, collision handling, rollback, and cleanup pass in isolated HOME.                                                                   |
+| `python3 Tests/Signing/signing_test.py`                                                            | U2                        | Updated release sequence and failure propagation pass with stubbed Apple tools.                                                                                     |
+| `./build.sh` and `./build-wallpaper.sh`                                                            | U2–U4                     | Both native products compile; packaged payload matches the app.                                                                                                     |
+| `./tests.sh`                                                                                       | Shared saver/options code | Existing saver tests pass.                                                                                                                                          |
+| `./wallpaper-tests.sh`                                                                             | U3–U4                     | Presence transitions, actions, banner, preference preservation, and existing wallpaper tests pass.                                                                  |
+| `./wallpaper-install-tests.sh`                                                                     | U1–U2                     | Existing pair installation and recovery packaging remain compatible.                                                                                                |
+| `ruby Tests/Homebrew/cask_lifecycle_test.rb` and `python3 Tests/Homebrew/release_metadata_test.py` | U1–U2                     | Cask lifecycle and archive/build-order expectations remain compatible.                                                                                              |
+| `bash Tests/Homebrew/integration_lifecycle.sh`                                                     | U1–U2                     | Isolated real Homebrew restore followed by upgrade/uninstall preserves owner/path and artifact lifecycle on supported ARM64 macOS.                                  |
+| Manual AppKit walkthrough                                                                          | U3–U5                     | Both entry points, focus refresh, errors, accessibility, and small-display layout behave as specified.                                                              |
+| Signed release-artifact check in isolated macOS                                                    | U2, U5                    | Remove download folder, delete installed saver, disconnect network, restore from installed app, and run saver successfully; app and saver validation remain intact. |
 
 For manual coverage, test sync initially on and off, wallpaper playing/paused/stopped, removal through System Settings, external reinstallation, and failure followed by retry.
 Do not trigger a release workflow merely to perform local verification. Coordinate real Developer ID/notarization verification within an explicitly authorized release or signing session.

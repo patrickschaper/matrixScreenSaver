@@ -58,7 +58,10 @@ struct NeoMessageScene {
     /// The number scene anchors its start after this duration.
     private(set) var scheduledDuration: TimeInterval = 60.0
 
-    mutating func reset(startTime: TimeInterval, seed: UInt64, lines: [String] = Self.defaultLines, speedFactor: Double = 1.0) {
+    mutating func reset(
+        startTime: TimeInterval, seed: UInt64, lines: [String] = Self.defaultLines,
+        speedFactor: Double = 1.0
+    ) {
         self.startTime = startTime
         self.lines = lines.isEmpty ? Self.defaultLines : lines
         var rng = Xorshift64(seed: seed)
@@ -76,19 +79,21 @@ struct NeoMessageScene {
             let lineStart = t
             let typingEnd = t + (chars.last ?? 0)
             // pauseDuration min (2 s) > blankDuration max (1.5 s) — guaranteed by range choice.
-            let pauseDuration = isLast
+            let pauseDuration =
+                isLast
                 ? Double.random(in: 3...5, using: &rng)
                 : Double.random(in: 2...4, using: &rng)
             let blankDuration = isLast ? 0.0 : Double.random(in: 0.5...1.5, using: &rng)
             let pauseEnd = typingEnd + pauseDuration
             let blankEnd = pauseEnd + blankDuration
-            schedule.append(LineSchedule(
-                charTimings: chars,
-                lineStart: lineStart,
-                typingEnd: typingEnd,
-                pauseEnd: pauseEnd,
-                blankEnd: blankEnd
-            ))
+            schedule.append(
+                LineSchedule(
+                    charTimings: chars,
+                    lineStart: lineStart,
+                    typingEnd: typingEnd,
+                    pauseEnd: pauseEnd,
+                    blankEnd: blankEnd
+                ))
             t = blankEnd
         }
 
@@ -156,9 +161,11 @@ struct NeoMessageScene {
     var renderState: NeoMessageRenderState {
         switch phase {
         case .blankBetweenLines:
-            return NeoMessageRenderState(currentLine: nil, visibleCharCount: 0, cursorVisible: cursorVisible)
+            return NeoMessageRenderState(
+                currentLine: nil, visibleCharCount: 0, cursorVisible: cursorVisible)
         case .done:
-            return NeoMessageRenderState(currentLine: nil, visibleCharCount: 0, cursorVisible: false)
+            return NeoMessageRenderState(
+                currentLine: nil, visibleCharCount: 0, cursorVisible: false)
         case .typing, .pauseAfterLine:
             return NeoMessageRenderState(
                 currentLine: lines[lineIndex],

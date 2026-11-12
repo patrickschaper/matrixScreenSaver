@@ -6,6 +6,7 @@ artifact_contract: ce-unified-plan/v1
 product_contract_source: ce-plan-bootstrap
 execution: code
 ---
+
 # Restore Desktop Wallpaper - Plan
 
 ## Goal Capsule
@@ -76,13 +77,14 @@ flowchart TD
 **Approach:** Implement KTD1, KTD3, and KTD4, generate a tiny black PNG in Application Support, and expose begin/restore operations.
 **Patterns:** Injectable system operations in `Sources/MatrixWallpaper/LoginItemController.swift`; AppKit checks in the wallpaper test harness.
 **Test scenarios:**
+
 - Two displays with different URLs and options round-trip through black and back.
 - A fresh controller recovers the on-disk backup after simulated process loss.
 - Repeated begin calls while the app-owned black image remains selected preserve the first backup.
 - Disconnected displays and failed writes retain recoverable originals.
 - Corrupt or unwritable backup storage prevents wallpaper mutation.
 - A user-selected replacement survives rebuilds and Stop; a later Start/Stop restores that replacement even if an older restore entry remains.
-**Verification:** Tests exercise real file persistence with fake desktop operations and inspect the generated PNG.
+  **Verification:** Tests exercise real file persistence with fake desktop operations and inspect the generated PNG.
 
 ### U2. App lifecycle and documentation
 
@@ -90,10 +92,11 @@ flowchart TD
 **Files:** `Sources/MatrixWallpaper/WallpaperApp.swift`, `Tests/MatrixWallpaperTests/WallpaperAppTests.swift`, `Tests/MatrixWallpaperTests/LoginItemTests.swift`, `README.md`.
 **Approach:** Implement KTD2; restore stale backups on launch, apply black when playback starts, and restore on Stop/Quit and stopped display reconnection. Report errors through the native app and retain backups.
 **Test scenarios:**
+
 - Launch and Start apply black; Stop and Quit restore.
 - Sleep/wake, screen-saver suspension, and options/display reconstruction preserve ownership.
 - Existing menu and login tests use isolated wallpaper operations.
-**Verification:** Existing app lifecycle assertions plus wallpaper state assertions pass; the app and saver build successfully.
+  **Verification:** Existing app lifecycle assertions plus wallpaper state assertions pass; the app and saver build successfully.
 
 ## Verification Contract
 
