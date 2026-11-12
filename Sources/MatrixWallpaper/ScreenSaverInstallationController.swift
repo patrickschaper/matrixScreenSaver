@@ -35,19 +35,25 @@ final class ScreenSaverInstallationController {
     ///   - appURL: App whose packaged saver and lifecycle registration are used.
     ///   - recordURL: Managed installation record; `nil` disables record discovery in tests.
     ///   - operation: Optional replacement for the real asynchronous installer.
-    init(directories: [URL] = [
-            FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Screen Savers"),
-            URL(fileURLWithPath: "/Library/Screen Savers")],
-         appURL: URL = Bundle.main.bundleURL,
-         recordURL: URL? = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/MatrixWallpaper/Installation/installation.plist"),
-         operation: InstallOperation? = nil) {
+    init(
+        directories: [URL] = [
+            FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(
+                "Library/Screen Savers"),
+            URL(fileURLWithPath: "/Library/Screen Savers"),
+        ],
+        appURL: URL = Bundle.main.bundleURL,
+        recordURL: URL? = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(
+                "Library/Application Support/MatrixWallpaper/Installation/installation.plist"),
+        operation: InstallOperation? = nil
+    ) {
         self.directories = directories
         self.appURL = appURL
         self.recordURL = recordURL
-        self.operation = operation ?? { completion in
-            Self.runLifecycle(action: "install-saver", appURL: appURL, completion: completion)
-        }
+        self.operation =
+            operation ?? { completion in
+                Self.runLifecycle(action: "install-saver", appURL: appURL, completion: completion)
+            }
         refresh()
     }
 
@@ -55,7 +61,8 @@ final class ScreenSaverInstallationController {
     func refresh() {
         guard state != .installing else { return }
         var candidates = directories.flatMap {
-            (try? FileManager.default.contentsOfDirectory(at: $0, includingPropertiesForKeys: nil)) ?? []
+            (try? FileManager.default.contentsOfDirectory(at: $0, includingPropertiesForKeys: nil))
+                ?? []
         }
         if let recordedSaver { candidates.append(recordedSaver) }
         state = candidates.contains(where: Self.isInstalledSaver) ? .installed : .missing
@@ -70,7 +77,10 @@ final class ScreenSaverInstallationController {
     func install(completion: @escaping (Result<Void, Error>) -> Void) {
         guard state != .installing else { return }
         refresh()
-        guard state == .missing else { completion(.success(())); return }
+        guard state == .missing else {
+            completion(.success(()))
+            return
+        }
         state = .installing
         onChange?()
         operation { [weak self] result in
@@ -79,7 +89,11 @@ final class ScreenSaverInstallationController {
                 self.state = .missing
                 self.refresh()
                 if case .success = result, self.state != .installed {
-                    completion(.failure(Self.failure("The screen saver could not be found after installation. Try again.")))
+                    completion(
+                        .failure(
+                            Self.failure(
+                                "The screen saver could not be found after installation. Try again."
+                            )))
                 } else {
                     completion(result)
                 }
@@ -90,16 +104,18 @@ final class ScreenSaverInstallationController {
     /// Returns only this app's canonical, recognized managed destination.
     private var recordedSaver: URL? {
         guard let recordURL, recordURL.standardizedFileURL == recordURL.resolvingSymlinksInPath(),
-              let record = Self.metadata(at: recordURL),
-              let app = record["app"] as? String, let saver = record["saver"] as? String,
-              let owner = record["owner"] as? String, ["local", "homebrew"].contains(owner),
-              app.hasPrefix("/"), saver.hasPrefix("/"),
-              URL(fileURLWithPath: app).standardizedFileURL == appURL.standardizedFileURL,
-              URL(fileURLWithPath: app).lastPathComponent == "Matrix Wallpaper.app" else { return nil }
+            let record = Self.metadata(at: recordURL),
+            let app = record["app"] as? String, let saver = record["saver"] as? String,
+            let owner = record["owner"] as? String, ["local", "homebrew"].contains(owner),
+            app.hasPrefix("/"), saver.hasPrefix("/"),
+            URL(fileURLWithPath: app).standardizedFileURL == appURL.standardizedFileURL,
+            URL(fileURLWithPath: app).lastPathComponent == "Matrix Wallpaper.app"
+        else { return nil }
         let destination = URL(fileURLWithPath: saver)
         guard destination.lastPathComponent == "MatrixScreenSaver.saver",
-              destination.path == destination.standardizedFileURL.path,
-              destination.standardizedFileURL == destination.resolvingSymlinksInPath() else { return nil }
+            destination.path == destination.standardizedFileURL.path,
+            destination.standardizedFileURL == destination.resolvingSymlinksInPath()
+        else { return nil }
         return destination
     }
 
@@ -107,7 +123,8 @@ final class ScreenSaverInstallationController {
     /// - Returns: A dictionary for valid plist files, otherwise `nil`.
     private static func metadata(at url: URL) -> [String: Any]? {
         guard let data = try? Data(contentsOf: url) else { return nil }
-        return (try? PropertyListSerialization.propertyList(from: data, format: nil)) as? [String: Any]
+        return (try? PropertyListSerialization.propertyList(from: data, format: nil))
+            as? [String: Any]
     }
 
     /// Recognizes installed bundles while excluding only a transaction's known incomplete output.
@@ -117,20 +134,24 @@ final class ScreenSaverInstallationController {
     /// - Returns: Whether the bundle is available for synchronization.
     private static func isInstalledSaver(_ url: URL) -> Bool {
         guard url.pathExtension.lowercased() == "saver",
-              metadata(at: url.appendingPathComponent("Contents/Info.plist"))?["CFBundleIdentifier"] as? String ==
-                "dev.patsch.MatrixScreenSaver" else { return false }
-        guard let marker = try? String(contentsOfFile: url.path + ".installing", encoding: .utf8)
+            metadata(at: url.appendingPathComponent("Contents/Info.plist"))?["CFBundleIdentifier"]
+                as? String == "dev.patsch.MatrixScreenSaver"
+        else { return false }
+        guard
+            let marker = try? String(contentsOfFile: url.path + ".installing", encoding: .utf8)
                 .trimmingCharacters(in: .whitespacesAndNewlines),
-              let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
-              let device = attributes[.systemNumber] as? NSNumber,
-              let inode = attributes[.systemFileNumber] as? NSNumber else { return true }
+            let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
+            let device = attributes[.systemNumber] as? NSNumber,
+            let inode = attributes[.systemFileNumber] as? NSNumber
+        else { return true }
         return marker != "\(device):\(inode)"
     }
 
     /// Creates a user-facing failure shared by subprocess and verification errors.
     private static func failure(_ message: String) -> NSError {
-        NSError(domain: "MatrixScreenSaverInstallation", code: 1,
-                userInfo: [NSLocalizedDescriptionKey: message])
+        NSError(
+            domain: "MatrixScreenSaverInstallation", code: 1,
+            userInfo: [NSLocalizedDescriptionKey: message])
     }
 
     /// Runs recovery or cleanup activation off the UI thread, draining output without pipe deadlock.
@@ -140,13 +161,18 @@ final class ScreenSaverInstallationController {
     ///   - action: `install-saver` restores the saver; `activate` starts existing managed cleanup.
     ///   - appURL: App containing the signed recovery resources.
     ///   - completion: Receives process success or a bounded diagnostic on the worker queue.
-    static func runLifecycle(action: String, appURL: URL, completion: @escaping (Result<Void, Error>) -> Void) {
+    static func runLifecycle(
+        action: String, appURL: URL, completion: @escaping (Result<Void, Error>) -> Void
+    ) {
         DispatchQueue.global(qos: .userInitiated).async {
             let process = Process()
             let pipe = Pipe()
             process.executableURL = URL(fileURLWithPath: "/bin/bash")
-            process.arguments = [appURL.appendingPathComponent("Contents/Resources/ScreenSaver/product-lifecycle.sh").path,
-                                 action, appURL.path]
+            process.arguments = [
+                appURL.appendingPathComponent("Contents/Resources/ScreenSaver/product-lifecycle.sh")
+                    .path,
+                action, appURL.path,
+            ]
             process.standardOutput = pipe
             process.standardError = pipe
             do {
@@ -163,8 +189,13 @@ final class ScreenSaverInstallationController {
                 if process.terminationStatus == 0 {
                     completion(.success(()))
                 } else {
-                    let message = String(decoding: output, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
-                    completion(.failure(failure(message.isEmpty ? "Could not complete \(action). Try again." : message)))
+                    let message = String(decoding: output, as: UTF8.self).trimmingCharacters(
+                        in: .whitespacesAndNewlines)
+                    completion(
+                        .failure(
+                            failure(
+                                message.isEmpty
+                                    ? "Could not complete \(action). Try again." : message)))
                 }
             } catch { completion(.failure(error)) }
         }

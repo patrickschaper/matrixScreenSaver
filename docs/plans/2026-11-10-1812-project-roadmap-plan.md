@@ -1,4 +1,5 @@
 # Matrix Screen Saver and Wallpaper — Project Roadmap
+
 Created: 2026-11-10
 
 This roadmap records future work for the native macOS screen saver and animated wallpaper. It does not authorize implementation or set release dates. Feature-specific implementation plans remain in this directory.
@@ -13,7 +14,7 @@ This roadmap records future work for the native macOS screen saver and animated 
 
 ### Goal
 
-Render the scene from *The Matrix* in which three Agents stand in a hallway aiming their guns toward the camera. Use the project's own animated falling glyphs as textures across the walls and throughout the scene, rather than relying on a prerecorded video or baked-in code texture.
+Render the scene from _The Matrix_ in which three Agents stand in a hallway aiming their guns toward the camera. Use the project's own animated falling glyphs as textures across the walls and throughout the scene, rather than relying on a prerecorded video or baked-in code texture.
 
 The goal is a real 3D scene with depth and perspective, available in both the screen saver and animated wallpaper. Keep the existing 2D rain available.
 

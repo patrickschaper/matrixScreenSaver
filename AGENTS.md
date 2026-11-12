@@ -25,48 +25,48 @@ This repository is hosted on GitHub. When relevant, assume GitHub-native feature
 
 ### Source — `Sources/MatrixScreenSaver/`
 
-| File | Purpose |
-|---|---|
-| `MatrixScreenSaverView.swift` | Main `.saver` view — drawing, lifecycle, layout, options wiring |
-| `NativeMatrixRenderer.swift` | Core in-process Matrix animation engine |
-| `MatrixScreenSaverOptions.swift` | Persisted options model and native **Options…** configure sheet |
-| `MatrixRendererLimits.swift` | Shared numeric clamps/limits (Foundation-only, no AppKit/ScreenSaver dependency) |
-| `NeoMessageScene.swift` | "Neo" intro message state machine |
-| `CmdCaptureScene.swift` | Runs a command in the background, captures its stdout, and reveals it before the trace program |
-| `Xorshift64.swift` | Deterministic 64-bit RNG |
-| `TerminalSupport.swift` | Shared terminal-like types: `TerminalSize`, `TerminalColor` |
+| File                             | Purpose                                                                                        |
+| -------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `MatrixScreenSaverView.swift`    | Main `.saver` view — drawing, lifecycle, layout, options wiring                                |
+| `NativeMatrixRenderer.swift`     | Core in-process Matrix animation engine                                                        |
+| `MatrixScreenSaverOptions.swift` | Persisted options model and native **Options…** configure sheet                                |
+| `MatrixRendererLimits.swift`     | Shared numeric clamps/limits (Foundation-only, no AppKit/ScreenSaver dependency)               |
+| `NeoMessageScene.swift`          | "Neo" intro message state machine                                                              |
+| `CmdCaptureScene.swift`          | Runs a command in the background, captures its stdout, and reveals it before the trace program |
+| `Xorshift64.swift`               | Deterministic 64-bit RNG                                                                       |
+| `TerminalSupport.swift`          | Shared terminal-like types: `TerminalSize`, `TerminalColor`                                    |
 
 ### Tools
 
-| File | Purpose |
-|---|---|
+| File                      | Purpose                                               |
+| ------------------------- | ----------------------------------------------------- |
 | `Tools/PreviewHost.swift` | Standalone preview window host used by `./preview.sh` |
 
 ### Tests — `Tests/MatrixScreenSaverTests/`
 
-| File | Purpose |
-|---|---|
-| `main.swift` | TAP harness entry point — `ok()` helper, orchestrates test files, prints plan |
-| `Xorshift64Tests.swift` | Tests for `Xorshift64` RNG determinism |
-| `CmdCaptureSceneTests.swift` | Tests for `CmdCaptureScene` phases and `NeoMessageScene` name templating |
-| `NativeMatrixRendererTests.swift` | Tests for renderer `seedOffset` default and per-display divergence |
+| File                              | Purpose                                                                       |
+| --------------------------------- | ----------------------------------------------------------------------------- |
+| `main.swift`                      | TAP harness entry point — `ok()` helper, orchestrates test files, prints plan |
+| `Xorshift64Tests.swift`           | Tests for `Xorshift64` RNG determinism                                        |
+| `CmdCaptureSceneTests.swift`      | Tests for `CmdCaptureScene` phases and `NeoMessageScene` name templating      |
+| `NativeMatrixRendererTests.swift` | Tests for renderer `seedOffset` default and per-display divergence            |
 
 ### Scripts
 
-| Script | Purpose |
-|---|---|
-| `build.sh` | Builds `build/MatrixScreenSaver.saver` via `swiftc` |
-| `tests.sh` | Compiles and runs the TAP test suite via `swiftc` (no Xcode required) |
-| `install.sh` | Builds and installs to `~/Library/Screen Savers/`, kills `ScreenSaverEngine` |
-| `preview.sh` | Builds and launches the saver in the preview host for fast iteration |
-| `Scripts/install-saver.sh` | Shared installer (strips quarantine, copies with `ditto`, verifies hash) |
+| Script                     | Purpose                                                                      |
+| -------------------------- | ---------------------------------------------------------------------------- |
+| `build.sh`                 | Builds `build/MatrixScreenSaver.saver` via `swiftc`                          |
+| `tests.sh`                 | Compiles and runs the TAP test suite via `swiftc` (no Xcode required)        |
+| `install.sh`               | Builds and installs to `~/Library/Screen Savers/`, kills `ScreenSaverEngine` |
+| `preview.sh`               | Builds and launches the saver in the preview host for fast iteration         |
+| `Scripts/install-saver.sh` | Shared installer (strips quarantine, copies with `ditto`, verifies hash)     |
 
 ### CI — `.github/workflows/`
 
-| Workflow | Trigger | Purpose |
-|---|---|---|
-| `tests.yml` | Push to `development`/`feat/**`/`fix/**`; PRs to `development` or `main` | Runs `./tests.sh` on `macos-latest` |
-| `release.yml` | `workflow_dispatch` on `main`; push to `main` when `VERSION` changes | Bumps version, updates changelog, opens release PR; on merge publishes GitHub Release |
+| Workflow      | Trigger                                                                  | Purpose                                                                               |
+| ------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------- |
+| `tests.yml`   | Push to `development`/`feat/**`/`fix/**`; PRs to `development` or `main` | Runs `./tests.sh` on `macos-latest`                                                   |
+| `release.yml` | `workflow_dispatch` on `main`; push to `main` when `VERSION` changes     | Bumps version, updates changelog, opens release PR; on merge publishes GitHub Release |
 
 ### Resources
 
@@ -92,6 +92,7 @@ Outputs `build/MatrixScreenSaver.saver`. Reads `VERSION`, compiles with `-O -par
 Compiles a test binary with `swiftc` and runs it. Emits **TAP** (Test Anything Protocol) output — `ok N - description` / `not ok N - description` lines, then a `1..N` plan. Exits non-zero on failure. Command Line Tools only; no Xcode required.
 
 Tests cover:
+
 - `Xorshift64` — same seed → same sequence; different seeds → different sequences
 - `NativeMatrixRenderer` — `seedOffset` defaults to `0`; two renderers with different `seedOffset` values diverge after 60 frames
 
@@ -136,7 +137,7 @@ class MatrixColumn {
 - Include a `- Parameters:` block whenever a function takes non-obvious arguments.
 - Include `- Returns:` and `- Throws:` blocks where applicable.
 - Use `// MARK: -` to separate logical sections within a file.
-- Do not comment self-evident code; focus comments on *why*, not *what*.
+- Do not comment self-evident code; focus comments on _why_, not _what_.
 
 ## Implementation notes
 

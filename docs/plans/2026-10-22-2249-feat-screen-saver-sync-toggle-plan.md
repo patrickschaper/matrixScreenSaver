@@ -95,6 +95,7 @@ flowchart TD
 **Files:** `Sources/MatrixWallpaper/WallpaperApp.swift`; `Tests/MatrixWallpaperTests/WallpaperAppTests.swift`; `Tests/MatrixWallpaperTests/LoginItemTests.swift` if shared test support needs adjustment.
 
 **Approach:**
+
 1. Add the preference, menu item, and bounded installed-bundle detection per KTD2–KTD3.
 2. Persist toggle actions and refresh native menu state. Keep preference storage separate from `MatrixScreenSaverOptions`.
 3. Use temporary bundle fixtures and an isolated defaults suite in tests; do not alter the user's installed saver or login registration.
@@ -102,6 +103,7 @@ flowchart TD
 **Patterns:** Existing `LoginItemController` dependency injection and native menu-action tests.
 
 **Test scenarios:**
+
 1. Covers AE1: No stored value produces a checked item; an explicit false value survives constructing another host with the same test store.
 2. Covers AE4: User/local installation fixtures show the item; removing both hides it; reinstalling retains the saved false value.
 3. Renamed and symlinked matching bundles are found; wrong identifiers, malformed metadata, and missing directories are ignored.
@@ -118,11 +120,13 @@ flowchart TD
 **Files:** `Sources/MatrixWallpaper/WallpaperApp.swift`; `Tests/MatrixWallpaperTests/WallpaperAppTests.swift`; existing regression coverage in `Tests/MatrixWallpaperTests/ConsumerHost.swift`; `README.md`.
 
 **Approach:**
+
 1. Apply KTD1 at the shared request entry point and toggle action, retaining existing display validation and suspension checks.
 2. Extend host tests through real menu actions and frame discovery, using the existing bounded run-loop helpers.
 3. Document the default, persistence, conditional visibility, and independent-playback behavior in the README.
 
 **Test scenarios:**
+
 1. Covers AE2: With sync off, repeated requests produce no frames and do not wake hidden wallpaper rendering.
 2. Covers AE3: Disable an active producer, confirm its offer disappears and no subsequent request recreates it; the existing consumer-host regression proves native fallback.
 3. Re-enable and request again; fresh frames return from the same wallpaper views without an animation restart.

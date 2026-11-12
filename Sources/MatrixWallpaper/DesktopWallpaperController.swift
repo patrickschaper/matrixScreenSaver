@@ -36,11 +36,17 @@ final class DesktopWallpaperController {
     ///   - screens: Connected display UUIDs, stable across process launches.
     ///   - readImage: Current image and options for one connected display.
     ///   - setImage: Applies settings to a connected display, throwing on failure.
-    init(directory: URL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+    init(
+        directory: URL = FileManager.default.urls(
+            for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("MatrixWallpaper/DesktopWallpaper"),
-         screens: @escaping () -> [String] = { Array(DesktopWallpaperController.systemScreens().keys) },
-         readImage: @escaping (String) -> Image? = DesktopWallpaperController.systemImage,
-         setImage: @escaping (Image, String) throws -> Void = DesktopWallpaperController.setSystemImage) {
+        screens: @escaping () -> [String] = {
+            Array(DesktopWallpaperController.systemScreens().keys)
+        },
+        readImage: @escaping (String) -> Image? = DesktopWallpaperController.systemImage,
+        setImage: @escaping (Image, String) throws -> Void = DesktopWallpaperController
+            .setSystemImage
+    ) {
         self.directory = directory
         self.screens = screens
         self.readImage = readImage
@@ -58,15 +64,18 @@ final class DesktopWallpaperController {
         for id in screens() where originals[id] == nil || originals[id]?.restorePending == true {
             do {
                 guard let image = readImage(id), image.url.isFileURL,
-                      image.url != blackImageURL || originals[id]?.restorePending == true else {
+                    image.url != blackImageURL || originals[id]?.restorePending == true
+                else {
                     throw Self.error("Could not save the original wallpaper for display \(id).")
                 }
                 let saved: SavedImage
                 if image.url == blackImageURL, let pending = originals[id] {
                     saved = SavedImage(url: pending.url, options: pending.options)
                 } else {
-                    let options = Dictionary(uniqueKeysWithValues: image.options.map { ($0.key.rawValue, $0.value) })
-                    let archive = try NSKeyedArchiver.archivedData(withRootObject: options, requiringSecureCoding: true)
+                    let options = Dictionary(
+                        uniqueKeysWithValues: image.options.map { ($0.key.rawValue, $0.value) })
+                    let archive = try NSKeyedArchiver.archivedData(
+                        withRootObject: options, requiringSecureCoding: true)
                     // Validate restoration before committing to replace the user's desktop.
                     _ = try decodeOptions(archive)
                     saved = SavedImage(url: image.url, options: archive)
@@ -75,7 +84,11 @@ final class DesktopWallpaperController {
                 updated[id] = saved
                 try save(updated)
                 originals = updated
-                try setImage(Image(url: blackImageURL, options: [.imageScaling: NSImageScaling.scaleAxesIndependently.rawValue]), id)
+                try setImage(
+                    Image(
+                        url: blackImageURL,
+                        options: [.imageScaling: NSImageScaling.scaleAxesIndependently.rawValue]),
+                    id)
             } catch { failure = failure ?? error }
         }
         if let failure { throw failure }
@@ -92,7 +105,8 @@ final class DesktopWallpaperController {
             guard let saved = originals[id] else { continue }
             do {
                 guard let current = readImage(id) else {
-                    throw Self.error("Could not read the wallpaper for display \(id); its backup was kept.")
+                    throw Self.error(
+                        "Could not read the wallpaper for display \(id); its backup was kept.")
                 }
                 if current.url == blackImageURL || current.url == saved.url {
                     var pending = saved
@@ -101,9 +115,12 @@ final class DesktopWallpaperController {
                     updated[id] = pending
                     try save(updated)
                     originals = updated
-                    try setImage(Image(url: saved.url, options: try decodeOptions(saved.options)), id)
+                    try setImage(
+                        Image(url: saved.url, options: try decodeOptions(saved.options)), id)
                     // A successful setter only accepts the request; reads can still report black.
-                    guard let observed = readImage(id), observed.url != blackImageURL else { continue }
+                    guard let observed = readImage(id), observed.url != blackImageURL else {
+                        continue
+                    }
                 }
                 var updated = originals
                 updated.removeValue(forKey: id)
@@ -116,7 +133,8 @@ final class DesktopWallpaperController {
 
     private func load() throws -> [String: SavedImage] {
         guard FileManager.default.fileExists(atPath: backupURL.path) else { return [:] }
-        return try PropertyListDecoder().decode([String: SavedImage].self, from: Data(contentsOf: backupURL))
+        return try PropertyListDecoder().decode(
+            [String: SavedImage].self, from: Data(contentsOf: backupURL))
     }
 
     private func save(_ originals: [String: SavedImage]) throws {
@@ -124,19 +142,28 @@ final class DesktopWallpaperController {
     }
 
     private func decodeOptions(_ data: Data) throws -> [NSWorkspace.DesktopImageOptionKey: Any] {
-        guard let options = try NSKeyedUnarchiver.unarchivedObject(
-            ofClasses: [NSDictionary.self, NSString.self, NSNumber.self, NSColor.self], from: data) as? [String: Any] else {
+        guard
+            let options = try NSKeyedUnarchiver.unarchivedObject(
+                ofClasses: [NSDictionary.self, NSString.self, NSNumber.self, NSColor.self],
+                from: data) as? [String: Any]
+        else {
             throw Self.error("The saved desktop-image options could not be read.")
         }
-        return Dictionary(uniqueKeysWithValues: options.map { (NSWorkspace.DesktopImageOptionKey(rawValue: $0.key), $0.value) })
+        return Dictionary(
+            uniqueKeysWithValues: options.map {
+                (NSWorkspace.DesktopImageOptionKey(rawValue: $0.key), $0.value)
+            })
     }
 
     private func prepareBlackImage() throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         guard !FileManager.default.fileExists(atPath: blackImageURL.path) else { return }
-        guard let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 1, pixelsHigh: 1,
-            bitsPerSample: 8, samplesPerPixel: 3, hasAlpha: false, isPlanar: false,
-            colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0) else {
+        guard
+            let bitmap = NSBitmapImageRep(
+                bitmapDataPlanes: nil, pixelsWide: 1, pixelsHigh: 1,
+                bitsPerSample: 8, samplesPerPixel: 3, hasAlpha: false, isPlanar: false,
+                colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)
+        else {
             throw Self.error("Could not create the black desktop image.")
         }
         bitmap.setColor(.black, atX: 0, y: 0)
@@ -147,15 +174,20 @@ final class DesktopWallpaperController {
     }
 
     private static func error(_ message: String) -> NSError {
-        NSError(domain: "MatrixWallpaper.DesktopWallpaper", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
+        NSError(
+            domain: "MatrixWallpaper.DesktopWallpaper", code: 1,
+            userInfo: [NSLocalizedDescriptionKey: message])
     }
 
     /// Resolves stable display UUIDs instead of persisting transient Core Graphics display IDs.
     static func systemScreens() -> [String: NSScreen] {
         var result: [String: NSScreen] = [:]
         for screen in NSScreen.screens {
-            guard let id = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? UInt32,
-                  let uuid = CGDisplayCreateUUIDFromDisplayID(id)?.takeRetainedValue() else { continue }
+            guard
+                let id = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")]
+                    as? UInt32,
+                let uuid = CGDisplayCreateUUIDFromDisplayID(id)?.takeRetainedValue()
+            else { continue }
             result[CFUUIDCreateString(nil, uuid) as String] = screen
         }
         return result
@@ -164,8 +196,10 @@ final class DesktopWallpaperController {
     /// Reads only the desktop settings exposed by AppKit for the current Space.
     /// - Returns: Image settings, or nil if the display or settings are unavailable.
     static func systemImage(_ id: String) -> Image? {
-        guard let screen = systemScreens()[id], let url = NSWorkspace.shared.desktopImageURL(for: screen),
-              let options = NSWorkspace.shared.desktopImageOptions(for: screen) else { return nil }
+        guard let screen = systemScreens()[id],
+            let url = NSWorkspace.shared.desktopImageURL(for: screen),
+            let options = NSWorkspace.shared.desktopImageOptions(for: screen)
+        else { return nil }
         // shortcut: AppKit exposes image settings only; exact dynamic/Space restoration needs a supported richer API.
         return Image(url: url, options: options)
     }
@@ -173,7 +207,9 @@ final class DesktopWallpaperController {
     /// Applies settings through the supported desktop-image API.
     /// - Throws: An unavailable-display error or the system's desktop-image error.
     static func setSystemImage(_ image: Image, _ id: String) throws {
-        guard let screen = systemScreens()[id] else { throw error("Display \(id) is no longer connected.") }
+        guard let screen = systemScreens()[id] else {
+            throw error("Display \(id) is no longer connected.")
+        }
         try NSWorkspace.shared.setDesktopImageURL(image.url, for: screen, options: image.options)
     }
 }

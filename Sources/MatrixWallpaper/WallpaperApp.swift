@@ -22,7 +22,9 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Persists user intent even while no saver is installed.
     private static let syncPreferenceKey = "syncWithScreenSaver"
     /// Offers synchronization when installed, or explicit recovery when the saver is missing.
-    private let syncItem = NSMenuItem(title: "Sync with Screen Saver", action: #selector(toggleScreenSaverSync(_:)), keyEquivalent: "")
+    private let syncItem = NSMenuItem(
+        title: "Sync with Screen Saver", action: #selector(toggleScreenSaverSync(_:)),
+        keyEquivalent: "")
 
     /// Creates the host with system login operations, or an isolated test controller.
     ///
@@ -32,15 +34,21 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     ///   - screenSaverDirectories: User and local installed-saver directories.
     ///   - desktopWallpaper: Durable desktop settings controller, isolated in tests.
     ///   - screenSaverInstallation: Optional isolated discovery and installation controller.
-    init(loginItems: LoginItemController = LoginItemController(), defaults: UserDefaults = .standard,
-         screenSaverDirectories: [URL] = [
-             FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Screen Savers"),
-             URL(fileURLWithPath: "/Library/Screen Savers")],
-         desktopWallpaper: DesktopWallpaperController = DesktopWallpaperController(),
-         screenSaverInstallation: ScreenSaverInstallationController? = nil) {
+    init(
+        loginItems: LoginItemController = LoginItemController(), defaults: UserDefaults = .standard,
+        screenSaverDirectories: [URL] = [
+            FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(
+                "Library/Screen Savers"),
+            URL(fileURLWithPath: "/Library/Screen Savers"),
+        ],
+        desktopWallpaper: DesktopWallpaperController = DesktopWallpaperController(),
+        screenSaverInstallation: ScreenSaverInstallationController? = nil
+    ) {
         self.loginItems = loginItems
         self.defaults = defaults
-        self.screenSaverInstallation = screenSaverInstallation ?? ScreenSaverInstallationController(directories: screenSaverDirectories)
+        self.screenSaverInstallation =
+            screenSaverInstallation
+            ?? ScreenSaverInstallationController(directories: screenSaverDirectories)
         self.desktopWallpaper = desktopWallpaper
         super.init()
         defaults.register(defaults: [Self.syncPreferenceKey: true])
@@ -60,10 +68,12 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var isTerminating = false
 
     /// Menu action whose label follows requested playback, not temporary suspension.
-    private let playbackItem = NSMenuItem(title: "Stop Wallpaper", action: #selector(togglePlayback(_:)), keyEquivalent: "")
+    private let playbackItem = NSMenuItem(
+        title: "Stop Wallpaper", action: #selector(togglePlayback(_:)), keyEquivalent: "")
 
     /// Manual pause remains available independently of temporary system suspension.
-    private let pauseItem = NSMenuItem(title: "Pause Animation", action: #selector(togglePause(_:)), keyEquivalent: "")
+    private let pauseItem = NSMenuItem(
+        title: "Pause Animation", action: #selector(togglePause(_:)), keyEquivalent: "")
 
     /// Retains native options UI independently of transient wallpaper views.
     private var optionsController: MatrixScreenSaverOptionsSheetController?
@@ -91,8 +101,9 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private var currentDisplayLayout: [DisplayLayout] {
         NSScreen.screens.map {
-            DisplayLayout(id: $0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? UInt32 ?? 0,
-                          frame: $0.frame, scale: $0.backingScaleFactor)
+            DisplayLayout(
+                id: $0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? UInt32 ?? 0,
+                frame: $0.frame, scale: $0.backingScaleFactor)
         }.sorted { $0.id < $1.id }
     }
 
@@ -101,7 +112,8 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         installEditingMenu()
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let url = Bundle.main.url(forResource: "MenuBarIcon", withExtension: "pdf"),
-           let image = NSImage(contentsOf: url) {
+            let image = NSImage(contentsOf: url)
+        {
             image.isTemplate = true
             item.button?.image = image
         } else {
@@ -117,14 +129,16 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(pauseItem)
         menu.addItem(playbackItem)
         menu.addItem(.separator())
-        let options = NSMenuItem(title: "Settings…", action: #selector(showOptions(_:)), keyEquivalent: ",")
+        let options = NSMenuItem(
+            title: "Settings…", action: #selector(showOptions(_:)), keyEquivalent: ",")
         options.target = self
         menu.addItem(options)
         syncItem.target = self
         menu.addItem(loginItems.item)
         menu.addItem(syncItem)
         menu.addItem(.separator())
-        let coffee = NSMenuItem(title: "Buy Me a Coffee", action: #selector(openDonationPage(_:)), keyEquivalent: "")
+        let coffee = NSMenuItem(
+            title: "Buy Me a Coffee", action: #selector(openDonationPage(_:)), keyEquivalent: "")
         coffee.image = Bundle.main.image(forResource: "BuyMeACoffee")
         coffee.image?.size = NSSize(width: 16, height: 16)
         coffee.image?.isTemplate = false
@@ -135,7 +149,9 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         coffee.target = self
         menu.addItem(coffee)
         menu.addItem(.separator())
-        let quit = NSMenuItem(title: "Quit Matrix Wallpaper", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        let quit = NSMenuItem(
+            title: "Quit Matrix Wallpaper", action: #selector(NSApplication.terminate(_:)),
+            keyEquivalent: "q")
         quit.target = NSApp
         menu.addItem(quit)
         item.menu = menu
@@ -143,15 +159,21 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menuWillOpen(menu)
 
         observeSystemState()
-        frameLeaseTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+        frameLeaseTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) {
+            [weak self] _ in
             guard let self else { return }
             let now = ProcessInfo.processInfo.systemUptime
-            let expired = self.frameRequests.filter { now - $0.value >= SharedWallpaperFrame.freshnessInterval }
+            let expired = self.frameRequests.filter {
+                now - $0.value >= SharedWallpaperFrame.freshnessInterval
+            }
             guard !expired.isEmpty else { return }
             for id in expired.keys { self.frameRequests.removeValue(forKey: id) }
             for window in self.windows {
-                guard let id = window.screen?.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? UInt32,
-                      expired[id] != nil else { continue }
+                guard
+                    let id = window.screen?.deviceDescription[
+                        NSDeviceDescriptionKey("NSScreenNumber")] as? UInt32,
+                    expired[id] != nil
+                else { continue }
                 (window.contentView as? MatrixScreenSaverView)?.stopSharingWallpaperFrames()
             }
             if self.frameRequests.isEmpty {
@@ -160,12 +182,18 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
         }
         if let session = CGSessionCopyCurrentDictionary() as? [String: Any] {
-            playback.setSuspended(.sessionInactive, (session[kCGSessionOnConsoleKey as String] as? Bool) == false)
+            playback.setSuspended(
+                .sessionInactive, (session[kCGSessionOnConsoleKey as String] as? Bool) == false)
         }
-        playback.setSuspended(.displaysSleeping, NSScreen.screens.allSatisfy { screen in
-            guard let id = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? UInt32 else { return false }
-            return CGDisplayIsAsleep(id) != 0
-        })
+        playback.setSuspended(
+            .displaysSleeping,
+            NSScreen.screens.allSatisfy { screen in
+                guard
+                    let id = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")]
+                        as? UInt32
+                else { return false }
+                return CGDisplayIsAsleep(id) != 0
+            })
         let startup = DispatchWorkItem { [weak self] in
             guard let self, !self.isTerminating, self.pendingLaunch != nil else { return }
             if self.playback.isRequested { self.updateDesktopWallpaper(restoring: true) }
@@ -187,8 +215,10 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let editMenu = NSMenu(title: "Edit")
         editMenu.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
         editMenu.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
-        editMenu.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
-        editMenu.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        editMenu.addItem(
+            withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(
+            withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
         editItem.submenu = editMenu
         mainMenu.addItem(editItem)
         NSApp.mainMenu = mainMenu
@@ -206,16 +236,19 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard !isTerminating else { return }
         let state = screenSaverInstallation.state
         syncItem.isEnabled = state != .installing
-        syncItem.state = state == .installed && defaults.bool(forKey: Self.syncPreferenceKey) ? .on : .off
+        syncItem.state =
+            state == .installed && defaults.bool(forKey: Self.syncPreferenceKey) ? .on : .off
         switch state {
         case .installed:
             syncItem.title = "Sync with Screen Saver"
             syncItem.action = #selector(toggleScreenSaverSync(_:))
         case .missing, .installing:
-            syncItem.title = state == .installing ? "Installing Screen Saver…" : "Install Screen Saver"
+            syncItem.title =
+                state == .installing ? "Installing Screen Saver…" : "Install Screen Saver"
             syncItem.action = #selector(installScreenSaver(_:))
         }
-        optionsController?.updateScreenSaverInstallation(isMissing: state == .missing, isInstalling: state == .installing)
+        optionsController?.updateScreenSaverInstallation(
+            isMissing: state == .missing, isInstalling: state == .installing)
     }
 
     /// Restores the companion without interrupting wallpaper playback or saving settings edits.
@@ -307,7 +340,9 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if restart {
             reconcilePlayback(restart: true)
         } else {
-            for window in windows { (window.contentView as? MatrixScreenSaverView)?.applyWallpaperOptions(options) }
+            for window in windows {
+                (window.contentView as? MatrixScreenSaverView)?.applyWallpaperOptions(options)
+            }
         }
     }
 
@@ -329,7 +364,10 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
             currentOptions = MatrixScreenSaverView.loadSaverOptions()
             displayLayout = currentDisplayLayout
             for screen in NSScreen.screens {
-                guard let saver = MatrixScreenSaverView(frame: NSRect(origin: .zero, size: screen.frame.size), isPreview: false) else {
+                guard
+                    let saver = MatrixScreenSaverView(
+                        frame: NSRect(origin: .zero, size: screen.frame.size), isPreview: false)
+                else {
                     let alert = NSAlert()
                     alert.messageText = "Could not start Matrix Wallpaper"
                     alert.informativeText = "The native screen saver view could not be created."
@@ -349,17 +387,21 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
         }
         for window in windows {
-            (window.contentView as? MatrixScreenSaverView)?.rendersWallpaperWhileHidden = playback.isServingScreenSaver
+            (window.contentView as? MatrixScreenSaverView)?.rendersWallpaperWhileHidden =
+                playback.isServingScreenSaver
             if playback.shouldShowDesktop {
                 if !window.isVisible { window.orderBack(nil) }
-            } else if window.isVisible { window.orderOut(nil) }
+            } else if window.isVisible {
+                window.orderOut(nil)
+            }
         }
         if playback.shouldRun {
             if let suspendedAt {
                 let duration = Date.timeIntervalSinceReferenceDate - suspendedAt
                 ScreenSyncCoordinator.shared.shiftTimeline(by: duration)
                 for window in windows {
-                    (window.contentView as? MatrixScreenSaverView)?.resumeWallpaperAnimation(after: duration)
+                    (window.contentView as? MatrixScreenSaverView)?.resumeWallpaperAnimation(
+                        after: duration)
                 }
                 self.suspendedAt = nil
             }
@@ -374,9 +416,13 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Keeps native command labels, symbols, and availability tied to user intent rather than system suspension.
     private func updatePlaybackMenu() {
         playbackItem.title = playback.isRequested ? "Stop Wallpaper" : "Start Wallpaper"
-        playbackItem.image = NSImage(systemSymbolName: playback.isRequested ? "stop.fill" : "play.fill", accessibilityDescription: nil)
+        playbackItem.image = NSImage(
+            systemSymbolName: playback.isRequested ? "stop.fill" : "play.fill",
+            accessibilityDescription: nil)
         pauseItem.title = playback.isPaused ? "Resume Animation" : "Pause Animation"
-        pauseItem.image = NSImage(systemSymbolName: playback.isPaused ? "play.fill" : "pause.fill", accessibilityDescription: nil)
+        pauseItem.image = NSImage(
+            systemSymbolName: playback.isPaused ? "play.fill" : "pause.fill",
+            accessibilityDescription: nil)
         pauseItem.isEnabled = playback.isRequested
     }
 
@@ -384,8 +430,7 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// - Parameter restoring: Restores originals instead of acquiring newly connected desktops.
     private func updateDesktopWallpaper(restoring: Bool) {
         do {
-            if restoring { try desktopWallpaper.restore() }
-            else { try desktopWallpaper.start() }
+            if restoring { try desktopWallpaper.restore() } else { try desktopWallpaper.start() }
             lastWallpaperError = nil
         } catch {
             let message = error.localizedDescription
@@ -396,7 +441,8 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
             lastWallpaperError = message
             let alert = NSAlert()
             alert.messageText = "Could not restore the desktop wallpaper"
-            alert.informativeText = "\(message)\nSaved wallpaper settings are kept for retry on Stop or the next launch."
+            alert.informativeText =
+                "\(message)\nSaved wallpaper settings are kept for retry on Stop or the next launch."
             alert.runModal()
         }
     }
@@ -415,54 +461,80 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// Observes documented workspace state plus best-effort lock/saver distributed signals.
     private func observeSystemState() {
-        observe(NotificationCenter.default, name: NSApplication.didBecomeActiveNotification) { [weak self] in
+        observe(NotificationCenter.default, name: NSApplication.didBecomeActiveNotification) {
+            [weak self] in
             self?.screenSaverInstallation.refresh()
         }
-        let settingsFocus = NotificationCenter.default.addObserver(forName: NSWindow.didBecomeKeyNotification,
-            object: nil, queue: .main) { [weak self] notification in
-                guard let self, let window = notification.object as? NSWindow,
-                      window === self.optionsController?.configureSheet() else { return }
-                self.screenSaverInstallation.refresh()
-            }
+        let settingsFocus = NotificationCenter.default.addObserver(
+            forName: NSWindow.didBecomeKeyNotification,
+            object: nil, queue: .main
+        ) { [weak self] notification in
+            guard let self, let window = notification.object as? NSWindow,
+                window === self.optionsController?.configureSheet()
+            else { return }
+            self.screenSaverInstallation.refresh()
+        }
         observers.append((NotificationCenter.default, settingsFocus))
         let workspace = NSWorkspace.shared.notificationCenter
         for (start, end, reason) in [
-            (NSWorkspace.willSleepNotification, NSWorkspace.didWakeNotification, WallpaperPlaybackState.Suspension.sleeping),
-            (NSWorkspace.screensDidSleepNotification, NSWorkspace.screensDidWakeNotification, .displaysSleeping),
-            (NSWorkspace.sessionDidResignActiveNotification, NSWorkspace.sessionDidBecomeActiveNotification, .sessionInactive),
+            (
+                NSWorkspace.willSleepNotification, NSWorkspace.didWakeNotification,
+                WallpaperPlaybackState.Suspension.sleeping
+            ),
+            (
+                NSWorkspace.screensDidSleepNotification, NSWorkspace.screensDidWakeNotification,
+                .displaysSleeping
+            ),
+            (
+                NSWorkspace.sessionDidResignActiveNotification,
+                NSWorkspace.sessionDidBecomeActiveNotification, .sessionInactive
+            ),
         ] {
             observeSuspension(in: workspace, start: start, end: end, reason: reason)
         }
         let distributed = DistributedNotificationCenter.default()
-        let frameRequests = distributed.addObserver(forName: SharedWallpaperFrame.requestNotification,
-            object: nil, queue: .main) { [weak self] notification in
-                guard let id = notification.object as? String, let displayID = UInt32(id) else { return }
-                self?.shareFrames(for: displayID)
+        let frameRequests = distributed.addObserver(
+            forName: SharedWallpaperFrame.requestNotification,
+            object: nil, queue: .main
+        ) { [weak self] notification in
+            guard let id = notification.object as? String, let displayID = UInt32(id) else {
+                return
             }
+            self?.shareFrames(for: displayID)
+        }
         observers.append((distributed, frameRequests))
         // These names are best-effort macOS observations, not a documented lock/security contract.
-        observeSuspension(in: distributed, start: Notification.Name("com.apple.screenIsLocked"),
-                          end: Notification.Name("com.apple.screenIsUnlocked"), reason: .locked)
-        observeSuspension(in: distributed, start: Notification.Name("com.apple.screensaver.didstart"),
-                          end: Notification.Name("com.apple.screensaver.didstop"), reason: .screenSaver)
-        observe(distributed, name: Notification.Name("com.apple.screensaver.willstart")) { [weak self] in
+        observeSuspension(
+            in: distributed, start: Notification.Name("com.apple.screenIsLocked"),
+            end: Notification.Name("com.apple.screenIsUnlocked"), reason: .locked)
+        observeSuspension(
+            in: distributed, start: Notification.Name("com.apple.screensaver.didstart"),
+            end: Notification.Name("com.apple.screensaver.didstop"), reason: .screenSaver)
+        observe(distributed, name: Notification.Name("com.apple.screensaver.willstart")) {
+            [weak self] in
             self?.setSuspended(.screenSaver, true)
         }
-        observe(NotificationCenter.default, name: NSApplication.didChangeScreenParametersNotification) { [weak self] in
+        observe(
+            NotificationCenter.default, name: NSApplication.didChangeScreenParametersNotification
+        ) { [weak self] in
             guard let self, self.displayLayout != self.currentDisplayLayout else { return }
             self.reconcilePlayback(restart: true)
         }
     }
 
     /// Registers a matching pair of notifications for one independent suspension reason.
-    private func observeSuspension(in center: NotificationCenter, start: Notification.Name, end: Notification.Name,
-                                   reason: WallpaperPlaybackState.Suspension) {
+    private func observeSuspension(
+        in center: NotificationCenter, start: Notification.Name, end: Notification.Name,
+        reason: WallpaperPlaybackState.Suspension
+    ) {
         observe(center, name: start) { [weak self] in self?.setSuspended(reason, true) }
         observe(center, name: end) { [weak self] in self?.setSuspended(reason, false) }
     }
 
     /// Retains a main-thread notification registration until Quit.
-    private func observe(_ center: NotificationCenter, name: Notification.Name, action: @escaping () -> Void) {
+    private func observe(
+        _ center: NotificationCenter, name: Notification.Name, action: @escaping () -> Void
+    ) {
         let token = center.addObserver(forName: name, object: nil, queue: .main) { _ in action() }
         observers.append((center, token))
     }
@@ -479,7 +551,8 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// - Parameter displayID: Display requested through the sandbox-safe discovery notification.
     private func shareFrames(for displayID: UInt32) {
         guard defaults.bool(forKey: Self.syncPreferenceKey), playback.isRequested,
-              currentDisplayLayout.contains(where: { $0.id == displayID }) else { return }
+            currentDisplayLayout.contains(where: { $0.id == displayID })
+        else { return }
         let starting = !playback.isServingScreenSaver
         if starting {
             let options = MatrixScreenSaverView.loadSaverOptions()
@@ -490,10 +563,14 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if starting { reconcilePlayback() }
         guard playback.shouldRun else { return }
         for window in windows {
-            guard let id = window.screen?.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? UInt32,
-                  id == displayID, let saver = window.contentView as? MatrixScreenSaverView,
-                  let url = saver.shareWallpaperFrames() else { continue }
-            DistributedNotificationCenter.default().postNotificationName(SharedWallpaperFrame.offerNotification,
+            guard
+                let id = window.screen?.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")]
+                    as? UInt32,
+                id == displayID, let saver = window.contentView as? MatrixScreenSaverView,
+                let url = saver.shareWallpaperFrames()
+            else { continue }
+            DistributedNotificationCenter.default().postNotificationName(
+                SharedWallpaperFrame.offerNotification,
                 object: url.path, userInfo: nil, deliverImmediately: true)
         }
     }
@@ -518,8 +595,11 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         for (center, token) in observers { center.removeObserver(token) }
         observers.removeAll()
         // Installers request Quit too; a recovery error must not hold termination in a modal loop.
-        do { try desktopWallpaper.restore() }
-        catch { NSLog("Matrix Wallpaper desktop restore deferred until next launch: %@", error.localizedDescription) }
+        do { try desktopWallpaper.restore() } catch {
+            NSLog(
+                "Matrix Wallpaper desktop restore deferred until next launch: %@",
+                error.localizedDescription)
+        }
         removeDesktopWindows()
         optionsController?.configureSheet().close()
         optionsController = nil
