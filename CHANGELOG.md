@@ -5,14 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-
 ## [0.6.0] - 2026-11-12
+
+### Features
+
+- Select Matrix Screen Saver directly from the wallpaper menu or Options. (#141)
 
 ### Bug Fixes
 
-- preserve wallpaper and simplify screen saver setup (#141)
-- pass Homebrew style checks and format commits (#139)
-- prefix homebrew messages with arrows (#138)
+- Preserve existing desktop wallpaper choices while Matrix Wallpaper runs. (#141)
+- Keep playback menu icons visible on macOS 27, including local installations. (#141)
+- Improve Homebrew installation compatibility and messages. (#139, #138)
 
 ## [0.5.2] - 2026-11-12
 
