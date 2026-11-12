@@ -322,6 +322,42 @@ check(OSASCRIPT_CALLS.none? { |args| args.join.include?("delete every login item
 uninstall(renamed)
 puts "PASS native old-name app upgrade, conflict rollback, and preference retention"
 
+# Missing legacy artifacts and a partially completed upgrade must remain recoverable.
+[:saver, :app, :interrupted_upgrade].each do |missing|
+  legacy = definition("1.2.1", legacy: :wallpaper)
+  capture { Cask::Installer.new(legacy).install }
+  if missing == :app
+    LEGACY_APP_TARGET.rmtree
+  else
+    TARGET.rmtree
+  end
+  successor = definition("1.2.4")
+  if missing == :interrupted_upgrade
+    begin
+      capture do
+        Cask::Upgrade.upgrade_cask(legacy, successor, binaries: true, force: false,
+                                  require_sha: true, quit: false, skip_cask_deps: false, verbose: false,
+                                  download_queue: Homebrew::DownloadQueue.default,
+                                  new_cask_installer: Cask::Installer.new(successor, upgrade: true))
+      end
+      raise "Missing saver unexpectedly allowed a normal upgrade"
+    rescue Cask::CaskError => error
+      check(error.message.include?(TARGET.to_s) && error.message.include?("not there"),
+            "Unexpected missing-saver upgrade failure: #{error}")
+    end
+    check(!LEGACY_APP_TARGET.exist?, "Failed upgrade did not reproduce removed legacy app")
+    check((legacy.staged_path/"MatrixWallpaper.app").directory?, "Failed upgrade lost app backup")
+  end
+  recovery = definition("1.2.4")
+  output = capture { Cask::Installer.new(recovery, reinstall: true, force: true).install }
+  verify_target("1.2.4")
+  check(!LEGACY_APP_TARGET.exist?, "Recovery left the old app filename")
+  check(recovery.installed_version == "1.2.4", "Recovery left an outdated installed receipt")
+  check(output.scan(COFFEE).length == 1, "Recovery did not report exactly one install success")
+  uninstall(recovery)
+  puts "PASS forced reinstall recovers #{missing} and preserves preferences"
+end
+
 # AE2/AE3: existing manual bundle survives native rejection, then explicit force replaces.
 TARGETS.each do |target|
   target.mkpath
