@@ -2,7 +2,7 @@ name: Homebrew distribution tests
 
 on:
   push:
-    branches: [development, 'feat/**', 'fix/**']
+    branches: [development, "feat/**", "fix/**"]
   pull_request:
     branches: [development, main]
 
@@ -11,9 +11,9 @@ permissions:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  HOMEBREW_NO_AUTO_UPDATE: '1'
-  HOMEBREW_NO_ANALYTICS: '1'
-  PYTHONDONTWRITEBYTECODE: '1'
+  HOMEBREW_NO_AUTO_UPDATE: "1"
+  HOMEBREW_NO_ANALYTICS: "1"
+  PYTHONDONTWRITEBYTECODE: "1"
 
 jobs:
   offline:
@@ -24,7 +24,7 @@ jobs:
           persist-credentials: false
       - uses: ruby/setup-ruby@v1
         with:
-          ruby-version: '3.4'
+          ruby-version: "3.4"
       - name: Fixture and documentation tests
         run: |
           ruby Tests/Homebrew/cask_lifecycle_test.rb
@@ -80,5 +80,5 @@ jobs:
         run: bash Tests/Homebrew/integration_lifecycle.sh
       - name: Full cask style
         env:
-          HOMEBREW_DEVELOPER: '1'
+          HOMEBREW_DEVELOPER: "1"
         run: brew style "$PWD/Homebrew/Casks/matrix-screen-saver.rb"

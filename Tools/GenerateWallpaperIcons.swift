@@ -13,21 +13,26 @@ import AppKit
 func glyph(in rect: CGRect) -> CGPath {
     let path = CGMutablePath()
     path.move(to: CGPoint(x: 18.322, y: -14.3147))
-    path.addCurve(to: CGPoint(x: 18.0979, y: -14.5228),
-                  control1: CGPoint(x: 18.3215, y: -14.4357), control2: CGPoint(x: 18.2588, y: -14.5226))
+    path.addCurve(
+        to: CGPoint(x: 18.0979, y: -14.5228),
+        control1: CGPoint(x: 18.3215, y: -14.4357), control2: CGPoint(x: 18.2588, y: -14.5226))
     path.addLine(to: CGPoint(x: 17.6334, y: -14.5238))
     path.addLine(to: CGPoint(x: 17.6328, y: -14.6515))
     path.addLine(to: CGPoint(x: 18.2221, y: -14.6575))
-    path.addCurve(to: CGPoint(x: 18.1813, y: -14.9078),
-                  control1: CGPoint(x: 18.2092, y: -14.8052), control2: CGPoint(x: 18.2156, y: -14.8674))
-    path.addCurve(to: CGPoint(x: 17.8689, y: -14.9787),
-                  control1: CGPoint(x: 18.1372, y: -14.9598), control2: CGPoint(x: 18.0375, y: -14.967))
-    path.addCurve(to: CGPoint(x: 17.3196, y: -15.0079),
-                  control1: CGPoint(x: 17.6959, y: -14.9887), control2: CGPoint(x: 17.4926, y: -14.9982))
+    path.addCurve(
+        to: CGPoint(x: 18.1813, y: -14.9078),
+        control1: CGPoint(x: 18.2092, y: -14.8052), control2: CGPoint(x: 18.2156, y: -14.8674))
+    path.addCurve(
+        to: CGPoint(x: 17.8689, y: -14.9787),
+        control1: CGPoint(x: 18.1372, y: -14.9598), control2: CGPoint(x: 18.0375, y: -14.967))
+    path.addCurve(
+        to: CGPoint(x: 17.3196, y: -15.0079),
+        control1: CGPoint(x: 17.6959, y: -14.9887), control2: CGPoint(x: 17.4926, y: -14.9982))
     path.addLine(to: CGPoint(x: 17.3196, y: -15.1462))
     path.addLine(to: CGPoint(x: 18.7116, y: -15.1462))
-    path.addCurve(to: CGPoint(x: 18.723, y: -15.1302),
-                  control1: CGPoint(x: 18.7154, y: -15.1412), control2: CGPoint(x: 18.7192, y: -15.1355))
+    path.addCurve(
+        to: CGPoint(x: 18.723, y: -15.1302),
+        control1: CGPoint(x: 18.7154, y: -15.1412), control2: CGPoint(x: 18.7192, y: -15.1355))
     path.addLine(to: CGPoint(x: 18.723, y: -14.6575))
     path.addLine(to: CGPoint(x: 18.9876, y: -14.6595))
     path.addLine(to: CGPoint(x: 20.5006, y: -11.4455))
@@ -37,34 +42,42 @@ func glyph(in rect: CGRect) -> CGPath {
     path.addLine(to: CGPoint(x: 22.428, y: -13.9757))
     path.addLine(to: CGPoint(x: 22.428, y: -10.3897))
     path.addLine(to: CGPoint(x: 21.388, y: -10.3738))
-    path.addCurve(to: CGPoint(x: 21.388, y: -10.51),
-                  control1: CGPoint(x: 21.3766, y: -10.3897), control2: CGPoint(x: 21.3653, y: -10.4462))
+    path.addCurve(
+        to: CGPoint(x: 21.388, y: -10.51),
+        control1: CGPoint(x: 21.3766, y: -10.3897), control2: CGPoint(x: 21.3653, y: -10.4462))
     path.addLine(to: CGPoint(x: 21.8236, y: -10.5394))
-    path.addCurve(to: CGPoint(x: 22.0681, y: -10.8599),
-                  control1: CGPoint(x: 21.9744, y: -10.5541), control2: CGPoint(x: 22.0771, y: -10.6028))
+    path.addCurve(
+        to: CGPoint(x: 22.0681, y: -10.8599),
+        control1: CGPoint(x: 21.9744, y: -10.5541), control2: CGPoint(x: 22.0771, y: -10.6028))
     path.addLine(to: CGPoint(x: 22.0681, y: -14.0839))
     path.addLine(to: CGPoint(x: 20.4531, y: -10.6729))
-    path.addCurve(to: CGPoint(x: 20.3745, y: -10.3961),
-                  control1: CGPoint(x: 20.4041, y: -10.5695), control2: CGPoint(x: 20.3774, y: -10.5191))
-    path.addCurve(to: CGPoint(x: 20.2163, y: -10.3991),
-                  control1: CGPoint(x: 20.3184, y: -10.3931), control2: CGPoint(x: 20.2724, y: -10.4011))
-    path.addCurve(to: CGPoint(x: 20.137, y: -10.8077),
-                  control1: CGPoint(x: 20.2162, y: -10.591), control2: CGPoint(x: 20.2033, y: -10.6513))
-    path.addCurve(to: CGPoint(x: 18.733, y: -13.6777),
-                  control1: CGPoint(x: 19.7139, y: -11.8046), control2: CGPoint(x: 19.2009, y: -12.7207))
+    path.addCurve(
+        to: CGPoint(x: 20.3745, y: -10.3961),
+        control1: CGPoint(x: 20.4041, y: -10.5695), control2: CGPoint(x: 20.3774, y: -10.5191))
+    path.addCurve(
+        to: CGPoint(x: 20.2163, y: -10.3991),
+        control1: CGPoint(x: 20.3184, y: -10.3931), control2: CGPoint(x: 20.2724, y: -10.4011))
+    path.addCurve(
+        to: CGPoint(x: 20.137, y: -10.8077),
+        control1: CGPoint(x: 20.2162, y: -10.591), control2: CGPoint(x: 20.2033, y: -10.6513))
+    path.addCurve(
+        to: CGPoint(x: 18.733, y: -13.6777),
+        control1: CGPoint(x: 19.7139, y: -11.8046), control2: CGPoint(x: 19.2009, y: -12.7207))
     path.addLine(to: CGPoint(x: 18.7299, y: -11.4417))
     path.addLine(to: CGPoint(x: 18.6162, y: -11.3053))
     path.addLine(to: CGPoint(x: 18.6162, y: -9.7893))
     path.addLine(to: CGPoint(x: 17.6364, y: -9.7893))
     path.addLine(to: CGPoint(x: 17.6336, y: -9.923))
     path.addLine(to: CGPoint(x: 18.1119, y: -9.9967))
-    path.addCurve(to: CGPoint(x: 18.3326, y: -10.4054),
-                  control1: CGPoint(x: 18.2991, y: -10.0445), control2: CGPoint(x: 18.3129, y: -10.1846))
+    path.addCurve(
+        to: CGPoint(x: 18.3326, y: -10.4054),
+        control1: CGPoint(x: 18.2991, y: -10.0445), control2: CGPoint(x: 18.3129, y: -10.1846))
     path.addLine(to: CGPoint(x: 18.3215, y: -14.3154))
     path.closeSubpath()
     let bounds = path.boundingBoxOfPath
     let scale = min(rect.width / bounds.width, rect.height / bounds.height)
-    var transform = CGAffineTransform(a: scale, b: 0, c: 0, d: -scale,
+    var transform = CGAffineTransform(
+        a: scale, b: 0, c: 0, d: -scale,
         tx: rect.midX - bounds.midX * scale, ty: rect.midY + bounds.midY * scale)
     return path.copy(using: &transform)!
 }
@@ -74,8 +87,10 @@ func glyph(in rect: CGRect) -> CGPath {
 /// - Parameter context: Output context, already scaled to the design coordinate system.
 func drawAppIcon(in context: CGContext) {
     context.setFillColor(NSColor.black.cgColor)
-    context.addPath(CGPath(roundedRect: CGRect(x: 100, y: 100, width: 824, height: 824),
-                           cornerWidth: 184, cornerHeight: 184, transform: nil))
+    context.addPath(
+        CGPath(
+            roundedRect: CGRect(x: 100, y: 100, width: 824, height: 824),
+            cornerWidth: 184, cornerHeight: 184, transform: nil))
     context.fillPath()
     let path = glyph(in: CGRect(x: 270, y: 248, width: 484, height: 528))
     // Rain's xterm-47 green (0, 255, 95), with its pale green leading highlight.
@@ -91,13 +106,16 @@ func drawAppIcon(in context: CGContext) {
     context.saveGState()
     context.addPath(path)
     context.clip()
-    let gradient = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB), colors: [
-        NSColor(srgbRed: 0, green: 0.53, blue: 0.2, alpha: 1).cgColor,
-        green,
-        NSColor(srgbRed: 0.84, green: 1, blue: 0.84, alpha: 1).cgColor,
-    ] as CFArray, locations: [0, 0.65, 1])!
-    context.drawLinearGradient(gradient, start: CGPoint(x: 512, y: 248),
-                               end: CGPoint(x: 512, y: 776), options: [])
+    let gradient = CGGradient(
+        colorsSpace: CGColorSpace(name: CGColorSpace.sRGB),
+        colors: [
+            NSColor(srgbRed: 0, green: 0.53, blue: 0.2, alpha: 1).cgColor,
+            green,
+            NSColor(srgbRed: 0.84, green: 1, blue: 0.84, alpha: 1).cgColor,
+        ] as CFArray, locations: [0, 0.65, 1])!
+    context.drawLinearGradient(
+        gradient, start: CGPoint(x: 512, y: 248),
+        end: CGPoint(x: 512, y: 776), options: [])
     context.setFillColor(NSColor(white: 0, alpha: 0.65).cgColor)
     for y in stride(from: 248, to: 776, by: 8) {
         context.fill(CGRect(x: 260, y: y, width: 504, height: 2))
@@ -112,7 +130,8 @@ try FileManager.default.createDirectory(at: iconset, withIntermediateDirectories
 for size in [16, 32, 128, 256, 512] {
     for scale in [1, 2] {
         let pixels = size * scale
-        let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: pixels, pixelsHigh: pixels,
+        let bitmap = NSBitmapImageRep(
+            bitmapDataPlanes: nil, pixelsWide: pixels, pixelsHigh: pixels,
             bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
             colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
         let context = NSGraphicsContext(bitmapImageRep: bitmap)!.cgContext
@@ -121,7 +140,9 @@ for size in [16, 32, 128, 256, 512] {
         let png = bitmap.representation(using: .png, properties: [:])!
         let name = "icon_\(size)x\(size)\(scale == 2 ? "@2x" : "").png"
         try png.write(to: iconset.appendingPathComponent(name))
-        if pixels == 1024 { try png.write(to: resources.appendingPathComponent("WallpaperIcon.png")) }
+        if pixels == 1024 {
+            try png.write(to: resources.appendingPathComponent("WallpaperIcon.png"))
+        }
     }
 }
 
@@ -144,7 +165,9 @@ try (pdf as Data).write(to: resources.appendingPathComponent("MenuBarIcon.pdf"))
 
 private let iconutil = Process()
 iconutil.executableURL = URL(fileURLWithPath: "/usr/bin/iconutil")
-iconutil.arguments = ["-c", "icns", iconset.path, "-o", resources.appendingPathComponent("WallpaperIcon.icns").path]
+iconutil.arguments = [
+    "-c", "icns", iconset.path, "-o", resources.appendingPathComponent("WallpaperIcon.icns").path,
+]
 try iconutil.run()
 iconutil.waitUntilExit()
 precondition(iconutil.terminationStatus == 0, "iconutil failed")

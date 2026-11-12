@@ -1,0 +1,22 @@
+{
+  "name": "matrix-screen-saver-dev",
+  "private": true,
+  "description": "Commit-time formatting tools for MatrixScreenSaver contributors.",
+  "engines": {
+    "node": ">=22.22.1"
+  },
+  "scripts": {
+    "prepare": "husky",
+    "format:staged": "lint-staged"
+  },
+  "devDependencies": {
+    "husky": "9.1.7",
+    "lint-staged": "17.6.0",
+    "prettier": "3.10.1"
+  },
+  "lint-staged": {
+    "*.{json,md,yaml,yml}": "prettier --write",
+    "Homebrew/Casks/*.rb": "brew style --fix",
+    "*.swift": "swift format format --in-place"
+  }
+}

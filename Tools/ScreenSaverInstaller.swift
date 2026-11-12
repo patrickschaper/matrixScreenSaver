@@ -31,7 +31,8 @@ enum ScreenSaverInstaller {
         let data = output.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
         guard process.terminationStatus == 0, let text = String(data: data, encoding: .utf8) else {
-            throw Failure("The bundled screen saver archive could not be read. Reinstall Matrix Wallpaper.")
+            throw Failure(
+                "The bundled screen saver archive could not be read. Reinstall Matrix Wallpaper.")
         }
         return text
     }
@@ -41,7 +42,9 @@ enum ScreenSaverInstaller {
     /// - Parameter path: The recovery ZIP sealed into the wallpaper app.
     /// - Throws: A validation error for traversal, duplicate, symlink, or non-Unix entries.
     static func validateArchive(at path: String) throws {
-        let names = try listing(["-1", path]).split(separator: "\n", omittingEmptySubsequences: false).dropLast()
+        let names = try listing(["-1", path]).split(
+            separator: "\n", omittingEmptySubsequences: false
+        ).dropLast()
         let modes = try listing(["-l", path]).split(separator: "\n").filter {
             $0.range(of: "^[bcdlps-][rwxstST-]{9} ", options: .regularExpression) != nil
         }
@@ -51,11 +54,16 @@ enum ScreenSaverInstaller {
         for (name, mode) in zip(names, modes) {
             let trimmed = name.hasSuffix("/") ? name.dropLast() : name[...]
             let parts = trimmed.split(separator: "/", omittingEmptySubsequences: false)
-            guard ["MatrixScreenSaver.saver", "__MACOSX"].contains(parts.first.map(String.init) ?? ""),
-                  parts.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." }),
-                  !name.contains("\\"), !name.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }),
-                  mode.first == "-" || mode.first == "d",
-                  mode.split(whereSeparator: { $0.isWhitespace }).dropFirst(2).first == "unx" else {
+            guard
+                ["MatrixScreenSaver.saver", "__MACOSX"].contains(
+                    parts.first.map(String.init) ?? ""),
+                parts.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." }),
+                !name.contains("\\"),
+                !name.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }
+                ),
+                mode.first == "-" || mode.first == "d",
+                mode.split(whereSeparator: { $0.isWhitespace }).dropFirst(2).first == "unx"
+            else {
                 throw Failure("The bundled screen saver archive contains an unsafe entry.")
             }
         }
@@ -69,7 +77,9 @@ enum ScreenSaverInstaller {
     /// - Throws: The filesystem error if promotion fails, including an occupied destination.
     static func promote(_ source: String, to destination: String) throws {
         guard renamex_np(source, destination, UInt32(RENAME_EXCL)) == 0 else {
-            throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno), userInfo: [NSFilePathErrorKey: destination])
+            throw NSError(
+                domain: NSPOSIXErrorDomain, code: Int(errno),
+                userInfo: [NSFilePathErrorKey: destination])
         }
     }
 
@@ -84,7 +94,9 @@ enum ScreenSaverInstaller {
         case "promote" where arguments.count == 3:
             try promote(arguments[1], to: arguments[2])
         default:
-            throw Failure("Usage: MatrixScreenSaverInstaller validate-archive ZIP | promote SOURCE DESTINATION")
+            throw Failure(
+                "Usage: MatrixScreenSaverInstaller validate-archive ZIP | promote SOURCE DESTINATION"
+            )
         }
     }
 }

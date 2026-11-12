@@ -22,9 +22,9 @@ struct MatrixScreenSaverOptions: Equatable {
         static let characterWidth = "CharacterWidth"
         static let characterHeight = "CharacterHeight"
         static let rainDensity = "RainDensity"
-         static let rainRunForever = "RainRunForever"
-         static let rainDurationSeconds = "RainDurationSeconds"
-         static let frameRate = "FrameRate"
+        static let rainRunForever = "RainRunForever"
+        static let rainDurationSeconds = "RainDurationSeconds"
+        static let frameRate = "FrameRate"
         static let errorRate = "ErrorRate"
         static let characters = "Characters"
         /// Defaults key for the selected rain font families.
@@ -50,10 +50,10 @@ struct MatrixScreenSaverOptions: Equatable {
     static let defaultDiffuseEnabled = true
     static let defaultCharacterWidth = 16
     static let defaultCharacterHeight = 30
-     static let defaultRainDensity = 1.0
-     static let defaultRainRunForever = true
-     static let defaultRainDurationSeconds = 300
-     static let defaultFrameRate = 25.0
+    static let defaultRainDensity = 1.0
+    static let defaultRainRunForever = true
+    static let defaultRainDurationSeconds = 300
+    static let defaultFrameRate = 25.0
     static let defaultErrorRate = 1.0
     static let defaultCharacters = ""
     static let defaultScanLinesIntensity = 0.25
@@ -66,36 +66,45 @@ struct MatrixScreenSaverOptions: Equatable {
     static let minimumNeoMessageSpeedFactor = MatrixRendererLimits.minimumNeoMessageSpeedFactor
     static let minimumCharacterWidth = 1
     static let minimumCharacterHeight = 1
-     static let minNeoMessageLineCount = 1
-     static let maxNeoMessageLineCount = 10
-     static let maxNeoMessageLineLength = 256
-     static let minimumRainDurationSeconds = 1
-     static let maximumRainDurationSeconds = 9999
-     static let maxCommandCount = 20
-     static let maxCommandLength = 512
+    static let minNeoMessageLineCount = 1
+    static let maxNeoMessageLineCount = 10
+    static let maxNeoMessageLineLength = 256
+    static let minimumRainDurationSeconds = 1
+    static let maximumRainDurationSeconds = 9999
+    static let maxCommandCount = 20
+    static let maxCommandLength = 512
 
     static let neoMessageSceneDescription = "Show the Neo message intro. On by default."
-    static let neoMessageSpeedFactorDescription = "Typing speed multiplier for Neo, custom commands and trace program. Default: 1.0."
+    static let neoMessageSpeedFactorDescription =
+        "Typing speed multiplier for Neo, custom commands and trace program. Default: 1.0."
     /// Output is immediate; this delay only starts after command completion.
-    static let cmdOutputHoldSecondsDescription = "Seconds to keep output visible after the command finishes. 0 advances immediately. Default: 10."
-    static let nameDescription = "Name used in the intro message (\"Wake up, {name}...\"). Empty = Neo."
-    static let neoMessageLinesDescription = "Lines typed during the Neo message intro (0–10, max 256 chars). Leave empty to use the Name-based default message."
-    static let cmdSceneDescription = "Execute custom commands and show its output as messages. Off by default."
+    static let cmdOutputHoldSecondsDescription =
+        "Seconds to keep output visible after the command finishes. 0 advances immediately. Default: 10."
+    static let nameDescription =
+        "Name used in the intro message (\"Wake up, {name}...\"). Empty = Neo."
+    static let neoMessageLinesDescription =
+        "Lines typed during the Neo message intro (0–10, max 256 chars). Leave empty to use the Name-based default message."
+    static let cmdSceneDescription =
+        "Execute custom commands and show its output as messages. Off by default."
     /// Retained in the editor where users enter commands that execute with host permissions.
-    static let commandsSecurityWarning = "Commands run with the host's permissions; commands and output are visible even while the screen is locked."
-    static let commandsDescription = "One shell command per row (up to 20, 512 characters each). Drag rows to change execution order. Overlong commands are ignored. Empty disables the scene."
+    static let commandsSecurityWarning =
+        "Commands run with the host's permissions; commands and output are visible even while the screen is locked."
+    static let commandsDescription =
+        "One shell command per row (up to 20, 512 characters each). Drag rows to change execution order. Overlong commands are ignored. Empty disables the scene."
     static let numberSceneDescription = "Show the trace program intro. On by default."
     static let diffuseDescription = "On by default."
     static let twinkleDescription = "On by default."
     static let characterSizeDescription = "Character cell size in pixels. Default: 16×30."
 
     static let characterSizePairs: [(width: Int, height: Int)] = [
-        (8, 15), (9, 17), (10, 19), (11, 21), (12, 23), (13, 24), (14, 26), (15, 28), (16, 30), (17, 32), (18, 34), (19, 36), (20, 38), (21, 40), (22, 42), (23, 44), (24, 46)
+        (8, 15), (9, 17), (10, 19), (11, 21), (12, 23), (13, 24), (14, 26), (15, 28), (16, 30),
+        (17, 32), (18, 34), (19, 36), (20, 38), (21, 40), (22, 42), (23, 44), (24, 46),
     ]
     static let defaultCharacterSizeIndex = 8
-     static let rainDensityDescription = "Rain density multiplier. Default: 1.0."
-     static let rainDurationSecondsDescription = "How long rain keeps starting new falling lines (1–9999 seconds) before it winds down. Default: 300 (5 minutes)."
-     static let frameRateDescription = "Target frame rate in fps, 1–1000. Default: 25."
+    static let rainDensityDescription = "Rain density multiplier. Default: 1.0."
+    static let rainDurationSecondsDescription =
+        "How long rain keeps starting new falling lines (1–9999 seconds) before it winds down. Default: 300 (5 minutes)."
+    static let frameRateDescription = "Target frame rate in fps, 1–1000. Default: 25."
     static let errorRateDescription = "Character change rate factor. Default: 1.0."
     static let charactersDescription = "Custom glyph set (e.g. ATGC). Empty = default."
     /// Help text shown under the Font picker.
@@ -121,10 +130,10 @@ struct MatrixScreenSaverOptions: Equatable {
     var diffuseEnabled = defaultDiffuseEnabled
     var characterWidth = defaultCharacterWidth
     var characterHeight = defaultCharacterHeight
-     var rainDensity = defaultRainDensity
-     var rainRunForever = defaultRainRunForever
-     var rainDurationSeconds = defaultRainDurationSeconds
-     var frameRate = defaultFrameRate
+    var rainDensity = defaultRainDensity
+    var rainRunForever = defaultRainRunForever
+    var rainDurationSeconds = defaultRainDurationSeconds
+    var frameRate = defaultFrameRate
     var errorRate = defaultErrorRate
     var characters = defaultCharacters
     /// Zero or one selected font; the array format preserves existing saved preferences.
@@ -139,16 +148,18 @@ struct MatrixScreenSaverOptions: Equatable {
     /// - Parameter previous: Configuration currently applied to the session.
     /// - Returns: Whether all displays must restart together rather than update in place.
     func requiresSceneRestart(comparedTo previous: MatrixScreenSaverOptions) -> Bool {
-        characterWidth != previous.characterWidth || characterHeight != previous.characterHeight ||
-        neoMessageSceneEnabled != previous.neoMessageSceneEnabled ||
-        neoMessageSpeedFactor != previous.neoMessageSpeedFactor || neoMessageLines != previous.neoMessageLines ||
-        (neoMessageLines.isEmpty && name != previous.name) ||
-        cmdSceneEnabled != previous.cmdSceneEnabled || commands != previous.commands ||
-        cmdOutputHoldSeconds != previous.cmdOutputHoldSeconds ||
-        commandsRunInSequence != previous.commandsRunInSequence ||
-        commandsShuffleSequence != previous.commandsShuffleSequence ||
-        numberSceneEnabled != previous.numberSceneEnabled ||
-        rainRunForever != previous.rainRunForever || rainDurationSeconds != previous.rainDurationSeconds
+        characterWidth != previous.characterWidth || characterHeight != previous.characterHeight
+            || neoMessageSceneEnabled != previous.neoMessageSceneEnabled
+            || neoMessageSpeedFactor != previous.neoMessageSpeedFactor
+            || neoMessageLines != previous.neoMessageLines
+            || (neoMessageLines.isEmpty && name != previous.name)
+            || cmdSceneEnabled != previous.cmdSceneEnabled || commands != previous.commands
+            || cmdOutputHoldSeconds != previous.cmdOutputHoldSeconds
+            || commandsRunInSequence != previous.commandsRunInSequence
+            || commandsShuffleSequence != previous.commandsShuffleSequence
+            || numberSceneEnabled != previous.numberSceneEnabled
+            || rainRunForever != previous.rainRunForever
+            || rainDurationSeconds != previous.rainDurationSeconds
     }
 
     /// Converts persisted options into the renderer configuration type.
@@ -165,9 +176,9 @@ struct MatrixScreenSaverOptions: Equatable {
             twinkleEnabled: twinkleEnabled,
             diffuseEnabled: diffuseEnabled,
             rainDensity: rainDensity,
-             rainRunForever: rainRunForever,
-             rainDurationSeconds: rainDurationSeconds,
-             frameRate: frameRate,
+            rainRunForever: rainRunForever,
+            rainDurationSeconds: rainDurationSeconds,
+            frameRate: frameRate,
             errorRate: errorRate,
             characters: characters,
             rainFonts: Array(rainFonts.prefix(1)),
@@ -181,13 +192,15 @@ struct MatrixScreenSaverOptions: Equatable {
     /// Clamps persisted values to the supported ranges.
     func sanitized() -> MatrixScreenSaverOptions {
         let sanitizedLines: [String] = {
-            let result = neoMessageLines
+            let result =
+                neoMessageLines
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .map { String($0.prefix(Self.maxNeoMessageLineLength)) }
                 .filter { !$0.isEmpty }
             return Array(result.prefix(Self.maxNeoMessageLineCount))
         }()
-        let sanitizedCommands: [String] = commands
+        let sanitizedCommands: [String] =
+            commands
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             // Clipping shell text can change which files or actions a command targets.
             .filter { !$0.isEmpty && $0.count <= Self.maxCommandLength && !$0.utf8.contains(0) }
@@ -199,7 +212,8 @@ struct MatrixScreenSaverOptions: Equatable {
             name: name.trimmingCharacters(in: .whitespacesAndNewlines),
             neoMessageLines: sanitizedLines,
             cmdSceneEnabled: cmdSceneEnabled,
-            cmdOutputHoldSeconds: cmdOutputHoldSeconds.isFinite && cmdOutputHoldSeconds >= 0 ? cmdOutputHoldSeconds : Self.defaultCmdOutputHoldSeconds,
+            cmdOutputHoldSeconds: cmdOutputHoldSeconds.isFinite && cmdOutputHoldSeconds >= 0
+                ? cmdOutputHoldSeconds : Self.defaultCmdOutputHoldSeconds,
             commands: sanitizedCommands,
             commandsRunInSequence: commandsRunInSequence,
             commandsShuffleSequence: commandsShuffleSequence,
@@ -208,29 +222,33 @@ struct MatrixScreenSaverOptions: Equatable {
             diffuseEnabled: diffuseEnabled,
             characterWidth: max(characterWidth, Self.minimumCharacterWidth),
             characterHeight: max(characterHeight, Self.minimumCharacterHeight),
-             rainDensity: max(rainDensity, Self.minimumRainDensity),
-             rainRunForever: rainRunForever,
-             rainDurationSeconds: min(max(rainDurationSeconds, Self.minimumRainDurationSeconds), Self.maximumRainDurationSeconds),
-             frameRate: min(max(frameRate, Self.minimumFrameRate), Self.maximumFrameRate),
+            rainDensity: max(rainDensity, Self.minimumRainDensity),
+            rainRunForever: rainRunForever,
+            rainDurationSeconds: min(
+                max(rainDurationSeconds, Self.minimumRainDurationSeconds),
+                Self.maximumRainDurationSeconds),
+            frameRate: min(max(frameRate, Self.minimumFrameRate), Self.maximumFrameRate),
             errorRate: max(errorRate, Self.minimumErrorRate),
             characters: {
                 var seen = Set<UnicodeScalar>()
-                return characters
+                return
+                    characters
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                     .unicodeScalars
                     .filter { s in
-                        !s.properties.isDiacritic &&
-                        !CharacterSet.whitespacesAndNewlines.contains(s) &&
-                        !CharacterSet.controlCharacters.contains(s) &&
-                        seen.insert(s).inserted
+                        !s.properties.isDiacritic
+                            && !CharacterSet.whitespacesAndNewlines.contains(s)
+                            && !CharacterSet.controlCharacters.contains(s)
+                            && seen.insert(s).inserted
                     }
                     .map { String($0) }
                     .joined()
             }(),
-            rainFonts: Array(rainFonts
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty }
-                .prefix(1)),
+            rainFonts: Array(
+                rainFonts
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+                    .prefix(1)),
             rainGlyphSet: rainGlyphSet,
             scanLinesIntensity: max(0, min(1, scanLinesIntensity)),
             scanLinesVertical: scanLinesVertical
@@ -254,10 +272,10 @@ struct MatrixScreenSaverOptions: Equatable {
             Keys.diffuseEnabled: defaultDiffuseEnabled,
             Keys.characterWidth: defaultCharacterWidth,
             Keys.characterHeight: defaultCharacterHeight,
-             Keys.rainDensity: defaultRainDensity,
-             Keys.rainRunForever: defaultRainRunForever,
-             Keys.rainDurationSeconds: defaultRainDurationSeconds,
-             Keys.frameRate: defaultFrameRate,
+            Keys.rainDensity: defaultRainDensity,
+            Keys.rainRunForever: defaultRainRunForever,
+            Keys.rainDurationSeconds: defaultRainDurationSeconds,
+            Keys.frameRate: defaultFrameRate,
             Keys.errorRate: defaultErrorRate,
             Keys.characters: defaultCharacters,
             Keys.rainFonts: defaultRainFonts,
@@ -273,7 +291,8 @@ struct MatrixScreenSaverOptions: Equatable {
             neoMessageSceneEnabled: defaults.bool(forKey: Keys.neoMessageSceneEnabled),
             neoMessageSpeedFactor: defaults.double(forKey: Keys.neoMessageSpeedFactor),
             name: defaults.string(forKey: Keys.name) ?? defaultName,
-            neoMessageLines: (defaults.array(forKey: Keys.neoMessageLines) as? [String]) ?? defaultNeoMessageLines,
+            neoMessageLines: (defaults.array(forKey: Keys.neoMessageLines) as? [String])
+                ?? defaultNeoMessageLines,
             cmdSceneEnabled: defaults.bool(forKey: Keys.cmdSceneEnabled),
             cmdOutputHoldSeconds: defaults.double(forKey: Keys.cmdOutputHoldSeconds),
             commands: (defaults.array(forKey: Keys.commands) as? [String]) ?? defaultCommands,
@@ -284,14 +303,15 @@ struct MatrixScreenSaverOptions: Equatable {
             diffuseEnabled: defaults.bool(forKey: Keys.diffuseEnabled),
             characterWidth: defaults.integer(forKey: Keys.characterWidth),
             characterHeight: defaults.integer(forKey: Keys.characterHeight),
-             rainDensity: defaults.double(forKey: Keys.rainDensity),
-             rainRunForever: defaults.bool(forKey: Keys.rainRunForever),
-             rainDurationSeconds: defaults.integer(forKey: Keys.rainDurationSeconds),
-             frameRate: defaults.double(forKey: Keys.frameRate),
+            rainDensity: defaults.double(forKey: Keys.rainDensity),
+            rainRunForever: defaults.bool(forKey: Keys.rainRunForever),
+            rainDurationSeconds: defaults.integer(forKey: Keys.rainDurationSeconds),
+            frameRate: defaults.double(forKey: Keys.frameRate),
             errorRate: defaults.double(forKey: Keys.errorRate),
             characters: defaults.string(forKey: Keys.characters) ?? defaultCharacters,
             rainFonts: (defaults.array(forKey: Keys.rainFonts) as? [String]) ?? defaultRainFonts,
-            rainGlyphSet: RainGlyphSet(rawValue: defaults.string(forKey: Keys.rainGlyphSet) ?? "") ?? .default,
+            rainGlyphSet: RainGlyphSet(rawValue: defaults.string(forKey: Keys.rainGlyphSet) ?? "")
+                ?? .default,
             scanLinesIntensity: defaults.double(forKey: Keys.scanLinesIntensity),
             scanLinesVertical: defaults.bool(forKey: Keys.scanLinesVertical)
         ).sanitized()
@@ -314,10 +334,10 @@ struct MatrixScreenSaverOptions: Equatable {
         defaults.set(options.diffuseEnabled, forKey: Keys.diffuseEnabled)
         defaults.set(options.characterWidth, forKey: Keys.characterWidth)
         defaults.set(options.characterHeight, forKey: Keys.characterHeight)
-         defaults.set(options.rainDensity, forKey: Keys.rainDensity)
-         defaults.set(options.rainRunForever, forKey: Keys.rainRunForever)
-         defaults.set(options.rainDurationSeconds, forKey: Keys.rainDurationSeconds)
-         defaults.set(options.frameRate, forKey: Keys.frameRate)
+        defaults.set(options.rainDensity, forKey: Keys.rainDensity)
+        defaults.set(options.rainRunForever, forKey: Keys.rainRunForever)
+        defaults.set(options.rainDurationSeconds, forKey: Keys.rainDurationSeconds)
+        defaults.set(options.frameRate, forKey: Keys.frameRate)
         defaults.set(options.errorRate, forKey: Keys.errorRate)
         defaults.set(options.characters, forKey: Keys.characters)
         defaults.set(options.rainFonts, forKey: Keys.rainFonts)
@@ -330,50 +350,56 @@ struct MatrixScreenSaverOptions: Equatable {
 
 final class MatrixScreenSaverOptionsSheetController: NSObject,
     NSTextFieldDelegate, NSWindowDelegate,
-    NSTableViewDataSource, NSTableViewDelegate {
-     private enum ValidationError: LocalizedError {
-         case neoMessageSpeedFactor
-          case cmdOutputHoldSeconds
-          case rainDensity
-           case frameRate
-           case errorRate
-           case rainDurationSeconds
+    NSTableViewDataSource, NSTableViewDelegate
+{
+    private enum ValidationError: LocalizedError {
+        case neoMessageSpeedFactor
+        case cmdOutputHoldSeconds
+        case rainDensity
+        case frameRate
+        case errorRate
+        case rainDurationSeconds
 
-         var errorDescription: String? {
-             switch self {
-             case .neoMessageSpeedFactor:
-                  return "Intro typing speed must be a positive number."
-             case .cmdOutputHoldSeconds:
-                  return "Output hold must be a finite non-negative number of seconds."
-             case .rainDensity:
-                 return "Rain density must be a positive number."
-             case .frameRate:
-                 return "Frame rate must be a positive number less than or equal to 1000."
-             case .errorRate:
-               return "Error rate must be a non-negative number."
-               case .rainDurationSeconds:
-                   return "Rain duration must be a positive integer (1–9999 seconds)."
-             }
-         }
-     }
+        var errorDescription: String? {
+            switch self {
+            case .neoMessageSpeedFactor:
+                return "Intro typing speed must be a positive number."
+            case .cmdOutputHoldSeconds:
+                return "Output hold must be a finite non-negative number of seconds."
+            case .rainDensity:
+                return "Rain density must be a positive number."
+            case .frameRate:
+                return "Frame rate must be a positive number less than or equal to 1000."
+            case .errorRate:
+                return "Error rate must be a non-negative number."
+            case .rainDurationSeconds:
+                return "Rain duration must be a positive integer (1–9999 seconds)."
+            }
+        }
+    }
 
     /// Delivers validated options to either the saver view or the wallpaper host.
     private let onApply: (MatrixScreenSaverOptions) -> Void
     var onClose: (() -> Void)?
 
-    /// Optional wallpaper-host action; omitted by the saver and preview to hide installation UI.
-    var onInstallScreenSaver: (() -> Void)?
-    /// Host-controlled notice above all tabs, removed from layout when the saver is installed.
+    /// Handles the notice's install or select button on the main thread without applying edits.
+    /// Set before updating the notice; the saver and preview omit it to keep the notice hidden.
+    var onScreenSaverAction: (() -> Void)?
+    /// Host-controlled notice above all tabs, removed when the saver is installed and selected.
     private let installationBanner = NSStackView()
-    /// Explicit recovery action that never replaces the settings window's default Save button.
-    private let installScreenSaverButton = NSButton(title: "Install Screen Saver", target: nil, action: nil)
+    /// Explains whether the companion needs installation or selection without blocking settings edits.
+    private let installationMessage = NSTextField(wrappingLabelWithString: "")
+    /// Installation or selection action that never replaces the settings window's default Save button.
+    private let installScreenSaverButton = NSButton(
+        title: "Install Screen Saver", target: nil, action: nil)
 
     private let window: NSWindow
     private let rootStack = NSStackView()
     /// Scrolls settings on smaller displays while keeping actions visible.
     private let optionsScrollView = NSScrollView()
     private var optionsHeight: NSLayoutConstraint?
-    private let neoMessageSceneCheckbox = NSButton(checkboxWithTitle: "Show Neo message", target: nil, action: nil)
+    private let neoMessageSceneCheckbox = NSButton(
+        checkboxWithTitle: "Show Neo message", target: nil, action: nil)
     private let neoMessageSpeedFactorField = NSTextField(string: "")
     private let cmdOutputHoldSecondsField = NSTextField(string: "")
     private let nameField = NSTextField(string: "")
@@ -385,7 +411,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
     private static let lineRowHeight: CGFloat = 24
     private static let dragPboardType = NSPasteboard.PasteboardType("matrixss.lineRow")
     private static let handleColumnID = NSUserInterfaceItemIdentifier("handle")
-    private static let textColumnID   = NSUserInterfaceItemIdentifier("lineText")
+    private static let textColumnID = NSUserInterfaceItemIdentifier("lineText")
     private static let removeColumnID = NSUserInterfaceItemIdentifier("remove")
     private var pendingLines: [String] = MatrixScreenSaverOptions.defaultNeoMessageLines
     private var linesEditorWindow: NSWindow?
@@ -398,30 +424,42 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
     /// Neo-only reset action hidden when editing commands.
     private let resetLinesButton = NSButton(title: "Reset lines", target: nil, action: nil)
     /// Commands may be empty; Neo retains at least one editable row.
-    private var minimumEditorRows: Int { editingCommands ? 0 : MatrixScreenSaverOptions.minNeoMessageLineCount }
+    private var minimumEditorRows: Int {
+        editingCommands ? 0 : MatrixScreenSaverOptions.minNeoMessageLineCount
+    }
     /// Applies each scene's existing storage limit to the shared list.
     private var maximumEditorRows: Int {
-        editingCommands ? MatrixScreenSaverOptions.maxCommandCount : MatrixScreenSaverOptions.maxNeoMessageLineCount
+        editingCommands
+            ? MatrixScreenSaverOptions.maxCommandCount
+            : MatrixScreenSaverOptions.maxNeoMessageLineCount
     }
-    private let cmdSceneCheckbox = NSButton(checkboxWithTitle: "Run custom commands", target: nil, action: nil)
+    private let cmdSceneCheckbox = NSButton(
+        checkboxWithTitle: "Run custom commands", target: nil, action: nil)
     /// Scene-owned editor buttons remain available only while their scene is enabled.
     private let commandsEditButton = NSButton(title: "Edit…", target: nil, action: nil)
     private let linesEditButton = NSButton(title: "Edit…", target: nil, action: nil)
     /// Radio controls share an action and parent so AppKit treats them as one group.
-    private let commandsSequenceRadio = NSButton(radioButtonWithTitle: "In sequence", target: nil, action: nil)
+    private let commandsSequenceRadio = NSButton(
+        radioButtonWithTitle: "In sequence", target: nil, action: nil)
     /// Selects a single command on every scene entry.
-    private let commandsRandomRadio = NSButton(radioButtonWithTitle: "One random command", target: nil, action: nil)
+    private let commandsRandomRadio = NSButton(
+        radioButtonWithTitle: "One random command", target: nil, action: nil)
     /// Runs the complete list in a newly shuffled order for each cycle.
-    private let commandsShuffleRadio = NSButton(radioButtonWithTitle: "All commands in random order", target: nil, action: nil)
+    private let commandsShuffleRadio = NSButton(
+        radioButtonWithTitle: "All commands in random order", target: nil, action: nil)
     /// Commands accepted in the editor, not persisted until the main dialog is accepted.
     private var pendingCommands: [String] = []
-    private let numberSceneCheckbox = NSButton(checkboxWithTitle: "Show trace program", target: nil, action: nil)
-    private let twinkleCheckbox = NSButton(checkboxWithTitle: "Twinkling effect", target: nil, action: nil)
-    private let diffuseCheckbox = NSButton(checkboxWithTitle: "Glow effect", target: nil, action: nil)
+    private let numberSceneCheckbox = NSButton(
+        checkboxWithTitle: "Show trace program", target: nil, action: nil)
+    private let twinkleCheckbox = NSButton(
+        checkboxWithTitle: "Twinkling effect", target: nil, action: nil)
+    private let diffuseCheckbox = NSButton(
+        checkboxWithTitle: "Glow effect", target: nil, action: nil)
     private let scanLinesSlider: NSSlider = {
-        let s = NSSlider(value: MatrixScreenSaverOptions.defaultScanLinesIntensity * 100,
-                         minValue: 0, maxValue: 100,
-                         target: nil, action: nil)
+        let s = NSSlider(
+            value: MatrixScreenSaverOptions.defaultScanLinesIntensity * 100,
+            minValue: 0, maxValue: 100,
+            target: nil, action: nil)
         s.numberOfTickMarks = 0
         s.allowsTickMarkValuesOnly = false
         return s
@@ -435,28 +473,33 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
     }()
     private let characterSizeSlider: NSSlider = {
         let pairs = MatrixScreenSaverOptions.characterSizePairs
-        let s = NSSlider(value: Double(MatrixScreenSaverOptions.defaultCharacterSizeIndex),
-                         minValue: 0, maxValue: Double(pairs.count - 1),
-                         target: nil, action: nil)
+        let s = NSSlider(
+            value: Double(MatrixScreenSaverOptions.defaultCharacterSizeIndex),
+            minValue: 0, maxValue: Double(pairs.count - 1),
+            target: nil, action: nil)
         s.numberOfTickMarks = pairs.count
         s.allowsTickMarkValuesOnly = true
         return s
     }()
     private let characterSizeValueLabel: NSTextField = {
-        let pair = MatrixScreenSaverOptions.characterSizePairs[MatrixScreenSaverOptions.defaultCharacterSizeIndex]
+        let pair = MatrixScreenSaverOptions.characterSizePairs[
+            MatrixScreenSaverOptions.defaultCharacterSizeIndex]
         return NSTextField(labelWithString: "\(pair.width)×\(pair.height)")
     }()
-     private let rainDensityField = NSTextField(string: "")
-     private let rainRunForeverCheckbox = NSButton(checkboxWithTitle: "Run forever", target: nil, action: nil)
-     private let rainDurationField = NSTextField(string: "")
-     private let frameRateField = NSTextField(string: "")
+    private let rainDensityField = NSTextField(string: "")
+    private let rainRunForeverCheckbox = NSButton(
+        checkboxWithTitle: "Run forever", target: nil, action: nil)
+    private let rainDurationField = NSTextField(string: "")
+    private let frameRateField = NSTextField(string: "")
     private let errorRateField = NSTextField(string: "")
     private let charactersField = NSTextField(string: "")
     /// Pull-down listing installed fonts with one selected entry.
     private let rainFontsButton = NSPopUpButton(frame: .zero, pullsDown: true)
     private let rainFontsResetButton = NSButton(title: "Reset", target: nil, action: nil)
     /// Radio buttons share a parent and action for native keyboard navigation.
-    private let rainGlyphRadios = RainGlyphSet.allCases.map { NSButton(radioButtonWithTitle: $0.title, target: nil, action: nil) }
+    private let rainGlyphRadios = RainGlyphSet.allCases.map {
+        NSButton(radioButtonWithTitle: $0.title, target: nil, action: nil)
+    }
     /// Wrapping native text uses the same font fallback as the renderer.
     private let rainGlyphPreview = NSTextField(wrappingLabelWithString: "")
     private var selectedRainGlyphSet: RainGlyphSet = .default
@@ -489,25 +532,28 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         pendingLines = options.neoMessageLines
         cmdSceneCheckbox.state = options.cmdSceneEnabled ? .on : .off
         pendingCommands = options.commands
-        commandsSequenceRadio.state = options.commandsRunInSequence && !options.commandsShuffleSequence ? .on : .off
+        commandsSequenceRadio.state =
+            options.commandsRunInSequence && !options.commandsShuffleSequence ? .on : .off
         commandsRandomRadio.state = options.commandsRunInSequence ? .off : .on
-        commandsShuffleRadio.state = options.commandsRunInSequence && options.commandsShuffleSequence ? .on : .off
+        commandsShuffleRadio.state =
+            options.commandsRunInSequence && options.commandsShuffleSequence ? .on : .off
         numberSceneCheckbox.state = options.numberSceneEnabled ? .on : .off
         twinkleCheckbox.state = options.twinkleEnabled ? .on : .off
         diffuseCheckbox.state = options.diffuseEnabled ? .on : .off
         scanLinesSlider.doubleValue = options.scanLinesIntensity * 100
         scanLinesValueLabel.stringValue = "\(Int(options.scanLinesIntensity * 100))%"
         scanLinesDirectionPopup.selectItem(at: options.scanLinesVertical ? 0 : 1)
-        let sizeIndex = MatrixScreenSaverOptions.characterSizePairs.firstIndex(where: {
-            $0.width == options.characterWidth && $0.height == options.characterHeight
-        }) ?? MatrixScreenSaverOptions.defaultCharacterSizeIndex
+        let sizeIndex =
+            MatrixScreenSaverOptions.characterSizePairs.firstIndex(where: {
+                $0.width == options.characterWidth && $0.height == options.characterHeight
+            }) ?? MatrixScreenSaverOptions.defaultCharacterSizeIndex
         characterSizeSlider.doubleValue = Double(sizeIndex)
         let pair = MatrixScreenSaverOptions.characterSizePairs[sizeIndex]
         characterSizeValueLabel.stringValue = "\(pair.width)×\(pair.height)"
-         rainDensityField.stringValue = Self.format(options.rainDensity)
-         rainRunForeverCheckbox.state = options.rainRunForever ? .on : .off
-         rainDurationField.stringValue = Self.format(options.rainDurationSeconds)
-         rainDurationField.isEnabled = !options.rainRunForever
+        rainDensityField.stringValue = Self.format(options.rainDensity)
+        rainRunForeverCheckbox.state = options.rainRunForever ? .on : .off
+        rainDurationField.stringValue = Self.format(options.rainDurationSeconds)
+        rainDurationField.isEnabled = !options.rainRunForever
         frameRateField.stringValue = Self.format(options.frameRate)
         errorRateField.stringValue = Self.format(options.errorRate)
         charactersField.stringValue = options.characters
@@ -523,23 +569,25 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         return window
     }
 
-    /// Updates the optional recovery notice without reloading or saving any edited options.
+    /// Updates the optional installation or selection notice without reloading or saving edited options.
     ///
     /// - Parameters:
-    ///   - isMissing: Whether discovery found no installed companion saver.
-    ///   - isInstalling: Whether the host already has an installation in progress.
-    func updateScreenSaverInstallation(isMissing: Bool, isInstalling: Bool) {
-        let hidden = onInstallScreenSaver == nil || (!isMissing && !isInstalling)
+    ///   - message: Host-provided explanation; `nil` hides the notice when Matrix is ready.
+    ///   - actionTitle: The menu's current install, select, settings, or progress label.
+    ///   - isEnabled: Whether an explicit click can start an operation; false while busy.
+    func updateScreenSaverNotice(message: String?, actionTitle: String, isEnabled: Bool) {
+        let hidden = onScreenSaverAction == nil || message == nil
         let changedVisibility = installationBanner.isHidden != hidden
         installationBanner.isHidden = hidden
-        installScreenSaverButton.title = isInstalling ? "Installing Screen Saver…" : "Install Screen Saver"
-        installScreenSaverButton.isEnabled = !isInstalling
+        installationMessage.stringValue = message ?? ""
+        installScreenSaverButton.title = actionTitle
+        installScreenSaverButton.isEnabled = isEnabled
         if changedVisibility { sizeWindowToFitContent() }
     }
 
-    /// Forwards an explicit install click to the wallpaper host without applying settings.
-    @objc private func installScreenSaver(_ sender: Any?) {
-        onInstallScreenSaver?()
+    /// Forwards an explicit install or select click to the wallpaper host without applying settings.
+    @objc private func performScreenSaverAction(_ sender: Any?) {
+        onScreenSaverAction?()
     }
 
     /// Validates and applies the edited options.
@@ -584,23 +632,23 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         window.isReleasedWhenClosed = false
         window.delegate = self
 
-         characterSizeSlider.target = self
-         characterSizeSlider.action = #selector(characterSizeSliderChanged(_:))
-         neoMessageSpeedFactorField.formatter = Self.numberFormatter
-         cmdOutputHoldSecondsField.formatter = Self.numberFormatter
-         cmdOutputHoldSecondsField.delegate = self
-         rainDensityField.formatter = Self.numberFormatter
-         rainDurationField.formatter = Self.integerFormatter
-         frameRateField.formatter = Self.numberFormatter
-         errorRateField.formatter = Self.numberFormatter
-         neoMessageSpeedFactorField.delegate = self
-         rainDensityField.delegate = self
-         rainDurationField.delegate = self
-         frameRateField.delegate = self
-          errorRateField.delegate = self
-          charactersField.delegate = self
-         rainRunForeverCheckbox.target = self
-         rainRunForeverCheckbox.action = #selector(rainRunForeverCheckboxChanged(_:))
+        characterSizeSlider.target = self
+        characterSizeSlider.action = #selector(characterSizeSliderChanged(_:))
+        neoMessageSpeedFactorField.formatter = Self.numberFormatter
+        cmdOutputHoldSecondsField.formatter = Self.numberFormatter
+        cmdOutputHoldSecondsField.delegate = self
+        rainDensityField.formatter = Self.numberFormatter
+        rainDurationField.formatter = Self.integerFormatter
+        frameRateField.formatter = Self.numberFormatter
+        errorRateField.formatter = Self.numberFormatter
+        neoMessageSpeedFactorField.delegate = self
+        rainDensityField.delegate = self
+        rainDurationField.delegate = self
+        frameRateField.delegate = self
+        errorRateField.delegate = self
+        charactersField.delegate = self
+        rainRunForeverCheckbox.target = self
+        rainRunForeverCheckbox.action = #selector(rainRunForeverCheckboxChanged(_:))
         for checkbox in [neoMessageSceneCheckbox, cmdSceneCheckbox, numberSceneCheckbox] {
             checkbox.target = self
             checkbox.action = #selector(sceneCheckboxChanged(_:))
@@ -612,7 +660,6 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         rootStack.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
         rootStack.translatesAutoresizingMaskIntoConstraints = false
 
-        let installationMessage = NSTextField(wrappingLabelWithString: "Screen saver isn’t installed.")
         installationMessage.textColor = .secondaryLabelColor
         installationBanner.orientation = .horizontal
         installationBanner.alignment = .centerY
@@ -620,15 +667,17 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         installationBanner.isHidden = true
         installScreenSaverButton.bezelStyle = .rounded
         installScreenSaverButton.target = self
-        installScreenSaverButton.action = #selector(installScreenSaver(_:))
+        installScreenSaverButton.action = #selector(performScreenSaverAction(_:))
         installScreenSaverButton.setContentHuggingPriority(.required, for: .horizontal)
-        installScreenSaverButton.setContentCompressionResistancePriority(.required, for: .horizontal)
+        installScreenSaverButton.setContentCompressionResistancePriority(
+            .required, for: .horizontal)
         installationBanner.addArrangedSubview(installationMessage)
         installationBanner.addArrangedSubview(installScreenSaverButton)
         rootStack.addArrangedSubview(installationBanner)
         installationBanner.widthAnchor.constraint(equalToConstant: 640).isActive = true
 
-        let aboutButton = NSButton(title: "About the project", target: self, action: #selector(openRepository(_:)))
+        let aboutButton = NSButton(
+            title: "About the project", target: self, action: #selector(openRepository(_:)))
         aboutButton.bezelStyle = .inline
         aboutButton.isBordered = false
         aboutButton.contentTintColor = .linkColor
@@ -637,43 +686,85 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         // Tab pages lay out during insertion, before Auto Layout sizes the tab view.
         let tabs = NSTabView(frame: NSRect(x: 0, y: 0, width: 640, height: 620))
         tabs.translatesAutoresizingMaskIntoConstraints = false
-        tabs.addTabViewItem(makeOptionsTab(title: "General", views: [
-            makeDescriptionLabel("Shared settings for the screen saver and animated wallpaper."),
-            makeOptionsGroup(title: "Rendering", views: [
-                makeCharacterSizeSection(),
-                makeNumericSection(title: "Frame rate", field: frameRateField, description: "Frames per second. Higher values use more energy."),
-            ]),
-            makeOptionsGroup(title: "Shared effects", views: [
-                makeScanLinesSection(),
-                makeCheckboxSection(checkbox: twinkleCheckbox, description: "Vary character brightness in the rain and trace program."),
-            ]),
-        ]))
-        tabs.addTabViewItem(makeOptionsTab(title: "Intro scenes", views: [
-            makeNumericSection(title: "Typing speed", field: neoMessageSpeedFactorField, description: "Speed multiplier for all intro scenes. 1 is normal speed."),
-            makeOptionsGroup(title: "1. Neo message", views: [
-                neoMessageSceneCheckbox,
-                makeTextSection(title: "Name", field: nameField, description: "Used in “Wake up, {name}…”. Leave empty for Neo."),
-                makeNeoMessageLinesButtonRow(),
-            ]),
-            makeOptionsGroup(title: "2. Custom commands", views: [makeCustomShellCommandsSection()]),
-            makeOptionsGroup(title: "3. Trace program", views: [numberSceneCheckbox]),
-        ]))
-        tabs.addTabViewItem(makeOptionsTab(title: "Rain", views: [
-            makeDescriptionLabel("The falling characters shown after the intro scenes."),
-            makeOptionsGroup(title: "Characters", views: [
-                makeRainGlyphSection(),
-                makeRainFontsSection(),
-                makeTextSection(title: "Custom glyphs", field: charactersField, description: "Leave empty to use the selected font’s character set."),
-            ]),
-            makeOptionsGroup(title: "Animation", views: [
-                makeNumericSection(title: "Density", field: rainDensityField, description: "Number of falling streams. 1 is normal density."),
-                makeRainDurationSection(),
-                makeNumericSection(title: "Change rate", field: errorRateField, description: "How often characters change. 0 keeps each character fixed."),
-            ]),
-            makeOptionsGroup(title: "Effects", views: [
-                makeCheckboxSection(checkbox: diffuseCheckbox, description: "Add a soft glow around falling characters."),
-            ]),
-        ]))
+        tabs.addTabViewItem(
+            makeOptionsTab(
+                title: "General",
+                views: [
+                    makeDescriptionLabel(
+                        "Shared settings for the screen saver and animated wallpaper."),
+                    makeOptionsGroup(
+                        title: "Rendering",
+                        views: [
+                            makeCharacterSizeSection(),
+                            makeNumericSection(
+                                title: "Frame rate", field: frameRateField,
+                                description: "Frames per second. Higher values use more energy."),
+                        ]),
+                    makeOptionsGroup(
+                        title: "Shared effects",
+                        views: [
+                            makeScanLinesSection(),
+                            makeCheckboxSection(
+                                checkbox: twinkleCheckbox,
+                                description:
+                                    "Vary character brightness in the rain and trace program."),
+                        ]),
+                ]))
+        tabs.addTabViewItem(
+            makeOptionsTab(
+                title: "Intro scenes",
+                views: [
+                    makeNumericSection(
+                        title: "Typing speed", field: neoMessageSpeedFactorField,
+                        description: "Speed multiplier for all intro scenes. 1 is normal speed."),
+                    makeOptionsGroup(
+                        title: "1. Neo message",
+                        views: [
+                            neoMessageSceneCheckbox,
+                            makeTextSection(
+                                title: "Name", field: nameField,
+                                description: "Used in “Wake up, {name}…”. Leave empty for Neo."),
+                            makeNeoMessageLinesButtonRow(),
+                        ]),
+                    makeOptionsGroup(
+                        title: "2. Custom commands", views: [makeCustomShellCommandsSection()]),
+                    makeOptionsGroup(title: "3. Trace program", views: [numberSceneCheckbox]),
+                ]))
+        tabs.addTabViewItem(
+            makeOptionsTab(
+                title: "Rain",
+                views: [
+                    makeDescriptionLabel("The falling characters shown after the intro scenes."),
+                    makeOptionsGroup(
+                        title: "Characters",
+                        views: [
+                            makeRainGlyphSection(),
+                            makeRainFontsSection(),
+                            makeTextSection(
+                                title: "Custom glyphs", field: charactersField,
+                                description: "Leave empty to use the selected font’s character set."
+                            ),
+                        ]),
+                    makeOptionsGroup(
+                        title: "Animation",
+                        views: [
+                            makeNumericSection(
+                                title: "Density", field: rainDensityField,
+                                description: "Number of falling streams. 1 is normal density."),
+                            makeRainDurationSection(),
+                            makeNumericSection(
+                                title: "Change rate", field: errorRateField,
+                                description:
+                                    "How often characters change. 0 keeps each character fixed."),
+                        ]),
+                    makeOptionsGroup(
+                        title: "Effects",
+                        views: [
+                            makeCheckboxSection(
+                                checkbox: diffuseCheckbox,
+                                description: "Add a soft glow around falling characters.")
+                        ]),
+                ]))
         optionsScrollView.borderType = .noBorder
         optionsScrollView.drawsBackground = false
         optionsScrollView.hasVerticalScroller = true
@@ -689,7 +780,8 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         NSLayoutConstraint.activate([
             tabs.widthAnchor.constraint(equalToConstant: 640),
             tabs.heightAnchor.constraint(equalToConstant: 620),
-            optionsScrollView.widthAnchor.constraint(equalTo: rootStack.widthAnchor, constant: groupWidth),
+            optionsScrollView.widthAnchor.constraint(
+                equalTo: rootStack.widthAnchor, constant: groupWidth),
             optionsScrollView.widthAnchor.constraint(equalToConstant: 640),
         ])
 
@@ -699,7 +791,8 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         buttons.alignment = .centerY
         buttons.translatesAutoresizingMaskIntoConstraints = false
 
-        let resetButton = NSButton(title: "Restore Defaults", target: self, action: #selector(resetToDefaults(_:)))
+        let resetButton = NSButton(
+            title: "Restore Defaults", target: self, action: #selector(resetToDefaults(_:)))
         let cancelButton = NSButton(title: "Cancel", target: self, action: #selector(cancel(_:)))
         let okButton = NSButton(title: "Save", target: self, action: #selector(apply(_:)))
         okButton.keyEquivalent = "\r"
@@ -719,16 +812,20 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         footer.distribution = .fill
         footer.translatesAutoresizingMaskIntoConstraints = false
 
-        let versionString = Bundle(for: MatrixScreenSaverOptionsSheetController.self)
+        let versionString =
+            Bundle(for: MatrixScreenSaverOptionsSheetController.self)
             .infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
-        let versionLabel = NSTextField(labelWithString: versionString.isEmpty ? "" : "v\(versionString)")
+        let versionLabel = NSTextField(
+            labelWithString: versionString.isEmpty ? "" : "v\(versionString)")
         versionLabel.font = .systemFont(ofSize: 11)
         versionLabel.textColor = .secondaryLabelColor
         versionLabel.setContentHuggingPriority(.required, for: .horizontal)
 
-        let coffeeButton = NSButton(title: "Buy Me a Coffee", target: self, action: #selector(openDonationPage(_:)))
+        let coffeeButton = NSButton(
+            title: "Buy Me a Coffee", target: self, action: #selector(openDonationPage(_:)))
         // Source: https://cdn.buymeacoffee.com/assets/homepage/meta/favicon-32x32.png
-        coffeeButton.image = Bundle(for: MatrixScreenSaverOptionsSheetController.self).image(forResource: "BuyMeACoffee")
+        coffeeButton.image = Bundle(for: MatrixScreenSaverOptionsSheetController.self).image(
+            forResource: "BuyMeACoffee")
         coffeeButton.image?.size = NSSize(width: 16, height: 16)
         coffeeButton.image?.isTemplate = false
         coffeeButton.imagePosition = .imageLeft
@@ -739,7 +836,9 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         coffeeButton.font = aboutButton.font
         coffeeButton.setContentHuggingPriority(.required, for: .horizontal)
         // The native centered title uses half the extra width as icon-to-label spacing.
-        coffeeButton.widthAnchor.constraint(greaterThanOrEqualToConstant: coffeeButton.intrinsicContentSize.width + 8).isActive = true
+        coffeeButton.widthAnchor.constraint(
+            greaterThanOrEqualToConstant: coffeeButton.intrinsicContentSize.width + 8
+        ).isActive = true
 
         let spacerRight = NSView()
         spacerRight.translatesAutoresizingMaskIntoConstraints = false
@@ -752,7 +851,9 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
 
         let informationSpacer = NSView()
         informationSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        let information = NSStackView(views: [aboutButton, versionLabel, informationSpacer, coffeeButton])
+        let information = NSStackView(views: [
+            aboutButton, versionLabel, informationSpacer, coffeeButton,
+        ])
         information.alignment = .centerY
         information.spacing = 8
         rootStack.addArrangedSubview(information)
@@ -766,7 +867,8 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         rootStack.addArrangedSubview(footer)
         buttons.setHuggingPriority(.required, for: .horizontal)
         resetButton.setContentHuggingPriority(.required, for: .horizontal)
-        footer.widthAnchor.constraint(equalTo: rootStack.widthAnchor, constant: groupWidth).isActive = true
+        footer.widthAnchor.constraint(equalTo: rootStack.widthAnchor, constant: groupWidth)
+            .isActive = true
 
         let contentView = NSView()
         contentView.translatesAutoresizingMaskIntoConstraints = false
@@ -798,7 +900,9 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         content.addSubview(stack)
         NSLayoutConstraint.activate([
             // A single-checkbox group still needs room for the native box's content margins.
-            box.heightAnchor.constraint(greaterThanOrEqualTo: stack.heightAnchor, constant: box.contentViewMargins.height * 2),
+            box.heightAnchor.constraint(
+                greaterThanOrEqualTo: stack.heightAnchor,
+                constant: box.contentViewMargins.height * 2),
             stack.leadingAnchor.constraint(equalTo: content.leadingAnchor),
             stack.trailingAnchor.constraint(equalTo: content.trailingAnchor),
             stack.topAnchor.constraint(equalTo: content.topAnchor),
@@ -815,7 +919,9 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         cmdOutputHoldSecondsField.isEnabled = cmdSceneCheckbox.state == .on
         nameField.isEnabled = neoMessageSceneCheckbox.state == .on
         linesEditButton.isEnabled = neoMessageSceneCheckbox.state == .on
-        for control in [commandsEditButton, commandsSequenceRadio, commandsRandomRadio, commandsShuffleRadio] {
+        for control in [
+            commandsEditButton, commandsSequenceRadio, commandsRandomRadio, commandsShuffleRadio,
+        ] {
             control.isEnabled = cmdSceneCheckbox.state == .on
         }
     }
@@ -839,15 +945,19 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
             radio.target = self
             radio.action = #selector(commandModeChanged(_:))
         }
-        let modes = NSStackView(views: [commandsSequenceRadio, commandsRandomRadio, commandsShuffleRadio])
+        let modes = NSStackView(views: [
+            commandsSequenceRadio, commandsRandomRadio, commandsShuffleRadio,
+        ])
         modes.orientation = .vertical
         modes.alignment = .leading
         modes.spacing = 4
         let stack = NSStackView(views: [
             cmdSceneCheckbox,
             heading, modes,
-            makeNumericSection(title: "Output hold", field: cmdOutputHoldSecondsField,
-                description: "Seconds to show output after each command finishes. 0 continues immediately."),
+            makeNumericSection(
+                title: "Output hold", field: cmdOutputHoldSecondsField,
+                description:
+                    "Seconds to show output after each command finishes. 0 continues immediately."),
         ])
         cmdOutputHoldSecondsField.setAccessibilityLabel("Command output hold in seconds")
         stack.orientation = .vertical
@@ -896,7 +1006,8 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         row.addArrangedSubview(linesEditButton)
 
         stack.addArrangedSubview(row)
-        stack.addArrangedSubview(makeDescriptionLabel("Customize the intro message, or use the default greeting."))
+        stack.addArrangedSubview(
+            makeDescriptionLabel("Customize the intro message, or use the default greeting."))
         return stack
     }
 
@@ -958,7 +1069,8 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
 
         resetLinesButton.target = self
         resetLinesButton.action = #selector(resetLines(_:))
-        let cancelLinesButton = NSButton(title: "Cancel", target: self, action: #selector(cancelLines(_:)))
+        let cancelLinesButton = NSButton(
+            title: "Cancel", target: self, action: #selector(cancelLines(_:)))
         let okLinesButton = NSButton(title: "OK", target: self, action: #selector(applyLines(_:)))
         okLinesButton.keyEquivalent = "\r"
         cancelLinesButton.keyEquivalent = "\u{1b}"
@@ -995,10 +1107,14 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         editorStack.addArrangedSubview(warning)
         editorStack.addArrangedSubview(footer)
 
-        linesScrollView.widthAnchor.constraint(equalTo: editorStack.widthAnchor,
-            constant: -(editorStack.edgeInsets.left + editorStack.edgeInsets.right)).isActive = true
-        footer.widthAnchor.constraint(equalTo: editorStack.widthAnchor,
-            constant: -(editorStack.edgeInsets.left + editorStack.edgeInsets.right)).isActive = true
+        linesScrollView.widthAnchor.constraint(
+            equalTo: editorStack.widthAnchor,
+            constant: -(editorStack.edgeInsets.left + editorStack.edgeInsets.right)
+        ).isActive = true
+        footer.widthAnchor.constraint(
+            equalTo: editorStack.widthAnchor,
+            constant: -(editorStack.edgeInsets.left + editorStack.edgeInsets.right)
+        ).isActive = true
         for label in [description, warning] {
             label.widthAnchor.constraint(equalTo: linesScrollView.widthAnchor).isActive = true
         }
@@ -1030,11 +1146,14 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         let editor = linesEditorWindow ?? buildLinesEditorWindow()
         linesEditorWindow = editor
         editor.title = editingCommands ? "Custom Shell Commands" : "Neo Message Lines"
-        editorDescriptionLabel?.stringValue = editingCommands
-            ? MatrixScreenSaverOptions.commandsDescription : MatrixScreenSaverOptions.neoMessageLinesDescription
+        editorDescriptionLabel?.stringValue =
+            editingCommands
+            ? MatrixScreenSaverOptions.commandsDescription
+            : MatrixScreenSaverOptions.neoMessageLinesDescription
         editorSecurityWarning?.isHidden = !editingCommands
         resetLinesButton.isHidden = editingCommands
-        linesTableView.setAccessibilityLabel(editingCommands ? "Custom commands" : "Neo message lines")
+        linesTableView.setAccessibilityLabel(
+            editingCommands ? "Custom commands" : "Neo message lines")
         linesEditorAddButton.setAccessibilityLabel(editingCommands ? "Add command" : "Add message")
         editorLines = editingCommands ? pendingCommands : pendingLines
         linesTableView.reloadData()
@@ -1050,7 +1169,8 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
             // Never truncate shell syntax into a different executable command; sanitize on main Apply.
             pendingCommands = editorLines
         } else {
-            pendingLines = editorLines
+            pendingLines =
+                editorLines
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty }
                 .map { String($0.prefix(MatrixScreenSaverOptions.maxNeoMessageLineLength)) }
@@ -1067,9 +1187,11 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
     /// Syncs visible text-field values back into `editorLines` before a reload.
     private func flushEditorLines() {
         for row in 0..<linesTableView.numberOfRows {
-            guard let cell = linesTableView.view(atColumn: 1, row: row, makeIfNecessary: false)
+            guard
+                let cell = linesTableView.view(atColumn: 1, row: row, makeIfNecessary: false)
                     as? NSTableCellView,
-                  let field = cell.textField else { continue }
+                let field = cell.textField
+            else { continue }
             editorLines[row] = field.stringValue
         }
     }
@@ -1109,7 +1231,9 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         let count = editorLines.count
         linesEditorAddButton.isEnabled = count < maximumEditorRows
         linesScrollView.hasVerticalScroller = count > 10
-        let tableHeight = CGFloat(max(1, min(count, 10))) * (Self.lineRowHeight + linesTableView.intercellSpacing.height)
+        let tableHeight =
+            CGFloat(max(1, min(count, 10)))
+            * (Self.lineRowHeight + linesTableView.intercellSpacing.height)
         if let constraint = linesScrollHeightConstraint {
             constraint.constant = tableHeight
         } else {
@@ -1134,28 +1258,36 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
 
     func numberOfRows(in tableView: NSTableView) -> Int { editorLines.count }
 
-    func tableView(_ tableView: NSTableView,
-                   pasteboardWriterForRow row: Int) -> (any NSPasteboardWriting)? {
+    func tableView(
+        _ tableView: NSTableView,
+        pasteboardWriterForRow row: Int
+    ) -> (any NSPasteboardWriting)? {
         let item = NSPasteboardItem()
         item.setString("\(row)", forType: Self.dragPboardType)
         return item
     }
 
-    func tableView(_ tableView: NSTableView,
-                   validateDrop info: any NSDraggingInfo,
-                   proposedRow row: Int,
-                   proposedDropOperation dropOperation: NSTableView.DropOperation) -> NSDragOperation {
-        return info.draggingSource as? NSTableView === tableView && dropOperation == .above ? .move : []
+    func tableView(
+        _ tableView: NSTableView,
+        validateDrop info: any NSDraggingInfo,
+        proposedRow row: Int,
+        proposedDropOperation dropOperation: NSTableView.DropOperation
+    ) -> NSDragOperation {
+        return info.draggingSource as? NSTableView === tableView && dropOperation == .above
+            ? .move : []
     }
 
-    func tableView(_ tableView: NSTableView,
-                   acceptDrop info: any NSDraggingInfo,
-                   row: Int,
-                   dropOperation: NSTableView.DropOperation) -> Bool {
+    func tableView(
+        _ tableView: NSTableView,
+        acceptDrop info: any NSDraggingInfo,
+        row: Int,
+        dropOperation: NSTableView.DropOperation
+    ) -> Bool {
         guard info.draggingSource as? NSTableView === tableView, dropOperation == .above,
-              let srcStr = info.draggingPasteboard.string(forType: Self.dragPboardType),
-              let srcRow = Int(srcStr), editorLines.indices.contains(srcRow),
-              (0...editorLines.count).contains(row) else { return false }
+            let srcStr = info.draggingPasteboard.string(forType: Self.dragPboardType),
+            let srcRow = Int(srcStr), editorLines.indices.contains(srcRow),
+            (0...editorLines.count).contains(row)
+        else { return false }
         flushEditorLines()
         let item = editorLines.remove(at: srcRow)
         let dest = srcRow < row ? row - 1 : row
@@ -1166,9 +1298,11 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
 
     // MARK: – NSTableViewDelegate
 
-    func tableView(_ tableView: NSTableView,
-                   viewFor tableColumn: NSTableColumn?,
-                   row: Int) -> NSView? {
+    func tableView(
+        _ tableView: NSTableView,
+        viewFor tableColumn: NSTableColumn?,
+        row: Int
+    ) -> NSView? {
         guard let col = tableColumn else { return nil }
 
         switch col.identifier {
@@ -1190,7 +1324,8 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
             let identifier = NSUserInterfaceItemIdentifier("lineTextCell")
             let cellView: NSTableCellView
             if let reused = tableView.makeView(withIdentifier: identifier, owner: self)
-                    as? NSTableCellView {
+                as? NSTableCellView
+            {
                 cellView = reused
             } else {
                 cellView = NSTableCellView()
@@ -1210,8 +1345,11 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
                 ])
             }
             cellView.textField?.stringValue = editorLines[row]
-            cellView.textField?.font = editingCommands ? .monospacedSystemFont(ofSize: 12, weight: .regular) : .systemFont(ofSize: 13)
-            cellView.textField?.setAccessibilityLabel(editingCommands ? "Command \(row + 1)" : "Message \(row + 1)")
+            cellView.textField?.font =
+                editingCommands
+                ? .monospacedSystemFont(ofSize: 12, weight: .regular) : .systemFont(ofSize: 13)
+            cellView.textField?.setAccessibilityLabel(
+                editingCommands ? "Command \(row + 1)" : "Message \(row + 1)")
             return cellView
 
         case Self.removeColumnID:
@@ -1219,7 +1357,8 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
             btn.bezelStyle = .rounded
             btn.font = .systemFont(ofSize: 13)
             btn.isEnabled = editorLines.count > minimumEditorRows
-            btn.setAccessibilityLabel(editingCommands ? "Remove command \(row + 1)" : "Remove message \(row + 1)")
+            btn.setAccessibilityLabel(
+                editingCommands ? "Remove command \(row + 1)" : "Remove message \(row + 1)")
             return btn
 
         default:
@@ -1246,7 +1385,8 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
     /// Prevents AppKit's text substitutions from rewriting executable shell syntax.
     func controlTextDidBeginEditing(_ notification: Notification) {
         guard editingCommands, let field = notification.object as? NSTextField,
-              let editor = field.currentEditor() as? NSTextView else { return }
+            let editor = field.currentEditor() as? NSTextView
+        else { return }
         editor.isAutomaticQuoteSubstitutionEnabled = false
         editor.isAutomaticDashSubstitutionEnabled = false
         editor.isAutomaticSpellingCorrectionEnabled = false
@@ -1287,7 +1427,8 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         row.addArrangedSubview(scanLinesDirectionPopup)
 
         stack.addArrangedSubview(row)
-        stack.addArrangedSubview(makeDescriptionLabel("CRT texture across all scenes. Set to 0% to turn it off."))
+        stack.addArrangedSubview(
+            makeDescriptionLabel("CRT texture across all scenes. Set to 0% to turn it off."))
         return stack
     }
 
@@ -1310,7 +1451,9 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
     }
 
     /// Builds a labeled numeric input row with its description.
-    private func makeNumericSection(title: String, field: NSTextField, description: String) -> NSView {
+    private func makeNumericSection(title: String, field: NSTextField, description: String)
+        -> NSView
+    {
         let stack = NSStackView()
         stack.orientation = .vertical
         stack.alignment = .leading
@@ -1360,7 +1503,9 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         rainGlyphPreview.maximumNumberOfLines = 3
         rainGlyphPreview.heightAnchor.constraint(equalToConstant: 48).isActive = true
         rainGlyphPreview.setAccessibilityLabel("Rain glyph sample")
-        let note = makeDescriptionLabel("Classic and Resurrections include their own font and glyphs. Choose Default to customize them below.")
+        let note = makeDescriptionLabel(
+            "Classic and Resurrections include their own font and glyphs. Choose Default to customize them below."
+        )
         let stack = NSStackView(views: [heading, row, rainGlyphPreview, note])
         stack.orientation = .vertical
         stack.alignment = .leading
@@ -1368,7 +1513,8 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         stack.setHuggingPriority(.required, for: .vertical)
         rainGlyphPreview.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         note.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
-        row.toolTip = "Classic and Resurrections use their original bundled fonts. Default uses the settings below."
+        row.toolTip =
+            "Classic and Resurrections use their original bundled fonts. Default uses the settings below."
         return stack
     }
 
@@ -1398,7 +1544,8 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         let renderer = NativeMatrixRenderer()
         renderer.updateConfiguration(options.sanitized().rendererConfiguration())
         let name = renderer.activeRainFonts.first
-        rainGlyphPreview.font = name.flatMap { RainFontCatalog.font(named: $0, size: 12) }
+        rainGlyphPreview.font =
+            name.flatMap { RainFontCatalog.font(named: $0, size: 12) }
             ?? NSFont.monospacedSystemFont(ofSize: 12, weight: .medium)
         rainGlyphPreview.stringValue = String(String.UnicodeScalarView(renderer.rainGlyphs))
         rainGlyphPreview.invalidateIntrinsicContentSize()
@@ -1443,22 +1590,27 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         let menu = NSMenu()
         let systemFont = NSFont.monospacedSystemFont(ofSize: 16, weight: .medium)
         // Resolve the backing family instead of exposing the system alias or face weights.
-        let backingFont = CTFontCreateWithGraphicsFont(CTFontCopyGraphicsFont(systemFont, nil), 16, nil, nil)
+        let backingFont = CTFontCreateWithGraphicsFont(
+            CTFontCopyGraphicsFont(systemFont, nil), 16, nil, nil)
         let defaultTitle = "Default - \(CTFontCopyFamilyName(backingFont))"
         let summary = selectedRainFonts.first ?? defaultTitle
         menu.addItem(NSMenuItem(title: summary, action: nil, keyEquivalent: ""))
 
-        let defaultItem = NSMenuItem(title: defaultTitle, action: #selector(clearRainFonts(_:)), keyEquivalent: "")
+        let defaultItem = NSMenuItem(
+            title: defaultTitle, action: #selector(clearRainFonts(_:)), keyEquivalent: "")
         defaultItem.target = self
         defaultItem.state = selectedRainFonts.isEmpty ? .on : .off
         menu.addItem(defaultItem)
 
         let bundledFonts = RainGlyphSet.allCases.compactMap(\.fontName)
-        let families = RainFontCatalog.families(alwaysInclude: selectedRainFonts).filter { !bundledFonts.contains($0) }
+        let families = RainFontCatalog.families(alwaysInclude: selectedRainFonts).filter {
+            !bundledFonts.contains($0)
+        }
         for (index, group) in [bundledFonts, families].enumerated() {
             if index == 1 { menu.addItem(.separator()) }
             for family in group {
-                let item = NSMenuItem(title: family, action: #selector(selectRainFont(_:)), keyEquivalent: "")
+                let item = NSMenuItem(
+                    title: family, action: #selector(selectRainFont(_:)), keyEquivalent: "")
                 item.target = self
                 item.representedObject = family
                 item.state = selectedRainFonts.contains(family) ? .on : .off
@@ -1516,44 +1668,48 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         return stack
     }
 
-     /// Builds the rain duration section with "Run forever" checkbox and optional seconds field.
-     private func makeRainDurationSection() -> NSView {
-         let stack = NSStackView()
-         stack.orientation = .vertical
-         stack.alignment = .leading
-         stack.spacing = 4
-         stack.setHuggingPriority(.required, for: .vertical)
+    /// Builds the rain duration section with "Run forever" checkbox and optional seconds field.
+    private func makeRainDurationSection() -> NSView {
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 4
+        stack.setHuggingPriority(.required, for: .vertical)
 
-         let checkboxRow = NSStackView()
-         checkboxRow.orientation = .horizontal
-         checkboxRow.spacing = 0
-         checkboxRow.alignment = .centerY
-         rainRunForeverCheckbox.setButtonType(.switch)
-         checkboxRow.addArrangedSubview(rainRunForeverCheckbox)
+        let checkboxRow = NSStackView()
+        checkboxRow.orientation = .horizontal
+        checkboxRow.spacing = 0
+        checkboxRow.alignment = .centerY
+        rainRunForeverCheckbox.setButtonType(.switch)
+        checkboxRow.addArrangedSubview(rainRunForeverCheckbox)
 
-         let secondsRow = NSStackView()
-         secondsRow.orientation = .horizontal
-         secondsRow.spacing = 12
-         secondsRow.alignment = .centerY
+        let secondsRow = NSStackView()
+        secondsRow.orientation = .horizontal
+        secondsRow.spacing = 12
+        secondsRow.alignment = .centerY
 
-         let secondsLabel = NSTextField(labelWithString: "Seconds")
+        let secondsLabel = NSTextField(labelWithString: "Seconds")
         secondsLabel.font = .systemFont(ofSize: NSFont.systemFontSize)
-         secondsLabel.setContentHuggingPriority(.required, for: .horizontal)
-         secondsLabel.widthAnchor.constraint(equalToConstant: 100).isActive = true
-         rainDurationField.setAccessibilityLabel("Rain duration in seconds")
+        secondsLabel.setContentHuggingPriority(.required, for: .horizontal)
+        secondsLabel.widthAnchor.constraint(equalToConstant: 100).isActive = true
+        rainDurationField.setAccessibilityLabel("Rain duration in seconds")
 
-         rainDurationField.alignment = .left
-         rainDurationField.controlSize = .regular
-         rainDurationField.translatesAutoresizingMaskIntoConstraints = false
-         rainDurationField.widthAnchor.constraint(equalToConstant: Self.fourDigitFieldWidth).isActive = true
+        rainDurationField.alignment = .left
+        rainDurationField.controlSize = .regular
+        rainDurationField.translatesAutoresizingMaskIntoConstraints = false
+        rainDurationField.widthAnchor.constraint(equalToConstant: Self.fourDigitFieldWidth)
+            .isActive = true
 
-         secondsRow.addArrangedSubview(secondsLabel)
-         secondsRow.addArrangedSubview(rainDurationField)
+        secondsRow.addArrangedSubview(secondsLabel)
+        secondsRow.addArrangedSubview(rainDurationField)
 
-         stack.addArrangedSubview(checkboxRow)
-         stack.addArrangedSubview(secondsRow)
-        stack.addArrangedSubview(makeDescriptionLabel("When off, rain winds down after this many seconds, then the scene sequence repeats."))
-         return stack
+        stack.addArrangedSubview(checkboxRow)
+        stack.addArrangedSubview(secondsRow)
+        stack.addArrangedSubview(
+            makeDescriptionLabel(
+                "When off, rain winds down after this many seconds, then the scene sequence repeats."
+            ))
+        return stack
     }
 
     /// Builds the character size slider with a live size label.
@@ -1587,20 +1743,21 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         row.addArrangedSubview(characterSizeValueLabel)
 
         stack.addArrangedSubview(row)
-        stack.addArrangedSubview(makeDescriptionLabel("Character cell dimensions in pixels, used by every scene."))
+        stack.addArrangedSubview(
+            makeDescriptionLabel("Character cell dimensions in pixels, used by every scene."))
         return stack
     }
 
-     @objc private func characterSizeSliderChanged(_ sender: NSSlider) {
-         let index = Int(sender.doubleValue.rounded())
-         let pair = MatrixScreenSaverOptions.characterSizePairs[index]
-         characterSizeValueLabel.stringValue = "\(pair.width)×\(pair.height)"
-     }
+    @objc private func characterSizeSliderChanged(_ sender: NSSlider) {
+        let index = Int(sender.doubleValue.rounded())
+        let pair = MatrixScreenSaverOptions.characterSizePairs[index]
+        characterSizeValueLabel.stringValue = "\(pair.width)×\(pair.height)"
+    }
 
-     @objc private func rainRunForeverCheckboxChanged(_ sender: NSButton) {
-         let isRunningForever = sender.state == .on
-         rainDurationField.isEnabled = !isRunningForever
-     }
+    @objc private func rainRunForeverCheckboxChanged(_ sender: NSButton) {
+        let isRunningForever = sender.state == .on
+        rainDurationField.isEnabled = !isRunningForever
+    }
 
     /// Builds a top-aligned tab page with full-width sections so help text wraps within the page.
     private func makeOptionsTab(title: String, views: [NSView]) -> NSTabViewItem {
@@ -1623,7 +1780,8 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
             stack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
             stack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
             stack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 16),
-            stack.bottomAnchor.constraint(lessThanOrEqualTo: contentView.bottomAnchor, constant: -16),
+            stack.bottomAnchor.constraint(
+                lessThanOrEqualTo: contentView.bottomAnchor, constant: -16),
         ])
         for view in views {
             view.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
@@ -1646,26 +1804,29 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
     private func validatedOptions() throws -> MatrixScreenSaverOptions {
         let sizeIndex = Int(characterSizeSlider.doubleValue.rounded())
         let sizePair = MatrixScreenSaverOptions.characterSizePairs[sizeIndex]
-         let neoMessageSpeedFactor = try parseDouble(from: neoMessageSpeedFactorField, error: .neoMessageSpeedFactor)
-         let cmdOutputHoldSeconds = try parseDouble(from: cmdOutputHoldSecondsField, error: .cmdOutputHoldSeconds)
-         guard cmdOutputHoldSeconds.isFinite, cmdOutputHoldSeconds >= 0 else {
-             throw ValidationError.cmdOutputHoldSeconds
-         }
-         let rainDensity = try parseDouble(from: rainDensityField, error: .rainDensity)
-         let rainDurationSeconds = try parseInteger(from: rainDurationField, error: .rainDurationSeconds)
-         let frameRate = try parseDouble(from: frameRateField, error: .frameRate)
+        let neoMessageSpeedFactor = try parseDouble(
+            from: neoMessageSpeedFactorField, error: .neoMessageSpeedFactor)
+        let cmdOutputHoldSeconds = try parseDouble(
+            from: cmdOutputHoldSecondsField, error: .cmdOutputHoldSeconds)
+        guard cmdOutputHoldSeconds.isFinite, cmdOutputHoldSeconds >= 0 else {
+            throw ValidationError.cmdOutputHoldSeconds
+        }
+        let rainDensity = try parseDouble(from: rainDensityField, error: .rainDensity)
+        let rainDurationSeconds = try parseInteger(
+            from: rainDurationField, error: .rainDurationSeconds)
+        let frameRate = try parseDouble(from: frameRateField, error: .frameRate)
         let errorRate = try parseDouble(from: errorRateField, error: .errorRate)
 
         guard neoMessageSpeedFactor > 0 else {
             throw ValidationError.neoMessageSpeedFactor
         }
-         guard rainDensity > 0 else {
-             throw ValidationError.rainDensity
-         }
-         guard rainDurationSeconds >= MatrixScreenSaverOptions.minimumRainDurationSeconds else {
-             throw ValidationError.rainDurationSeconds
-         }
-         guard frameRate > 0, frameRate <= MatrixScreenSaverOptions.maximumFrameRate else {
+        guard rainDensity > 0 else {
+            throw ValidationError.rainDensity
+        }
+        guard rainDurationSeconds >= MatrixScreenSaverOptions.minimumRainDurationSeconds else {
+            throw ValidationError.rainDurationSeconds
+        }
+        guard frameRate > 0, frameRate <= MatrixScreenSaverOptions.maximumFrameRate else {
             throw ValidationError.frameRate
         }
         guard errorRate >= 0 else {
@@ -1679,18 +1840,19 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
             neoMessageLines: pendingLines,
             cmdSceneEnabled: cmdSceneCheckbox.state == .on,
             cmdOutputHoldSeconds: cmdOutputHoldSeconds,
-             commands: pendingCommands,
-             commandsRunInSequence: commandsSequenceRadio.state == .on || commandsShuffleRadio.state == .on,
-             commandsShuffleSequence: commandsShuffleRadio.state == .on,
+            commands: pendingCommands,
+            commandsRunInSequence: commandsSequenceRadio.state == .on
+                || commandsShuffleRadio.state == .on,
+            commandsShuffleSequence: commandsShuffleRadio.state == .on,
             numberSceneEnabled: numberSceneCheckbox.state == .on,
             twinkleEnabled: twinkleCheckbox.state == .on,
             diffuseEnabled: diffuseCheckbox.state == .on,
             characterWidth: sizePair.width,
             characterHeight: sizePair.height,
-             rainDensity: rainDensity,
-             rainRunForever: rainRunForeverCheckbox.state == .on,
-             rainDurationSeconds: rainDurationSeconds,
-             frameRate: frameRate,
+            rainDensity: rainDensity,
+            rainRunForever: rainRunForeverCheckbox.state == .on,
+            rainDurationSeconds: rainDurationSeconds,
+            frameRate: frameRate,
             errorRate: errorRate,
             characters: charactersField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines),
             rainFonts: selectedRainFonts,
@@ -1798,10 +1960,12 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         contentView.layoutSubtreeIfNeeded()
         // Keep Save/Cancel on screen; only the fixed-size tab document scrolls.
         let currentHeight = optionsHeight?.constant ?? 620
-        let chromeHeight = window.frame.height - window.contentRect(forFrameRect: window.frame).height
+        let chromeHeight =
+            window.frame.height - window.contentRect(forFrameRect: window.frame).height
         let availableHeight = (window.screen ?? NSScreen.main)?.visibleFrame.height ?? 1000
         let otherHeight = rootStack.fittingSize.height - currentHeight
-        optionsHeight?.constant = min(620, max(120, availableHeight - chromeHeight - otherHeight - 24))
+        optionsHeight?.constant = min(
+            620, max(120, availableHeight - chromeHeight - otherHeight - 24))
         contentView.layoutSubtreeIfNeeded()
         let fittingSize = rootStack.fittingSize
         let contentSize = NSSize(
@@ -1811,7 +1975,9 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         window.contentMinSize = contentSize
         window.setContentSize(contentSize)
         if optionsHeight?.constant != currentHeight, let document = optionsScrollView.documentView {
-            document.scroll(NSPoint(x: 0, y: max(0, document.frame.height - optionsScrollView.contentSize.height)))
+            document.scroll(
+                NSPoint(
+                    x: 0, y: max(0, document.frame.height - optionsScrollView.contentSize.height)))
         }
     }
 
@@ -1829,7 +1995,8 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
 
     private static let textFieldWidth: CGFloat = {
         let font = NSFont.systemFont(ofSize: NSFont.systemFontSize)
-        let textWidth = ceil(("MMMMMMMMMMMMMMMMMMMMMMMM" as NSString).size(withAttributes: [.font: font]).width)
+        let textWidth = ceil(
+            ("MMMMMMMMMMMMMMMMMMMMMMMM" as NSString).size(withAttributes: [.font: font]).width)
         return textWidth + 20
     }()
 

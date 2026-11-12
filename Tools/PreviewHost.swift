@@ -12,7 +12,8 @@ final class PreviewHost: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     /// Builds the preview host configuration from the command-line arguments.
     init(arguments: [String]) {
-        let bundleArgument = arguments.first { !$0.hasPrefix("--") } ?? "./build/MatrixScreenSaver.saver"
+        let bundleArgument =
+            arguments.first { !$0.hasPrefix("--") } ?? "./build/MatrixScreenSaver.saver"
         bundleURL = URL(fileURLWithPath: bundleArgument).standardizedFileURL
         smokeTest = arguments.contains("--smoke-test")
         super.init()
@@ -81,7 +82,10 @@ final class PreviewHost: NSObject, NSApplicationDelegate, NSWindowDelegate {
         guard let saverType = bundle.principalClass as? ScreenSaverView.Type else {
             throw PreviewError.principalClass
         }
-        guard let saver = saverType.init(frame: NSRect(origin: .zero, size: previewSize), isPreview: false) else {
+        guard
+            let saver = saverType.init(
+                frame: NSRect(origin: .zero, size: previewSize), isPreview: false)
+        else {
             throw PreviewError.instantiate
         }
         saver.autoresizingMask = [.width, .height]
@@ -106,9 +110,13 @@ final class PreviewHost: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     /// Uses the largest visible attached display as the preview reference size.
     private func largestScreenReferenceSize() -> NSSize {
-        let screenSizes = NSScreen.screens.map(\.visibleFrame.size).filter { $0.width > 20 && $0.height > 20 }
+        let screenSizes = NSScreen.screens.map(\.visibleFrame.size).filter {
+            $0.width > 20 && $0.height > 20
+        }
         guard
-            let largestScreen = screenSizes.max(by: { ($0.width * $0.height) < ($1.width * $1.height) })
+            let largestScreen = screenSizes.max(by: {
+                ($0.width * $0.height) < ($1.width * $1.height)
+            })
         else {
             return Self.fallbackPreviewSize
         }
@@ -125,9 +133,9 @@ private enum PreviewError: LocalizedError {
     /// Provides user-facing launch errors for the preview host.
     var errorDescription: String? {
         switch self {
-        case let .openBundle(path):
+        case .openBundle(let path):
             return "Could not open bundle at \(path)."
-        case let .loadBundle(path):
+        case .loadBundle(let path):
             return "Could not load bundle at \(path)."
         case .principalClass:
             return "Bundle principal class is not a ScreenSaverView."

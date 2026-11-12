@@ -7,6 +7,11 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "Scripts/update-homebrew-tap.py"
 TEMPLATE = (ROOT / "Homebrew/Casks/matrix-screen-saver.rb").read_text()
+# Reviewed cask layout before the long System Settings message was wrapped.
+PRE_FORMAT_TEMPLATE = TEMPLATE.replace(
+    'args: ["➡️ Open System Settings > Wallpaper > Screen Saver and select MatrixScreenSaver."],\n'
+    '      print_stdout: true },',
+    'args: ["➡️ Open System Settings > Wallpaper > Screen Saver and select MatrixScreenSaver."], print_stdout: true },')
 LEGACY = (ROOT / "Tests/Homebrew/fixtures/legacy-screen-saver.rb").read_text()
 LEGACY_WALLPAPER = (ROOT / "Tests/Homebrew/fixtures/legacy-wallpaper.rb").read_text()
 LEGACY_PAIR = (ROOT / "Tests/Homebrew/fixtures/legacy-pair.rb").read_text()
@@ -95,7 +100,7 @@ class TapUpdateTest(unittest.TestCase):
 
     def test_synchronous_cleanup_cask_migrates_only_when_unmodified(self):
         """Accept the reviewed 0.5.0 hooks, but never overwrite independent tap edits."""
-        previous = TEMPLATE.replace('"unregister", "homebrew"', '"unregister"').replace(
+        previous = PRE_FORMAT_TEMPLATE.replace("➡️ ", "").replace('"unregister", "homebrew"', '"unregister"').replace(
             'uninstall launchctl: "dev.patsch.MatrixWallpaper.cleanup",\n            quit:',
             'uninstall quit:')
         for app in ("MatrixWallpaper.app", "Matrix Wallpaper.app"):
@@ -104,6 +109,30 @@ class TapUpdateTest(unittest.TestCase):
             self.module.update(api, "owner/homebrew-test", "1.2.3", cask())
             self.assertEqual(cask(), api.content)
             api = FakeAPI(content + "# unreviewed change\n")
+            with self.assertRaises(ValueError):
+                self.module.update(api, "owner/homebrew-test", "1.2.3", cask())
+            self.assertTrue(all(method == "GET" for method, _, _ in api.calls))
+
+    def test_messages_without_arrows_migrate_only_when_unmodified(self):
+        """Upgrade reviewed pre-arrow casks without accepting unrelated tap edits."""
+        for app in ("MatrixWallpaper.app", "Matrix Wallpaper.app"):
+            previous = PRE_FORMAT_TEMPLATE.replace("➡️ ", "").replace("MatrixWallpaper.app", app)
+            api = FakeAPI(previous)
+            self.module.update(api, "owner/homebrew-test", "1.2.3", cask())
+            self.assertEqual(cask(), api.content)
+            api = FakeAPI(previous + "# unreviewed change\n")
+            with self.assertRaises(ValueError):
+                self.module.update(api, "owner/homebrew-test", "1.2.3", cask())
+            self.assertTrue(all(method == "GET" for method, _, _ in api.calls))
+
+    def test_previous_format_migrates_only_when_unmodified(self):
+        """Accept the reviewed unwrapped cask, but still reject unrelated edits."""
+        for app in ("MatrixWallpaper.app", "Matrix Wallpaper.app"):
+            previous = PRE_FORMAT_TEMPLATE.replace("MatrixWallpaper.app", app)
+            api = FakeAPI(previous)
+            self.module.update(api, "owner/homebrew-test", "1.2.3", cask())
+            self.assertEqual(cask(), api.content)
+            api = FakeAPI(previous + "# unreviewed change\n")
             with self.assertRaises(ValueError):
                 self.module.update(api, "owner/homebrew-test", "1.2.3", cask())
             self.assertTrue(all(method == "GET" for method, _, _ in api.calls))

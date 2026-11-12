@@ -6,6 +6,7 @@ artifact_contract: ce-unified-plan/v1
 product_contract_source: ce-plan-bootstrap
 execution: code
 ---
+
 # Automatic Homebrew Tap Updates - Plan
 
 ## Goal Capsule
@@ -17,6 +18,7 @@ execution: code
 - **Stop conditions:** No live tap writes, secret provisioning, release triggers, installed saver changes, force pushes, or PR merges during implementation.
 
 ---
+
 ## Product Contract
 
 ### Summary
@@ -30,10 +32,12 @@ The release workflow currently opens a tap PR requiring human review and merge. 
 ### Requirements
 
 **Publication**
+
 - R1. Each release published by the repository's Release workflow updates the configured tap without requiring a tap PR merge.
 - R2. Use the existing published versioned ZIP and its validated SHA-256; retain the manual handoff artifact.
 
 **Safety and operations**
+
 - R3. Reject downgrades, conflicting same-version content, concurrent stale writes, and changes to cask content outside release metadata.
 - R4. Missing credentials or tap API failure must not invalidate the published release; report recovery instructions visibly.
 - R5. Document the dedicated fine-grained tap contents-write token and main-branch rollout requirement without exposing or repurposing credentials.
@@ -49,6 +53,7 @@ No runtime renderer or cask installation changes. No credential setup or live pu
 - AE3. Covers R3, R4: hand-edited cask logic or a concurrent file change causes a visible failure without overwriting work.
 
 ---
+
 ## Planning Contract
 
 ### Key Technical Decisions
@@ -79,6 +84,7 @@ flowchart TB
 The source login cannot list repository secrets (HTTP 403); token absence was reported in the invoking session but cannot be freshly confirmed. Runtime activation requires the dedicated secret and these changes reaching main. Keep the release's non-blocking tap step and manual artifact. File-SHA conflicts protect against races; failures require inspection before rerunning. Other tap files remain untouched.
 
 ---
+
 ## Implementation Units
 
 ### U1. Guarded automatic publication
@@ -109,6 +115,7 @@ The source login cannot list repository secrets (HTTP 403); token absence was re
 - **Verification:** Workflow lint and offline documentation checks pass.
 
 ---
+
 ## Verification Contract
 
 - `python3 -B -m unittest discover -s Tests/Homebrew -p '*_test.py'` protects metadata, publication, and documentation.
@@ -118,6 +125,7 @@ The source login cannot list repository secrets (HTTP 403); token absence was re
 - Browser tests are inapplicable: native saver, scripts, and GitHub Actions only.
 
 ---
+
 ## Definition of Done
 
 U1 and U2 satisfy their test scenarios, abandoned code is removed, and changes are reviewed, committed, pushed, and included in a new PR targeting development. Report CI state and the token/main rollout prerequisites; do not claim that automatic publication is live.

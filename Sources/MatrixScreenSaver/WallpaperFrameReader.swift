@@ -10,15 +10,19 @@ final class WallpaperFrameReader {
 
     /// Observes only path notifications; no Mach lookup or sandbox entitlement is required.
     init() {
-        observer = DistributedNotificationCenter.default().addObserver(forName: SharedWallpaperFrame.offerNotification,
-            object: nil, queue: .main) { [weak self] notification in
-                guard let self, let path = notification.object as? String else { return }
-                let url = URL(fileURLWithPath: path)
-                guard self.buffer?.url != url else { return }
-                if let offered = try? SharedWallpaperFrame(reading: url, displayID: self.displayID, pointSize: self.pointSize) {
-                    self.buffer = offered
-                }
+        observer = DistributedNotificationCenter.default().addObserver(
+            forName: SharedWallpaperFrame.offerNotification,
+            object: nil, queue: .main
+        ) { [weak self] notification in
+            guard let self, let path = notification.object as? String else { return }
+            let url = URL(fileURLWithPath: path)
+            guard self.buffer?.url != url else { return }
+            if let offered = try? SharedWallpaperFrame(
+                reading: url, displayID: self.displayID, pointSize: self.pointSize)
+            {
+                self.buffer = offered
             }
+        }
     }
 
     /// Requests matching output, then reads only fresh, complete frames.
@@ -37,7 +41,8 @@ final class WallpaperFrameReader {
         let now = ProcessInfo.processInfo.systemUptime
         if now - lastRequest >= 0.5 {
             lastRequest = now
-            DistributedNotificationCenter.default().postNotificationName(SharedWallpaperFrame.requestNotification,
+            DistributedNotificationCenter.default().postNotificationName(
+                SharedWallpaperFrame.requestNotification,
                 object: String(displayID), userInfo: nil, deliverImmediately: true)
         }
         return buffer?.snapshot()

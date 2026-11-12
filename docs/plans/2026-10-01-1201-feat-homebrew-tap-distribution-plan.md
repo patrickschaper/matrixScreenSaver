@@ -108,13 +108,13 @@ That path gives users no package-manager ownership for upgrades or removal and c
 
 **Lifecycle and branching (KTD3, KTD4)**
 
-| State before staging | Native target occupied | Preflight action | Native artifact action | Postflight settings |
-|---|---|---|---|---|
-| No managed receipt | No | R2 disclosure and staged quarantine removal | Install | Open once |
-| No managed receipt | Yes, no force | R4 migration warning and R2 action | Fail without replacing target | Never reached |
-| No managed receipt | Yes, explicit force | R4 migration warning and R2 action | Replace target | Open once |
-| Managed receipt, upgrade | Removed by upgrade preparation | R2 action, no migration warning | Install successor with predecessor | Do not open |
-| Managed receipt, reinstall | Removed by reinstall preparation | R2 action, no migration warning | Reinstall | Do not open |
+| State before staging       | Native target occupied           | Preflight action                            | Native artifact action             | Postflight settings |
+| -------------------------- | -------------------------------- | ------------------------------------------- | ---------------------------------- | ------------------- |
+| No managed receipt         | No                               | R2 disclosure and staged quarantine removal | Install                            | Open once           |
+| No managed receipt         | Yes, no force                    | R4 migration warning and R2 action          | Fail without replacing target      | Never reached       |
+| No managed receipt         | Yes, explicit force              | R4 migration warning and R2 action          | Replace target                     | Open once           |
+| Managed receipt, upgrade   | Removed by upgrade preparation   | R2 action, no migration warning             | Install successor with predecessor | Do not open         |
+| Managed receipt, reinstall | Removed by reinstall preparation | R2 action, no migration warning             | Reinstall                          | Do not open         |
 
 **Hook protocol**
 
@@ -185,6 +185,7 @@ Tap publication adds a credential boundary separate from the current release rep
 **Files:** Create `Homebrew/Casks/matrix-screen-saver.rb`, `Homebrew/README.md`, `Tests/Homebrew/cask_lifecycle_test.rb`, and `Tests/Homebrew/support/fake_cask_dsl.rb`.
 
 **Approach:**
+
 1. Implement KTD1-KTD6 in the self-contained cask, seeded from the verified published release in Sources and Research.
 2. Keep metadata evaluation read-only, preserve closure state per invocation, and use artifact-derived source and target paths rather than assumed destinations.
 3. Create fixture-backed Ruby tests with temporary staged and target bundles, mocked command execution and output capture; explicitly model metadata becoming installed between definition evaluation and preflight.
@@ -194,6 +195,7 @@ Tap publication adds a credential boundary separate from the current release rep
 **Execution note:** Prove the snapshot bug and force delegation with fixture tests before relying on hook behavior; no real saver operations on the user's machine.
 
 **Test scenarios:**
+
 - Covers AE1. A fresh definition sees no receipt; staging creates metadata before preflight; installation still counts as initial and postflight opens settings once.
 - Covers AE2. A manual target and no prior receipt emit a fully qualified `--force` command; hooks never remove the target; native unforced installation fails and preferences remain byte-identical.
 - Covers AE3. The same fixture with native force enabled replaces the bundle and retains preferences; settings open once.
@@ -216,6 +218,7 @@ Tap publication adds a credential boundary separate from the current release rep
 **Files:** Modify `.github/workflows/release.yml`; create `Scripts/render-homebrew-release.py`, `Tests/Homebrew/release_metadata_test.py`, and fixture archives under `Tests/Homebrew/fixtures/`.
 
 **Approach:**
+
 1. Implement KTD7 as a distinct post-publication handoff, preserving prepare/publish triggers and the current release naming scheme.
 2. Validate release version, download bytes, archive source path, bundle version, supported architecture, and Mach-O minimum OS before rendering the cask from the local payload; never render a dependency floor lower than the binary's requirement.
 3. Upload the cask and manifest as a workflow artifact and summarize the manual update. Add a disabled-by-default cross-tap PR path using an explicit target and separately configured credential; document configuration without provisioning it.
@@ -224,6 +227,7 @@ Tap publication adds a credential boundary separate from the current release rep
 **Patterns to follow:** Existing publish job's version and archive outputs; GitHub-native workflow artifacts and PR review. Do not duplicate version-bump or release-creation logic.
 
 **Test scenarios:**
+
 - Known fixture bytes generate the expected version, URL, architecture, and SHA-256, with no placeholders in the released cask.
 - A rerun with an existing release consumes the existing published archive rather than a newly built zip.
 - A missing asset, checksum/digest mismatch, bundle-version mismatch, invalid version, unsupported architecture, or unexpected saver path fails handoff generation without a tap PR.
@@ -245,6 +249,7 @@ Tap publication adds a credential boundary separate from the current release rep
 **Approach:** Document R9 using the actual generated cask token and a visibly unconfigured tap placeholder. Explain native force replacement and preference retention, the KTD2 compatibility debt, the exact coffee link, and the KTD7 maintainer handoff. Keep the manual path separate and add the same security disclosure to its quarantine instructions.
 
 **Test scenarios:**
+
 - Fresh, migrate-with-force, upgrade, and ordinary uninstall sections use a consistent token and tap placeholder; no illustrative tap is described as provisioned.
 - The bypass disclosure states that quarantine removal bypasses Gatekeeper quarantine checks and does not make the bundle notarized or Apple-approved.
 - Migration instructions describe replacement of the saver bundle and retention of settings; uninstall instructions do not recommend `--zap`.
@@ -266,6 +271,7 @@ Tap publication adds a credential boundary separate from the current release rep
 **Execution note:** Native lifecycle smoke proof is required in addition to Ruby mocks. CI must use ordinary mode for deprecated hook execution; preserve a separate expected-failure check showing developer mode rejects legacy stanzas rather than claiming universal audit compatibility.
 
 **Test scenarios:**
+
 - Covers AE1-AE5. Real native artifact install, conflict rejection, forced replacement, two-version upgrade, and uninstall produce the required target contents and retain the preference sentinel.
 - Real preflight runs after stage metadata creation; the definition snapshot still distinguishes initial install from upgrade.
 - The staged and installed saver have no quarantine attribute after successful install and upgrade.
