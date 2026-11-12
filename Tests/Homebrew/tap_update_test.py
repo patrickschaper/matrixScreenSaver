@@ -95,7 +95,7 @@ class TapUpdateTest(unittest.TestCase):
 
     def test_synchronous_cleanup_cask_migrates_only_when_unmodified(self):
         """Accept the reviewed 0.5.0 hooks, but never overwrite independent tap edits."""
-        previous = TEMPLATE.replace('"unregister", "homebrew"', '"unregister"').replace(
+        previous = TEMPLATE.replace("➡️ ", "").replace('"unregister", "homebrew"', '"unregister"').replace(
             'uninstall launchctl: "dev.patsch.MatrixWallpaper.cleanup",\n            quit:',
             'uninstall quit:')
         for app in ("MatrixWallpaper.app", "Matrix Wallpaper.app"):
@@ -104,6 +104,18 @@ class TapUpdateTest(unittest.TestCase):
             self.module.update(api, "owner/homebrew-test", "1.2.3", cask())
             self.assertEqual(cask(), api.content)
             api = FakeAPI(content + "# unreviewed change\n")
+            with self.assertRaises(ValueError):
+                self.module.update(api, "owner/homebrew-test", "1.2.3", cask())
+            self.assertTrue(all(method == "GET" for method, _, _ in api.calls))
+
+    def test_messages_without_arrows_migrate_only_when_unmodified(self):
+        """Upgrade reviewed pre-arrow casks without accepting unrelated tap edits."""
+        for app in ("MatrixWallpaper.app", "Matrix Wallpaper.app"):
+            previous = TEMPLATE.replace("➡️ ", "").replace("MatrixWallpaper.app", app)
+            api = FakeAPI(previous)
+            self.module.update(api, "owner/homebrew-test", "1.2.3", cask())
+            self.assertEqual(cask(), api.content)
+            api = FakeAPI(previous + "# unreviewed change\n")
             with self.assertRaises(ValueError):
                 self.module.update(api, "owner/homebrew-test", "1.2.3", cask())
             self.assertTrue(all(method == "GET" for method, _, _ in api.calls))
