@@ -75,7 +75,10 @@ final class ScreenSyncCoordinator {
     ///   - id: Unique identity of the registering view (use `ObjectIdentifier`).
     ///   - expectedCount: Total number of displays (typically `NSScreen.screens.count`).
     ///   - startupDelay: Initial lead-in in seconds, captured on the first registration of a session.
-    func register(_ id: ObjectIdentifier, expectedCount: Int, startupDelay: TimeInterval = ScreenSyncCoordinator.startDelay) {
+    func register(
+        _ id: ObjectIdentifier, expectedCount: Int,
+        startupDelay: TimeInterval = ScreenSyncCoordinator.startDelay
+    ) {
         excludedIDs.remove(id)
         if registeredIDs.isEmpty {
             self.expectedCount = max(expectedCount, 1)

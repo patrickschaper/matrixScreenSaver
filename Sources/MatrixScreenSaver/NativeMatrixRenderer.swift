@@ -35,7 +35,8 @@ enum RainGlyphSet: String, CaseIterable {
         switch self {
         case .default: return nil
         case .classic:
-            return Array("ホア3ウ セ¦:\"\u{E937}ミラリ╌ツテニハソ▪ー<>0|+*コシマムメモエヤキオカ7ケサスz152ヨタワ4ネヌナ98ヒ0".unicodeScalars)
+            return Array(
+                "ホア3ウ セ¦:\"\u{E937}ミラリ╌ツテニハソ▪ー<>0|+*コシマムメモエヤキオカ7ケサスz152ヨタワ4ネヌナ98ヒ0".unicodeScalars)
         case .resurrections:
             return (0xE900...0xE986).compactMap(UnicodeScalar.init)
         }
@@ -47,9 +48,12 @@ enum RainGlyphSet: String, CaseIterable {
         let bundle = Bundle(for: NativeMatrixRenderer.self)
         for preset in allCases {
             guard let name = preset.fontName,
-                  let url = bundle.url(forResource: name, withExtension: "ttf", subdirectory: "Fonts"),
-                  let descriptors = CTFontManagerCreateFontDescriptorsFromURL(url as CFURL) as? [CTFontDescriptor],
-                  let descriptor = descriptors.first else { continue }
+                let url = bundle.url(
+                    forResource: name, withExtension: "ttf", subdirectory: "Fonts"),
+                let descriptors = CTFontManagerCreateFontDescriptorsFromURL(url as CFURL)
+                    as? [CTFontDescriptor],
+                let descriptor = descriptors.first
+            else { continue }
             fonts[name] = descriptor as NSFontDescriptor
         }
         return fonts
@@ -72,9 +76,9 @@ final class NativeMatrixRenderer {
         var twinkleEnabled = true
         var diffuseEnabled = true
         var rainDensity = 1.0
-         var rainRunForever = true
-         var rainDurationSeconds = 300
-         var frameRate = 25.0
+        var rainRunForever = true
+        var rainDurationSeconds = 300
+        var frameRate = 25.0
         var errorRate = 1.0
         var characters = ""
         /// Installed font families used for the rain glyphs. Empty keeps the built-in glyphs and system font.
@@ -92,10 +96,13 @@ final class NativeMatrixRenderer {
         func sanitized() -> Configuration {
             Configuration(
                 neoMessageSceneEnabled: neoMessageSceneEnabled,
-                neoMessageSpeedFactor: max(neoMessageSpeedFactor, MatrixRendererLimits.minimumNeoMessageSpeedFactor),
+                neoMessageSpeedFactor: max(
+                    neoMessageSpeedFactor, MatrixRendererLimits.minimumNeoMessageSpeedFactor),
                 cmdSceneEnabled: cmdSceneEnabled,
-                cmdOutputHoldSeconds: cmdOutputHoldSeconds.isFinite && cmdOutputHoldSeconds >= 0 ? cmdOutputHoldSeconds : 10,
-                commands: commands
+                cmdOutputHoldSeconds: cmdOutputHoldSeconds.isFinite && cmdOutputHoldSeconds >= 0
+                    ? cmdOutputHoldSeconds : 10,
+                commands:
+                    commands
                     .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                     .filter { !$0.isEmpty },
                 commandsRunInSequence: commandsRunInSequence,
@@ -104,15 +111,18 @@ final class NativeMatrixRenderer {
                 twinkleEnabled: twinkleEnabled,
                 diffuseEnabled: diffuseEnabled,
                 rainDensity: max(rainDensity, MatrixRendererLimits.minimumRainDensity),
-                 rainRunForever: rainRunForever,
-                 rainDurationSeconds: max(rainDurationSeconds, 1),
-                 frameRate: min(max(frameRate, MatrixRendererLimits.minimumFrameRate), MatrixRendererLimits.maximumFrameRate),
+                rainRunForever: rainRunForever,
+                rainDurationSeconds: max(rainDurationSeconds, 1),
+                frameRate: min(
+                    max(frameRate, MatrixRendererLimits.minimumFrameRate),
+                    MatrixRendererLimits.maximumFrameRate),
                 errorRate: max(errorRate, MatrixRendererLimits.minimumErrorRate),
                 characters: characters,
                 rainFonts: rainFonts,
                 rainGlyphSet: rainGlyphSet,
                 neoMessageName: neoMessageName.trimmingCharacters(in: .whitespacesAndNewlines),
-                neoMessageLines: neoMessageLines.isEmpty ? NeoMessageScene.lines(forName: neoMessageName) : neoMessageLines,
+                neoMessageLines: neoMessageLines.isEmpty
+                    ? NeoMessageScene.lines(forName: neoMessageName) : neoMessageLines,
                 skipSyncDelay: skipSyncDelay
             )
         }
@@ -247,7 +257,9 @@ final class NativeMatrixRenderer {
         }
 
         /// Updates per-cell decay state and optional glyph corruption for the frame.
-        mutating func resolveLevels(now: Int, errorRateModulo: Int, glyphProvider: () -> UnicodeScalar) {
+        mutating func resolveLevels(
+            now: Int, errorRateModulo: Int, glyphProvider: () -> UnicodeScalar
+        ) {
             guard columns > 0, rows > 0 else {
                 return
             }
@@ -281,8 +293,8 @@ final class NativeMatrixRenderer {
     private static let defaultTwinkle = 0.2
     private static let baseSpeedTable = [2, 2, 2, 2, 3, 3, 6, 6, 6, 7, 7, 8, 8, 8]
     private static let baseErrorRateModulo = 20.0
-    private static let numberIntroCursorBlinkPeriod: TimeInterval = 0.5   // matches NeoMessageScene
-    private static let numberIntroCursorBlinkCount = 2                    // 4 half-periods × 0.5 s ≈ 2 s
+    private static let numberIntroCursorBlinkPeriod: TimeInterval = 0.5  // matches NeoMessageScene
+    private static let numberIntroCursorBlinkCount = 2  // 4 half-periods × 0.5 s ≈ 2 s
     private static let numberIntroTypingInterval: TimeInterval = 1.0 / 40.0
     private static let numberIntroBlackoutInterval: TimeInterval = 1.0
     private static let numberIntroBlackoutRounds = 10
@@ -326,14 +338,17 @@ final class NativeMatrixRenderer {
         let cs = CTFontCopyCharacterSet(font) as CharacterSet
         let defaults = Set(defaultGlyphPool)
         var out = [UnicodeScalar]()
-        let values = characters.isEmpty
+        let values =
+            characters.isEmpty
             ? Array(UInt32(0x21)...UInt32(0xFFFF))
             : Array(Set(characters.unicodeScalars.map(\.value))).sorted()
         for v in values {
-            guard let sc = UnicodeScalar(v), cs.contains(sc) || !characters.isEmpty || defaults.contains(sc),
-                  v != 0xA0, v != 0x2028, v != 0x2029, v != 0x2588,
-                  !CharacterSet.whitespacesAndNewlines.contains(sc),
-                  !CharacterSet.controlCharacters.contains(sc) else { continue }
+            guard let sc = UnicodeScalar(v),
+                cs.contains(sc) || !characters.isEmpty || defaults.contains(sc),
+                v != 0xA0, v != 0x2028, v != 0x2029, v != 0x2588,
+                !CharacterSet.whitespacesAndNewlines.contains(sc),
+                !CharacterSet.controlCharacters.contains(sc)
+            else { continue }
             out.append(sc)
         }
         let limit = RainFontTables.maximumGlyphsPerFont
@@ -353,15 +368,21 @@ final class NativeMatrixRenderer {
     ///   - characters: Optional custom character restriction applied before sampling.
     ///   - glyphSet: Film presets supply their complete repertoire instead of sampling the font.
     /// - Returns: Disjoint private-use keys for every font, including shared characters.
-    static func makeRainTables(fonts: [String], characters: String = "", glyphSet: RainGlyphSet = .default) -> RainFontTables {
+    static func makeRainTables(
+        fonts: [String], characters: String = "", glyphSet: RainGlyphSet = .default
+    ) -> RainFontTables {
         var tables = RainFontTables()
         var seen = Set<String>()
         let names = fonts.filter { seen.insert($0).inserted }.prefix(8)
         for (fontIndex, name) in names.enumerated() {
             var pool = [UnicodeScalar]()
-            for (index, source) in (glyphSet.scalars ?? glyphEntries(forFont: name, characters: characters)).enumerated() {
+            for (index, source)
+                in (glyphSet.scalars ?? glyphEntries(forFont: name, characters: characters))
+                .enumerated()
+            {
                 // Each font owns separate keys so shared glyphs cannot steal another font's weight.
-                let key = UnicodeScalar(0xF0000 + fontIndex * RainFontTables.maximumGlyphsPerFont + index)!
+                let key = UnicodeScalar(
+                    0xF0000 + fontIndex * RainFontTables.maximumGlyphsPerFont + index)!
                 pool.append(key)
                 tables.fontByScalar[key] = name
                 tables.sourceByScalar[key] = source
@@ -374,7 +395,9 @@ final class NativeMatrixRenderer {
     private static let palette = makePalette()
 
     /// Returns the glyph pool for the given characters string, deduplicating and falling back to the default pool when empty.
-    private static func resolveGlyphPool(characters: String, fallback: [UnicodeScalar]) -> [UnicodeScalar] {
+    private static func resolveGlyphPool(characters: String, fallback: [UnicodeScalar])
+        -> [UnicodeScalar]
+    {
         let trimmed = characters.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             return fallback
@@ -383,8 +406,9 @@ final class NativeMatrixRenderer {
         var pool = [UnicodeScalar]()
         for scalar in trimmed.unicodeScalars {
             guard !scalar.properties.isDiacritic,
-                  !CharacterSet.whitespacesAndNewlines.contains(scalar),
-                  !CharacterSet.controlCharacters.contains(scalar) else { continue }
+                !CharacterSet.whitespacesAndNewlines.contains(scalar),
+                !CharacterSet.controlCharacters.contains(scalar)
+            else { continue }
             if seen.insert(scalar).inserted {
                 pool.append(scalar)
             }
@@ -461,12 +485,12 @@ final class NativeMatrixRenderer {
     private var now = 100
     private var frameIndex = 0
     private var activeScene: Scene = .numberIntro
-     private var rainProducing = true
-     private var restartRequested = false
-     private var neoSceneDoneRequested = false
-     private var cmdSceneDoneRequested = false
-     private var numberSceneDoneRequested = false
-     private enum NumberIntroPhase {
+    private var rainProducing = true
+    private var restartRequested = false
+    private var neoSceneDoneRequested = false
+    private var cmdSceneDoneRequested = false
+    private var numberSceneDoneRequested = false
+    private enum NumberIntroPhase {
         case cursorBlink, typingFirstLine, pauseAfterFirst, secondLine, pauseAfterSecond, rain
     }
 
@@ -486,17 +510,17 @@ final class NativeMatrixRenderer {
     private var numberIntroCursorVisible = false
     /// Completed trace row shifts at the reference rate, independent of host FPS.
     private var numberIntroRainFrame = 0
-    private var sceneStartTime: TimeInterval = 0   // 5-second-quantised anchor — shared across displays
+    private var sceneStartTime: TimeInterval = 0  // 5-second-quantised anchor — shared across displays
     /// Immutable session date keeps scripted text identical when displays cross a phase barrier around a pause.
     private var sceneContentStartTime: TimeInterval = 0
-    private var sceneSeed: UInt64 = 0             // seed derived from sceneStartTime
+    private var sceneSeed: UInt64 = 0  // seed derived from sceneStartTime
     private var numberSceneRNG: Xorshift64 = Xorshift64(seed: 1)
     private var rainRNG: Xorshift64 = Xorshift64(seed: 1)
     private var numberIntroAnchor: TimeInterval = 0
     private var numberIntroSchedule = NumberIntroSchedule()
     private var numberIntroBlackoutCount = 0
     private var numberIntroBlackedColumns = Set<Int>()
-    private var rainStartTime: TimeInterval = 0   // wall-clock time when current rain phase began
+    private var rainStartTime: TimeInterval = 0  // wall-clock time when current rain phase began
 
     /// Returns the rendered cell content at the requested grid position.
     subscript(row: Int, column: Int) -> RenderCell {
@@ -539,7 +563,8 @@ final class NativeMatrixRenderer {
             return nil
         }
         let m = Self.numberIntroMargin
-        let textCount = state.currentLine.map { min(state.visibleCharCount, $0.unicodeScalars.count) } ?? 0
+        let textCount =
+            state.currentLine.map { min(state.visibleCharCount, $0.unicodeScalars.count) } ?? 0
         return (column: m + textCount, visible: state.cursorVisible)
     }
 
@@ -668,35 +693,46 @@ final class NativeMatrixRenderer {
             pendingSimulationSteps = 0.0
         }
 
-        let glyphsChanged = sanitizedConfiguration.rainFonts != previousConfiguration.rainFonts ||
-            sanitizedConfiguration.characters != previousConfiguration.characters ||
-            sanitizedConfiguration.rainGlyphSet != previousConfiguration.rainGlyphSet
+        let glyphsChanged =
+            sanitizedConfiguration.rainFonts != previousConfiguration.rainFonts
+            || sanitizedConfiguration.characters != previousConfiguration.characters
+            || sanitizedConfiguration.rainGlyphSet != previousConfiguration.rainGlyphSet
         if glyphsChanged {
-            activeRainFonts = sanitizedConfiguration.rainGlyphSet.fontName.map { [$0] } ?? sanitizedConfiguration.rainFonts
-            rainTables = Self.makeRainTables(fonts: activeRainFonts,
-                                            characters: sanitizedConfiguration.characters.trimmingCharacters(in: .whitespacesAndNewlines),
-                                            glyphSet: sanitizedConfiguration.rainGlyphSet)
+            activeRainFonts =
+                sanitizedConfiguration.rainGlyphSet.fontName.map { [$0] }
+                ?? sanitizedConfiguration.rainFonts
+            rainTables = Self.makeRainTables(
+                fonts: activeRainFonts,
+                characters: sanitizedConfiguration.characters.trimmingCharacters(
+                    in: .whitespacesAndNewlines),
+                glyphSet: sanitizedConfiguration.rainGlyphSet)
             rainFontByScalar = rainTables.fontByScalar
             rainSourceByScalar = rainTables.sourceByScalar
         }
         let fontPoolUnion = rainTables.pools.flatMap { $0 }
-        activeGlyphPool = fontPoolUnion.isEmpty ? Self.resolveGlyphPool(
-            characters: sanitizedConfiguration.characters,
-            fallback: Self.defaultGlyphPool
-        ) : fontPoolUnion
+        activeGlyphPool =
+            fontPoolUnion.isEmpty
+            ? Self.resolveGlyphPool(
+                characters: sanitizedConfiguration.characters,
+                fallback: Self.defaultGlyphPool
+            ) : fontPoolUnion
         activeMixPools = rainTables.pools.count > 1 ? rainTables.pools : nil
 
         let shouldResetSceneSequence =
-            columns > 0 &&
-            rows > 0 &&
-            (previousConfiguration.neoMessageSceneEnabled != sanitizedConfiguration.neoMessageSceneEnabled ||
-             previousConfiguration.cmdSceneEnabled != sanitizedConfiguration.cmdSceneEnabled ||
-             previousConfiguration.cmdOutputHoldSeconds != sanitizedConfiguration.cmdOutputHoldSeconds ||
-             previousConfiguration.commands != sanitizedConfiguration.commands ||
-             previousConfiguration.commandsRunInSequence != sanitizedConfiguration.commandsRunInSequence ||
-             previousConfiguration.commandsShuffleSequence != sanitizedConfiguration.commandsShuffleSequence ||
-             previousConfiguration.numberSceneEnabled != sanitizedConfiguration.numberSceneEnabled ||
-             previousConfiguration.neoMessageLines != sanitizedConfiguration.neoMessageLines)
+            columns > 0 && rows > 0
+            && (previousConfiguration.neoMessageSceneEnabled
+                != sanitizedConfiguration.neoMessageSceneEnabled
+                || previousConfiguration.cmdSceneEnabled != sanitizedConfiguration.cmdSceneEnabled
+                || previousConfiguration.cmdOutputHoldSeconds
+                    != sanitizedConfiguration.cmdOutputHoldSeconds
+                || previousConfiguration.commands != sanitizedConfiguration.commands
+                || previousConfiguration.commandsRunInSequence
+                    != sanitizedConfiguration.commandsRunInSequence
+                || previousConfiguration.commandsShuffleSequence
+                    != sanitizedConfiguration.commandsShuffleSequence
+                || previousConfiguration.numberSceneEnabled
+                    != sanitizedConfiguration.numberSceneEnabled
+                || previousConfiguration.neoMessageLines != sanitizedConfiguration.neoMessageLines)
 
         if shouldResetSceneSequence || (!running && columns > 0 && rows > 0) {
             resetLayers()
@@ -752,59 +788,64 @@ final class NativeMatrixRenderer {
     }
 
     /// Initializes the rain scene state.
-    private func beginRainScene(at wallClockTime: TimeInterval = Date.timeIntervalSinceReferenceDate) {
+    private func beginRainScene(
+        at wallClockTime: TimeInterval = Date.timeIntervalSinceReferenceDate
+    ) {
         activeScene = .rainForever
         rainStartTime = wallClockTime
         rainProducing = true
     }
 
     /// Advances the continuous rain scene by one simulation step.
-     private func stepRainFrame() {
-         // Check if we need to stop producing new lines (wind-down)
-         if !configuration.rainRunForever && rainProducing {
-             let elapsedSeconds = Date.timeIntervalSinceReferenceDate - rainStartTime
-             let durationSeconds = TimeInterval(configuration.rainDurationSeconds)
-             if elapsedSeconds >= durationSeconds {
-                 rainProducing = false
-             }
-         }
+    private func stepRainFrame() {
+        // Check if we need to stop producing new lines (wind-down)
+        if !configuration.rainRunForever && rainProducing {
+            let elapsedSeconds = Date.timeIntervalSinceReferenceDate - rainStartTime
+            let durationSeconds = TimeInterval(configuration.rainDurationSeconds)
+            if elapsedSeconds >= durationSeconds {
+                rainProducing = false
+            }
+        }
 
-         // Only spawn new lines if rain is actively producing
-         if rainProducing && frameIndex % spawnModulo == 0 {
-             addRandomThread()
-         }
-         frameIndex += 1
-         now += 1
+        // Only spawn new lines if rain is actively producing
+        if rainProducing && frameIndex % spawnModulo == 0 {
+            addRandomThread()
+        }
+        frameIndex += 1
+        now += 1
 
-         // Lines continue falling and stamping regardless; only spawning is gated
-         layers[0].stepThreads(now: now, glyphProvider: randomGlyph)
-         layers[0].resolveLevels(now: now, errorRateModulo: errorRateModulo, glyphProvider: randomGlyph)
-         
-         layers[1].stepThreads(now: now, glyphProvider: randomGlyph)
-         layers[1].resolveLevels(now: now, errorRateModulo: errorRateModulo, glyphProvider: randomGlyph)
-         
-         layers[2].stepThreads(now: now, glyphProvider: randomGlyph)
-        layers[2].resolveLevels(now: now, errorRateModulo: errorRateModulo, glyphProvider: randomGlyph)
+        // Lines continue falling and stamping regardless; only spawning is gated
+        layers[0].stepThreads(now: now, glyphProvider: randomGlyph)
+        layers[0].resolveLevels(
+            now: now, errorRateModulo: errorRateModulo, glyphProvider: randomGlyph)
+
+        layers[1].stepThreads(now: now, glyphProvider: randomGlyph)
+        layers[1].resolveLevels(
+            now: now, errorRateModulo: errorRateModulo, glyphProvider: randomGlyph)
+
+        layers[2].stepThreads(now: now, glyphProvider: randomGlyph)
+        layers[2].resolveLevels(
+            now: now, errorRateModulo: errorRateModulo, glyphProvider: randomGlyph)
 
         constructRenderContent()
 
-         // If winding down and all layers are empty, restart the scene sequence
-         if !rainProducing && !configuration.rainRunForever {
-             let allLayersEmpty = layers.allSatisfy { layer in
-                 layer.threads.isEmpty && layer.content.allSatisfy { $0.isBlank }
-             }
-             if allLayersEmpty && !restartRequested {
-                 if configuration.skipSyncDelay {
-                     // Preview context: self-restart in place
-                     resetLayers()
-                     overrideSceneStartTime = nil
-                     beginSceneSequence()
-                 } else {
-                     // Engine context: hand off restart to View for coordinated timing
-                     restartRequested = true
-                 }
-             }
-         }
+        // If winding down and all layers are empty, restart the scene sequence
+        if !rainProducing && !configuration.rainRunForever {
+            let allLayersEmpty = layers.allSatisfy { layer in
+                layer.threads.isEmpty && layer.content.allSatisfy { $0.isBlank }
+            }
+            if allLayersEmpty && !restartRequested {
+                if configuration.skipSyncDelay {
+                    // Preview context: self-restart in place
+                    resetLayers()
+                    overrideSceneStartTime = nil
+                    beginSceneSequence()
+                } else {
+                    // Engine context: hand off restart to View for coordinated timing
+                    restartRequested = true
+                }
+            }
+        }
     }
 
     // MARK: - Number intro scene
@@ -817,7 +858,8 @@ final class NativeMatrixRenderer {
         let colEnd = max(margin + 1, columns - margin)
         let contentColumns = colEnd - colStart
         let numRounds = Self.numberIntroBlackoutRounds
-        let columnsPerRound = contentColumns > 0
+        let columnsPerRound =
+            contentColumns > 0
             ? max(1, Int(ceil(Double(contentColumns) / Double(numRounds))))
             : 1
         var available = Array(colStart..<colEnd)
@@ -839,14 +881,18 @@ final class NativeMatrixRenderer {
 
         // Anchor: sceneStartTime + however long the Neo scene takes at the configured speed.
         // All displays use the same sceneStartTime and same seed → same anchor.
-        let neoWallDuration: TimeInterval = configuration.neoMessageSceneEnabled
+        let neoWallDuration: TimeInterval =
+            configuration.neoMessageSceneEnabled
             ? neoScene.scheduledDuration
             : 0
         numberIntroAnchor = playbackAnchor ?? (sceneStartTime + neoWallDuration)
 
-        let cursorBlinkEnd = Double(Self.numberIntroCursorBlinkCount * 2) * Self.numberIntroCursorBlinkPeriod
+        let cursorBlinkEnd =
+            Double(Self.numberIntroCursorBlinkCount * 2) * Self.numberIntroCursorBlinkPeriod
 
-        let blinkEndDate = Date(timeIntervalSinceReferenceDate: sceneContentStartTime + neoWallDuration + cursorBlinkEnd)
+        let blinkEndDate = Date(
+            timeIntervalSinceReferenceDate: sceneContentStartTime + neoWallDuration + cursorBlinkEnd
+        )
         let formatter = DateFormatter()
         formatter.dateFormat = "MM-dd-yy"
         let dateString = formatter.string(from: blinkEndDate)
@@ -854,9 +900,11 @@ final class NativeMatrixRenderer {
         let timeString = formatter.string(from: blinkEndDate)
         let typingText = "Call trans opt: received. \(dateString) \(timeString) REC:Log>"
 
-        let charTimings = Self.naturalTypingTimings(for: typingText,
-                                                    baseInterval: Self.numberIntroTypingInterval / max(configuration.neoMessageSpeedFactor, 1e-6),
-                                                    rng: &numberSceneRNG)
+        let charTimings = Self.naturalTypingTimings(
+            for: typingText,
+            baseInterval: Self.numberIntroTypingInterval
+                / max(configuration.neoMessageSpeedFactor, 1e-6),
+            rng: &numberSceneRNG)
         let typingEnd = cursorBlinkEnd + (charTimings.last ?? 0)
 
         let pause1Duration = Double.random(in: 1...3, using: &numberSceneRNG)
@@ -898,12 +946,12 @@ final class NativeMatrixRenderer {
             let t = Date.timeIntervalSinceReferenceDate
             let sceneTime = t - numberIntroAnchor
             switch numberIntroPhase {
-                case .cursorBlink:      stepCursorBlink(sceneTime: sceneTime)
-                case .typingFirstLine:  stepTypingFirstLine(sceneTime: sceneTime)
-                case .pauseAfterFirst:  stepPauseAfterFirst(sceneTime: sceneTime)
-                case .secondLine:       commitSecondLine()
-                case .pauseAfterSecond: stepPauseAfterSecond(sceneTime: sceneTime)
-                case .rain:             stepNumberRain(sceneTime: sceneTime)
+            case .cursorBlink: stepCursorBlink(sceneTime: sceneTime)
+            case .typingFirstLine: stepTypingFirstLine(sceneTime: sceneTime)
+            case .pauseAfterFirst: stepPauseAfterFirst(sceneTime: sceneTime)
+            case .secondLine: commitSecondLine()
+            case .pauseAfterSecond: stepPauseAfterSecond(sceneTime: sceneTime)
+            case .rain: stepNumberRain(sceneTime: sceneTime)
             }
             if numberIntroPhase == previousPhase { break }
         }
@@ -934,8 +982,9 @@ final class NativeMatrixRenderer {
             return
         }
         let halfPeriod = Int(typingElapsed / Self.numberIntroCursorBlinkPeriod)
-        setRow0(text: numberIntroSchedule.typingText, typedCount: count,
-                showCursor: halfPeriod % 2 == 0)
+        setRow0(
+            text: numberIntroSchedule.typingText, typedCount: count,
+            showCursor: halfPeriod % 2 == 0)
     }
 
     private func stepPauseAfterFirst(sceneTime: TimeInterval) {
@@ -944,9 +993,10 @@ final class NativeMatrixRenderer {
         let visible = halfPeriod % 2 == 0
         if visible != numberIntroCursorVisible {
             numberIntroCursorVisible = visible
-            setRow0(text: numberIntroSchedule.typingText,
-                    typedCount: numberIntroSchedule.charTimings.count,
-                    showCursor: visible)
+            setRow0(
+                text: numberIntroSchedule.typingText,
+                typedCount: numberIntroSchedule.charTimings.count,
+                showCursor: visible)
         }
         if pauseElapsed >= numberIntroSchedule.pause1Duration {
             numberIntroPhase = .secondLine
@@ -970,7 +1020,8 @@ final class NativeMatrixRenderer {
 
     private func stepNumberRain(sceneTime: TimeInterval) {
         while activeScene == .numberIntro && !numberSceneDoneRequested {
-            let expectedSceneTime = numberIntroSchedule.rainStart
+            let expectedSceneTime =
+                numberIntroSchedule.rainStart
                 + Double(numberIntroBlackoutCount) * Self.numberIntroBlackoutInterval
             if sceneTime >= expectedSceneTime {
                 blackoutColumns()
@@ -979,7 +1030,8 @@ final class NativeMatrixRenderer {
             }
         }
         guard activeScene == .numberIntro && !numberSceneDoneRequested else { return }
-        let expectedFrame = Int(max(0, sceneTime - numberIntroSchedule.rainStart) * Self.referenceFrameRate)
+        let expectedFrame = Int(
+            max(0, sceneTime - numberIntroSchedule.rainStart) * Self.referenceFrameRate)
         // Higher host FPS must not accelerate whole-row scrolling or repeat unchanged frames.
         while numberIntroRainFrame < expectedFrame {
             scrollNumberRain()
@@ -993,8 +1045,9 @@ final class NativeMatrixRenderer {
     private func setRow0(text: String, typedCount: Int, showCursor: Bool) {
         let m = Self.numberIntroMargin
         let visibleText = String(String.UnicodeScalarView(text.unicodeScalars.prefix(typedCount)))
-        setRow(m, text: visibleText,
-               showCursor: showCursor && visibleText.unicodeScalars.count < columns - m * 2)
+        setRow(
+            m, text: visibleText,
+            showCursor: showCursor && visibleText.unicodeScalars.count < columns - m * 2)
     }
 
     /// Writes a visible output row and optional block cursor within the content margins.
@@ -1012,11 +1065,13 @@ final class NativeMatrixRenderer {
             let index = col - colStart
             var cell = Self.blankRenderCell
             if showCursor && col == cursorColumn {
-                cell = RenderCell(scalar: UnicodeScalar(0x2588)!, foregroundLevel: baseGreenLevel,
-                                  backgroundLevel: 0, bold: false)
+                cell = RenderCell(
+                    scalar: UnicodeScalar(0x2588)!, foregroundLevel: baseGreenLevel,
+                    backgroundLevel: 0, bold: false)
             } else if index < textCount {
-                cell = RenderCell(scalar: scalars[index], foregroundLevel: baseGreenLevel,
-                                  backgroundLevel: 0, bold: false)
+                cell = RenderCell(
+                    scalar: scalars[index], foregroundLevel: baseGreenLevel,
+                    backgroundLevel: 0, bold: false)
             }
             if renderCells[offset + col] != cell {
                 renderCells[offset + col] = cell
@@ -1031,8 +1086,10 @@ final class NativeMatrixRenderer {
         let m = Self.numberIntroMargin
         guard rows > m * 2 + 1, columns > m * 2 else { return }
         let levelCount = max(levelColors.count, 1)
-        let rowStart = m + 1; let rowEnd = rows - m
-        let colStart = m;     let colEnd = columns - m
+        let rowStart = m + 1
+        let rowEnd = rows - m
+        let colStart = m
+        let colEnd = columns - m
         // ensure text row is blank
         let textOffset = m * columns
         for col in colStart..<colEnd { renderCells[textOffset + col] = Self.blankRenderCell }
@@ -1055,8 +1112,10 @@ final class NativeMatrixRenderer {
         let m = Self.numberIntroMargin
         guard rows > m * 2 + 1, columns > m * 2 else { return }
         let levelCount = max(levelColors.count, 1)
-        let rowStart = m + 1; let rowEnd = rows - m
-        let colStart = m;     let colEnd = columns - m
+        let rowStart = m + 1
+        let rowEnd = rows - m
+        let colStart = m
+        let colEnd = columns - m
         for row in stride(from: rowEnd - 1, through: rowStart + 1, by: -1) {
             let dst = row * columns
             let src = (row - 1) * columns
@@ -1085,8 +1144,10 @@ final class NativeMatrixRenderer {
         guard rows > m * 2 + 1, columns > m * 2 else { return }
         guard numberIntroBlackoutCount < numberIntroSchedule.blackoutRounds.count else { return }
         let chosen = numberIntroSchedule.blackoutRounds[numberIntroBlackoutCount]
-        let colStart = m; let colEnd = columns - m
-        let rowStart = m + 1; let rowEnd = rows - m
+        let colStart = m
+        let colEnd = columns - m
+        let rowStart = m + 1
+        let rowEnd = rows - m
         if !chosen.isEmpty {
             for row in m..<rowEnd { markRowDirty(row) }
         }
@@ -1098,17 +1159,18 @@ final class NativeMatrixRenderer {
                 backgroundLevel: 0, bold: false)
             numberIntroBlackedColumns.insert(col)
         }
-         visibleCountByRow[m] = (colStart..<colEnd).filter { numberIntroBlackedColumns.contains($0) }.count
-         numberIntroBlackoutCount += 1
-         if numberIntroBlackoutCount >= numberIntroSchedule.blackoutRounds.count {
-             if configuration.skipSyncDelay {
-                 // Preview context: self-transition immediately
-                 beginRainScene()
-             } else {
-                 // Engine context: signal completion and let View coordinate barrier
-                 numberSceneDoneRequested = true
-             }
-         }
+        visibleCountByRow[m] =
+            (colStart..<colEnd).filter { numberIntroBlackedColumns.contains($0) }.count
+        numberIntroBlackoutCount += 1
+        if numberIntroBlackoutCount >= numberIntroSchedule.blackoutRounds.count {
+            if configuration.skipSyncDelay {
+                // Preview context: self-transition immediately
+                beginRainScene()
+            } else {
+                // Engine context: signal completion and let View coordinate barrier
+                numberSceneDoneRequested = true
+            }
+        }
     }
 
     /// Returns a random palette level with power clamped to 0.2–0.6.
@@ -1123,9 +1185,9 @@ final class NativeMatrixRenderer {
     /// close (e.g. derived from consecutive whole-second timestamps) still produce
     /// well-distributed ``Xorshift64`` output from their very first draw.
     static func mixSeed(_ x: UInt64) -> UInt64 {
-        var z = x &+ 0x9E3779B97F4A7C15
-        z = (z ^ (z >> 30)) &* 0xBF58476D1CE4E5B9
-        z = (z ^ (z >> 27)) &* 0x94D049BB133111EB
+        var z = x &+ 0x9E37_79B9_7F4A_7C15
+        z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
+        z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
         return z ^ (z >> 31)
     }
 
@@ -1134,16 +1196,23 @@ final class NativeMatrixRenderer {
     /// rare hesitations. All timings are in seconds.
     /// Computes per-character cumulative delays with natural variation for a typing sequence.
     /// Used by both the Neo message scene and the number intro scene.
-    static func naturalTypingTimings(for text: String,
-                                             baseInterval: TimeInterval,
-                                             rng: inout Xorshift64) -> [TimeInterval] {
+    static func naturalTypingTimings(
+        for text: String,
+        baseInterval: TimeInterval,
+        rng: inout Xorshift64
+    ) -> [TimeInterval] {
         var timings: [TimeInterval] = []
         var t: TimeInterval = 0
         for ch in text {
             var delay = baseInterval * Double.random(in: 0.4...2.2, using: &rng)
-            if ".,!?:>".contains(ch) { delay += baseInterval * Double.random(in: 1.0...3.5, using: &rng) }
-            else if ch == " " { delay += baseInterval * Double.random(in: 0.3...1.2, using: &rng) }
-            if Double.random(in: 0...1, using: &rng) < 0.04 { delay += Double.random(in: 0.12...0.35, using: &rng) }
+            if ".,!?:>".contains(ch) {
+                delay += baseInterval * Double.random(in: 1.0...3.5, using: &rng)
+            } else if ch == " " {
+                delay += baseInterval * Double.random(in: 0.3...1.2, using: &rng)
+            }
+            if Double.random(in: 0...1, using: &rng) < 0.04 {
+                delay += Double.random(in: 0.12...0.35, using: &rng)
+            }
             t += delay
             timings.append(t)
         }
@@ -1157,7 +1226,8 @@ final class NativeMatrixRenderer {
         let state = neoScene.renderState
         // Never write the cursor to the frame buffer — the view draws it directly
         // via neoSceneCursor so it is guaranteed to appear in every phase.
-        setRow0(text: state.currentLine ?? "", typedCount: state.visibleCharCount, showCursor: false)
+        setRow0(
+            text: state.currentLine ?? "", typedCount: state.visibleCharCount, showCursor: false)
         // Neo's cursor is composited outside the grid, but still needs a published frame.
         if state.cursorVisible != previousCursorVisible { markRowDirty(Self.numberIntroMargin) }
         if neoScene.phase == .done {
@@ -1208,29 +1278,36 @@ final class NativeMatrixRenderer {
         // Xorshift64's first output is poorly mixed for numerically close seeds, so the
         // seed is passed through a splitmix64-style finalizer first to decorrelate it.
         var commandPickerRNG = Xorshift64(seed: Self.mixSeed(sceneSeed &+ 5))
-        let commands = configuration.commandsShuffleSequence && configuration.commandsRunInSequence
+        let commands =
+            configuration.commandsShuffleSequence && configuration.commandsRunInSequence
             ? configuration.commands.shuffled(using: &commandPickerRNG) : configuration.commands
-        let command = configuration.commandsRunInSequence
+        let command =
+            configuration.commandsRunInSequence
             ? commands[commandIndex]
             : commands.randomElement(using: &commandPickerRNG) ?? ""
 
-        let playbackAnchor = commandIndex == 0
-            ? sceneStartTime + (configuration.neoMessageSceneEnabled ? neoScene.scheduledDuration : 0)
+        let playbackAnchor =
+            commandIndex == 0
+            ? sceneStartTime
+                + (configuration.neoMessageSceneEnabled ? neoScene.scheduledDuration : 0)
             : Date.timeIntervalSinceReferenceDate
-        cmdScene.reset(startTime: playbackAnchor, command: command,
-                       speedFactor: configuration.neoMessageSpeedFactor,
-                       seed: sceneSeed &+ UInt64(commandIndex) &+ 5,
-                       holdDuration: configuration.cmdOutputHoldSeconds,
-                       size: TerminalSize(columns: columns - Self.numberIntroMargin * 2,
-                                          rows: rows - Self.numberIntroMargin * 2))
+        cmdScene.reset(
+            startTime: playbackAnchor, command: command,
+            speedFactor: configuration.neoMessageSpeedFactor,
+            seed: sceneSeed &+ UInt64(commandIndex) &+ 5,
+            holdDuration: configuration.cmdOutputHoldSeconds,
+            size: TerminalSize(
+                columns: columns - Self.numberIntroMargin * 2,
+                rows: rows - Self.numberIntroMargin * 2))
     }
 
     private func launchCmdCapture() {
         let task = CmdCaptureTask()
         cmdCaptureTask = task
         let command = cmdScene.command
-        let size = TerminalSize(columns: max(columns - Self.numberIntroMargin * 2, 1),
-                                rows: max(rows - Self.numberIntroMargin * 2, 1))
+        let size = TerminalSize(
+            columns: max(columns - Self.numberIntroMargin * 2, 1),
+            rows: max(rows - Self.numberIntroMargin * 2, 1))
         cmdCaptureQueue.async { [weak self] in
             let output = task.captureOutput(command: command, timeout: nil, size: size)
             DispatchQueue.main.async {
@@ -1246,13 +1323,15 @@ final class NativeMatrixRenderer {
         if let output = pendingCmdCaptureOutput {
             pendingCmdCaptureOutput = nil
             let m = Self.numberIntroMargin
-            cmdScene.receiveCapture(output, maxLines: max(rows - m * 2, 1),
-                                    maxColumns: max(columns - m * 2, 1), now: now)
+            cmdScene.receiveCapture(
+                output, maxLines: max(rows - m * 2, 1),
+                maxColumns: max(columns - m * 2, 1), now: now)
         } else if let output = cmdCaptureTask?.outputSnapshot, output != displayedCmdCaptureOutput {
             displayedCmdCaptureOutput = output
             let m = Self.numberIntroMargin
-            cmdScene.receiveCapture(output, maxLines: max(rows - m * 2, 1),
-                                    maxColumns: max(columns - m * 2, 1), now: now, isComplete: false)
+            cmdScene.receiveCapture(
+                output, maxLines: max(rows - m * 2, 1),
+                maxColumns: max(columns - m * 2, 1), now: now, isComplete: false)
         }
         cmdScene.advance(now: now)
         if cmdScene.phase == .launching && cmdCaptureTask == nil { launchCmdCapture() }
@@ -1262,12 +1341,15 @@ final class NativeMatrixRenderer {
             let index = row - m
             let line = index < state.lines.count ? state.lines[index] : ""
             let commandIsTyping = cmdScene.phase == .typingCommand || cmdScene.phase == .launching
-            setRow(row, text: line,
-                   showCursor: state.cursorVisible && index == state.lines.count - 1
-                       && (!commandIsTyping || line.unicodeScalars.count < columns - m * 2))
+            setRow(
+                row, text: line,
+                showCursor: state.cursorVisible && index == state.lines.count - 1
+                    && (!commandIsTyping || line.unicodeScalars.count < columns - m * 2))
         }
         if cmdScene.phase == .done {
-            if configuration.commandsRunInSequence && commandIndex + 1 < configuration.commands.count {
+            if configuration.commandsRunInSequence
+                && commandIndex + 1 < configuration.commands.count
+            {
                 commandIndex += 1
                 beginCmdCaptureScene()
                 return
@@ -1322,7 +1404,10 @@ final class NativeMatrixRenderer {
 
         if configuration.neoMessageSceneEnabled {
             activeScene = .neoMessage
-            neoScene.reset(startTime: sceneStartTime, seed: sceneSeed &+ 1, lines: configuration.neoMessageLines, speedFactor: configuration.neoMessageSpeedFactor)
+            neoScene.reset(
+                startTime: sceneStartTime, seed: sceneSeed &+ 1,
+                lines: configuration.neoMessageLines,
+                speedFactor: configuration.neoMessageSpeedFactor)
             for i in renderCells.indices { renderCells[i] = Self.blankRenderCell }
             for i in visibleCountByRow.indices { visibleCountByRow[i] = 0 }
             markAllRowsDirty()
@@ -1389,7 +1474,9 @@ final class NativeMatrixRenderer {
         let layer2 = layers[2].content
         let levelCount = levelColors.count
         let diffuseEnabled = configuration.diffuseEnabled
-        if diffuseEnabled, let baseAddress = diffuseLevels.withUnsafeMutableBufferPointer({ $0.baseAddress }) {
+        if diffuseEnabled,
+            let baseAddress = diffuseLevels.withUnsafeMutableBufferPointer({ $0.baseAddress })
+        {
             baseAddress.update(repeating: 0.0, count: diffuseLevels.count)
         }
 
@@ -1437,7 +1524,8 @@ final class NativeMatrixRenderer {
 
                 var adjustedPower = currentPower
                 if twinkleAmount > 0 {
-                    adjustedPower -= hypot(adjustedPower * twinkleAmount, 0.1) * Double.random(in: 0...1)
+                    adjustedPower -=
+                        hypot(adjustedPower * twinkleAmount, 0.1) * Double.random(in: 0...1)
                 }
                 if adjustedPower < 0 {
                     adjustedPower = 0
@@ -1461,7 +1549,9 @@ final class NativeMatrixRenderer {
                 renderableCount += 1
 
                 if diffuseEnabled {
-                    accumulateDiffuse(into: &diffuseLevels, row: row, column: column, level: level, levelCount: levelCount)
+                    accumulateDiffuse(
+                        into: &diffuseLevels, row: row, column: column, level: level,
+                        levelCount: levelCount)
                 }
                 column += 1
             }
@@ -1497,8 +1587,9 @@ final class NativeMatrixRenderer {
     /// Returns a random glyph from the supported rain character pool.
     private func randomGlyph() -> UnicodeScalar {
         if let pools = activeMixPools,
-           let pool = pools.randomElement(using: &rainRNG),
-           let glyph = pool.randomElement(using: &rainRNG) {
+            let pool = pools.randomElement(using: &rainRNG),
+            let glyph = pool.randomElement(using: &rainRNG)
+        {
             return glyph
         }
         return activeGlyphPool.randomElement(using: &rainRNG) ?? UnicodeScalar("0")
@@ -1521,7 +1612,8 @@ final class NativeMatrixRenderer {
         guard configuration.errorRate > 0 else {
             return 0
         }
-        return max(1, Int((Self.baseErrorRateModulo * frameRateScale / configuration.errorRate).rounded()))
+        return max(
+            1, Int((Self.baseErrorRateModulo * frameRateScale / configuration.errorRate).rounded()))
     }
 
     private var twinkleAmount: Double {
@@ -1529,7 +1621,9 @@ final class NativeMatrixRenderer {
     }
 
     /// Accumulates diffuse glow contributions around a rendered foreground cell.
-    private func accumulateDiffuse(into diffuseLevels: inout [Double], row: Int, column: Int, level: Int, levelCount: Int) {
+    private func accumulateDiffuse(
+        into diffuseLevels: inout [Double], row: Int, column: Int, level: Int, levelCount: Int
+    ) {
         guard levelCount > 1 else {
             return
         }
@@ -1551,7 +1645,9 @@ final class NativeMatrixRenderer {
     }
 
     /// Adds a single diffuse contribution to a valid neighboring cell.
-    private func addDiffuse(into diffuseLevels: inout [Double], row: Int, column: Int, value: Double) {
+    private func addDiffuse(
+        into diffuseLevels: inout [Double], row: Int, column: Int, value: Double
+    ) {
         guard row >= 0, row < rows, column >= 0, column < columns, value > 0 else {
             return
         }
@@ -1631,7 +1727,9 @@ final class NativeMatrixRenderer {
     }
 
     /// Converts normalized RGB values into an xterm-256 palette index.
-    private static func color2index(_ red: Double, _ green: Double, _ blue: Double, levels: Int) -> Int {
+    private static func color2index(_ red: Double, _ green: Double, _ blue: Double, levels: Int)
+        -> Int
+    {
         let r = Int(round(red * Double(levels - 1)))
         let g = Int(round(green * Double(levels - 1)))
         let b = Int(round(blue * Double(levels - 1)))
@@ -1708,9 +1806,13 @@ final class NativeMatrixRenderer {
                 for level in (minimum + 1)..<levels {
                     let remaining = Double(levels - 1 - level)
                     let denominator = Double(levels - 1 - minimum)
-                    let r = highlightCap - (highlightCap - Double(red) / edge) * (remaining / denominator)
+                    let r =
+                        highlightCap - (highlightCap - Double(red) / edge)
+                        * (remaining / denominator)
                     let g = 1.0 - (1.0 - Double(green) / edge) * (remaining / denominator)
-                    let b = highlightCap - (highlightCap - Double(blue) / edge) * (remaining / denominator)
+                    let b =
+                        highlightCap - (highlightCap - Double(blue) / edge)
+                        * (remaining / denominator)
                     indices.append(color2index(r, g, b, levels: levels))
                 }
             }
@@ -1742,14 +1844,23 @@ enum RainFontCatalog {
     /// Discovers font metadata in the standard system, local, network, and user font folders.
     private static func refreshHiddenFonts() {
         let manager = FileManager.default
-        let roots = manager.urls(for: .libraryDirectory, in: .allDomainsMask).map { $0.appendingPathComponent("Fonts") }
+        let roots = manager.urls(for: .libraryDirectory, in: .allDomainsMask).map {
+            $0.appendingPathComponent("Fonts")
+        }
         let keys: [URLResourceKey] = [.isRegularFileKey, .contentModificationDateKey]
         var inventory: [URL: Date] = [:]
         for root in roots {
-            guard let files = manager.enumerator(at: root, includingPropertiesForKeys: keys, options: [.skipsPackageDescendants]) else { continue }
+            guard
+                let files = manager.enumerator(
+                    at: root, includingPropertiesForKeys: keys, options: [.skipsPackageDescendants])
+            else { continue }
             for case let url as URL in files {
-                guard ["ttf", "otf", "ttc", "otc", "dfont", "suit"].contains(url.pathExtension.lowercased()),
-                      let values = try? url.resourceValues(forKeys: Set(keys)), values.isRegularFile == true else { continue }
+                guard
+                    ["ttf", "otf", "ttc", "otc", "dfont", "suit"].contains(
+                        url.pathExtension.lowercased()),
+                    let values = try? url.resourceValues(forKeys: Set(keys)),
+                    values.isRegularFile == true
+                else { continue }
                 inventory[url] = values.contentModificationDate ?? .distantPast
             }
         }
@@ -1757,12 +1868,22 @@ enum RainFontCatalog {
         let publicFamilies = Set(NSFontManager.shared.availableFontFamilies)
         var discovered: [String: NSFontDescriptor] = [:]
         for url in inventory.keys.sorted(by: { $0.path < $1.path }) {
-            guard let descriptors = CTFontManagerCreateFontDescriptorsFromURL(url as CFURL) as? [CTFontDescriptor] else { continue }
+            guard
+                let descriptors = CTFontManagerCreateFontDescriptorsFromURL(url as CFURL)
+                    as? [CTFontDescriptor]
+            else { continue }
             for descriptor in descriptors {
-                guard let family = CTFontDescriptorCopyAttribute(descriptor, kCTFontFamilyNameAttribute) as? String,
-                      !publicFamilies.contains(family) else { continue }
+                guard
+                    let family = CTFontDescriptorCopyAttribute(
+                        descriptor, kCTFontFamilyNameAttribute) as? String,
+                    !publicFamilies.contains(family)
+                else { continue }
                 let candidate = descriptor as NSFontDescriptor
-                if let current = discovered[family], fontStyleScore(current) <= fontStyleScore(candidate) { continue }
+                if let current = discovered[family],
+                    fontStyleScore(current) <= fontStyleScore(candidate)
+                {
+                    continue
+                }
                 discovered[family] = candidate
             }
         }

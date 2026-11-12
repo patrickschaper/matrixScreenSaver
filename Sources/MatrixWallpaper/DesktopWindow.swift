@@ -15,7 +15,8 @@ final class DesktopWindow: NSWindow {
     ///   - screen: Display whose desktop this window covers.
     ///   - saverView: Native saver view, created with preview mode disabled.
     init(screen: NSScreen, saverView: ScreenSaverView) {
-        super.init(contentRect: screen.frame, styleMask: .borderless, backing: .buffered, defer: false)
+        super.init(
+            contentRect: screen.frame, styleMask: .borderless, backing: .buffered, defer: false)
         // Explicit global coordinates also cover displays left of or above the primary display.
         setFrame(screen.frame, display: false)
         level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopWindow)))

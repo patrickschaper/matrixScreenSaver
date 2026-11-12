@@ -30,23 +30,26 @@ final class LoginItemController: NSObject, NSMenuDelegate {
     ///   - unregister: Operation to disable login startup.
     ///   - openSettings: Action for reviewing system approval.
     ///   - reportError: Presentation for failed operations.
-    init(readStatus: @escaping () -> Status = LoginItemController.systemStatus,
-         register: @escaping () throws -> Void = {
-             if #available(macOS 13.0, *) { try SMAppService.mainApp.register() }
-         },
-         unregister: @escaping () throws -> Void = {
-             if #available(macOS 13.0, *) { try SMAppService.mainApp.unregister() }
-         },
-         openSettings: @escaping () -> Void = {
-             if #available(macOS 13.0, *) { SMAppService.openSystemSettingsLoginItems() }
-         },
-         reportError: @escaping (Error) -> Void = { error in
-             let alert = NSAlert()
-             alert.messageText = "Could not change Launch at Login"
-             alert.informativeText = "\(error.localizedDescription)\nInstall Matrix Wallpaper in Applications and review Login Items Settings."
-             NSApp.activate(ignoringOtherApps: true)
-             alert.runModal()
-         }) {
+    init(
+        readStatus: @escaping () -> Status = LoginItemController.systemStatus,
+        register: @escaping () throws -> Void = {
+            if #available(macOS 13.0, *) { try SMAppService.mainApp.register() }
+        },
+        unregister: @escaping () throws -> Void = {
+            if #available(macOS 13.0, *) { try SMAppService.mainApp.unregister() }
+        },
+        openSettings: @escaping () -> Void = {
+            if #available(macOS 13.0, *) { SMAppService.openSystemSettingsLoginItems() }
+        },
+        reportError: @escaping (Error) -> Void = { error in
+            let alert = NSAlert()
+            alert.messageText = "Could not change Launch at Login"
+            alert.informativeText =
+                "\(error.localizedDescription)\nInstall Matrix Wallpaper in Applications and review Login Items Settings."
+            NSApp.activate(ignoringOtherApps: true)
+            alert.runModal()
+        }
+    ) {
         self.readStatus = readStatus
         self.register = register
         self.unregister = unregister
@@ -64,7 +67,8 @@ final class LoginItemController: NSObject, NSMenuDelegate {
     private func refresh() {
         let status = readStatus()
         item.state = status == .enabled ? .on : .off
-        item.title = status == .requiresApproval ? "Launch at Login — Approval Required" : "Launch at Login"
+        item.title =
+            status == .requiresApproval ? "Launch at Login — Approval Required" : "Launch at Login"
         item.isEnabled = status != .unavailable
         switch status {
         case .requiresApproval:

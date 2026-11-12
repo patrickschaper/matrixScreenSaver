@@ -589,7 +589,7 @@ jobs:
         env:
           TAP_TARGET: ${{ vars.HOMEBREW_TAP_REPOSITORY }}
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-          GH_TOKEN: ''
+          GH_TOKEN: ""
         shell: bash
         run: |
           set -euo pipefail

@@ -30,8 +30,10 @@ struct WallpaperPlaybackState {
 
     /// Whether animation may run after combining user intent and system state.
     var shouldRun: Bool {
-        isRequested && (!isPaused || isServingScreenSaver) &&
-            suspensions.allSatisfy { isServingScreenSaver && ($0 == .screenSaver || $0 == .locked) }
+        isRequested && (!isPaused || isServingScreenSaver)
+            && suspensions.allSatisfy {
+                isServingScreenSaver && ($0 == .screenSaver || $0 == .locked)
+            }
     }
 
     /// Desktop visibility remains separate from rendering for the lock-screen consumer.

@@ -1,6 +1,6 @@
-import Foundation
 import CoreGraphics
 import Darwin
+import Foundation
 
 /// Shares completed BGRA frames through a private file mapped read-only by the saver.
 ///
@@ -21,7 +21,8 @@ final class SharedWallpaperFrame {
 
     /// Word offsets in the versioned, same-machine shared-memory format.
     private enum Field: Int {
-        case magic, version, displayID, width, height, pointWidth, pointHeight, processID, sequence, updatedAt
+        case magic, version, displayID, width, height, pointWidth, pointHeight, processID, sequence,
+            updatedAt
     }
 
     /// One immutable presentation copy and its source sequence number.
@@ -58,7 +59,8 @@ final class SharedWallpaperFrame {
     ///   - scale: Display backing scale, without downsampling Retina output.
     /// - Throws: A file-system error or an unsupported-layout error.
     convenience init(displayID: UInt32, pointSize: CGSize, scale: CGFloat) throws {
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent(Self.filenamePrefix + UUID().uuidString)
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(
+            Self.filenamePrefix + UUID().uuidString)
         try self.init(url: url, displayID: displayID, pointSize: pointSize, scale: scale)
     }
 
@@ -76,12 +78,15 @@ final class SharedWallpaperFrame {
     /// Validates the entire fixed layout before mapping any untrusted pixel storage.
     private init(url: URL, displayID: UInt32, pointSize: CGSize, scale: CGFloat?) throws {
         guard Self.isFrameURL(url), pointSize.width.isFinite, pointSize.height.isFinite,
-              pointSize.width >= 1, pointSize.height >= 1, pointSize.width <= 16384, pointSize.height <= 16384 else {
+            pointSize.width >= 1, pointSize.height >= 1, pointSize.width <= 16384,
+            pointSize.height <= 16384
+        else {
             throw Self.invalidBuffer()
         }
         if let scale, !scale.isFinite || scale < 1 || scale > 4 { throw Self.invalidBuffer() }
         let creating = scale != nil
-        let flags = (creating ? O_RDWR | O_CREAT | O_EXCL : O_RDONLY | O_NONBLOCK) | O_NOFOLLOW | O_CLOEXEC
+        let flags =
+            (creating ? O_RDWR | O_CREAT | O_EXCL : O_RDONLY | O_NONBLOCK) | O_NOFOLLOW | O_CLOEXEC
         let fd = open(url.path, flags, S_IRUSR | S_IWUSR)
         guard fd >= 0 else { throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno)) }
         var ready = false
@@ -93,10 +98,11 @@ final class SharedWallpaperFrame {
         }
         var info = stat()
         guard fstat(fd, &info) == 0, info.st_uid == getuid(), info.st_nlink == 1,
-              info.st_mode & S_IFMT == S_IFREG, info.st_mode & 0o077 == 0 else { throw Self.invalidBuffer() }
+            info.st_mode & S_IFMT == S_IFREG, info.st_mode & 0o077 == 0
+        else { throw Self.invalidBuffer() }
         var header = [UInt64](repeating: 0, count: Self.headerSize / 8)
         if let scale {
-            header[Field.magic.rawValue] = 0x4D41545249584631
+            header[Field.magic.rawValue] = 0x4D41_5452_4958_4631
             header[Field.version.rawValue] = 1
             header[Field.displayID.rawValue] = UInt64(displayID)
             header[Field.width.rawValue] = UInt64(ceil(pointSize.width * scale))
@@ -105,31 +111,43 @@ final class SharedWallpaperFrame {
             header[Field.pointHeight.rawValue] = Double(pointSize.height).bitPattern
             header[Field.processID.rawValue] = UInt64(getpid())
         } else {
-            let count = header.withUnsafeMutableBytes { pread(fd, $0.baseAddress, Self.headerSize, 0) }
+            let count = header.withUnsafeMutableBytes {
+                pread(fd, $0.baseAddress, Self.headerSize, 0)
+            }
             guard count == Self.headerSize else { throw Self.invalidBuffer() }
         }
-        let width = header[Field.width.rawValue], height = header[Field.height.rawValue]
-        guard header[Field.magic.rawValue] == 0x4D41545249584631, header[Field.version.rawValue] == 1,
-              header[Field.displayID.rawValue] == displayID,
-              header[Field.pointWidth.rawValue] == Double(pointSize.width).bitPattern,
-              header[Field.pointHeight.rawValue] == Double(pointSize.height).bitPattern,
-              width > 0, height > 0, width <= 16384, height <= 16384,
-              width * height * 4 <= Self.maximumPixelBytes,
-              header[Field.processID.rawValue] > 0, header[Field.processID.rawValue] <= Int32.max else {
+        let width = header[Field.width.rawValue]
+        let height = header[Field.height.rawValue]
+        guard header[Field.magic.rawValue] == 0x4D41_5452_4958_4631,
+            header[Field.version.rawValue] == 1,
+            header[Field.displayID.rawValue] == displayID,
+            header[Field.pointWidth.rawValue] == Double(pointSize.width).bitPattern,
+            header[Field.pointHeight.rawValue] == Double(pointSize.height).bitPattern,
+            width > 0, height > 0, width <= 16384, height <= 16384,
+            width * height * 4 <= Self.maximumPixelBytes,
+            header[Field.processID.rawValue] > 0, header[Field.processID.rawValue] <= Int32.max
+        else {
             throw Self.invalidBuffer()
         }
         let size = Self.headerSize + Int(width * height * 4)
         if creating {
             guard ftruncate(fd, off_t(size)) == 0,
-                  header.withUnsafeBytes({ pwrite(fd, $0.baseAddress, Self.headerSize, 0) }) == Self.headerSize else {
+                header.withUnsafeBytes({ pwrite(fd, $0.baseAddress, Self.headerSize, 0) })
+                    == Self.headerSize
+            else {
                 throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
             }
         }
         guard fstat(fd, &info) == 0, info.st_uid == getuid(), info.st_nlink == 1,
-              info.st_mode & S_IFMT == S_IFREG, info.st_mode & 0o077 == 0, info.st_size == size else {
+            info.st_mode & S_IFMT == S_IFREG, info.st_mode & 0o077 == 0, info.st_size == size
+        else {
             throw Self.invalidBuffer()
         }
-        guard let mapped = mmap(nil, size, PROT_READ | (creating ? PROT_WRITE : 0), MAP_SHARED, fd, 0), mapped != MAP_FAILED else {
+        guard
+            let mapped = mmap(
+                nil, size, PROT_READ | (creating ? PROT_WRITE : 0), MAP_SHARED, fd, 0),
+            mapped != MAP_FAILED
+        else {
             throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
         }
         self.url = url
@@ -150,9 +168,10 @@ final class SharedWallpaperFrame {
     /// - Returns: Whether its standardized location is eligible for further ownership checks.
     static func isFrameURL(_ url: URL) -> Bool {
         let path = url.standardizedFileURL.path
-        return url.isFileURL && (path.hasPrefix("/var/folders/") || path.hasPrefix("/private/var/folders/")) &&
-            url.deletingLastPathComponent().lastPathComponent == "T" &&
-            url.lastPathComponent.hasPrefix(filenamePrefix)
+        return url.isFileURL
+            && (path.hasPrefix("/var/folders/") || path.hasPrefix("/private/var/folders/"))
+            && url.deletingLastPathComponent().lastPathComponent == "T"
+            && url.lastPathComponent.hasPrefix(filenamePrefix)
     }
 
     /// Draws one complete frame under a nonblocking exclusive lock.
@@ -162,9 +181,14 @@ final class SharedWallpaperFrame {
     func publish(_ draw: (CGContext) -> Void) -> CGImage? {
         guard isProducer, flock(descriptor, LOCK_EX | LOCK_NB) == 0 else { return nil }
         defer { flock(descriptor, LOCK_UN) }
-        guard let context = CGContext(data: memory.advanced(by: Self.headerSize), width: pixelWidth, height: pixelHeight,
-            bitsPerComponent: 8, bytesPerRow: pixelWidth * 4, space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGBitmapInfo.byteOrder32Little.rawValue | CGImageAlphaInfo.premultipliedFirst.rawValue) else { return nil }
+        guard
+            let context = CGContext(
+                data: memory.advanced(by: Self.headerSize), width: pixelWidth, height: pixelHeight,
+                bitsPerComponent: 8, bytesPerRow: pixelWidth * 4,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGBitmapInfo.byteOrder32Little.rawValue
+                    | CGImageAlphaInfo.premultipliedFirst.rawValue)
+        else { return nil }
         draw(context)
         store(value(.sequence) &+ 1, at: .sequence)
         store(ProcessInfo.processInfo.systemUptime.bitPattern, at: .updatedAt)
@@ -176,7 +200,9 @@ final class SharedWallpaperFrame {
     func refresh() {
         guard isProducer, flock(descriptor, LOCK_EX | LOCK_NB) == 0 else { return }
         defer { flock(descriptor, LOCK_UN) }
-        if value(.sequence) > 0 { store(ProcessInfo.processInfo.systemUptime.bitPattern, at: .updatedAt) }
+        if value(.sequence) > 0 {
+            store(ProcessInfo.processInfo.systemUptime.bitPattern, at: .updatedAt)
+        }
     }
 
     /// Reads a consistent presentation copy, retaining a fresh cached frame during contention.
@@ -185,15 +211,19 @@ final class SharedWallpaperFrame {
     func snapshot() -> Frame? {
         let now = ProcessInfo.processInfo.systemUptime
         var info = stat()
-        guard fstat(descriptor, &info) == 0, info.st_nlink == 1, info.st_size == byteCount else { return nil }
+        guard fstat(descriptor, &info) == 0, info.st_nlink == 1, info.st_size == byteCount else {
+            return nil
+        }
         guard flock(descriptor, LOCK_SH | LOCK_NB) == 0 else {
             return now - cachedUpdate < Self.freshnessInterval ? cachedFrame : nil
         }
         defer { flock(descriptor, LOCK_UN) }
         let updatedAt = Double(bitPattern: value(.updatedAt))
         let readTime = ProcessInfo.processInfo.systemUptime
-        guard updatedAt.isFinite, updatedAt <= readTime, readTime - updatedAt < Self.freshnessInterval,
-              value(.sequence) > 0 else { return nil }
+        guard updatedAt.isFinite, updatedAt <= readTime,
+            readTime - updatedAt < Self.freshnessInterval,
+            value(.sequence) > 0
+        else { return nil }
         if cachedFrame?.sequence != value(.sequence) { cachedFrame = copyFrame() }
         cachedUpdate = updatedAt
         return cachedFrame
@@ -201,24 +231,34 @@ final class SharedWallpaperFrame {
 
     /// Copies only under a kernel lock so later writes cannot tear a displayed frame.
     private func copyFrame() -> Frame? {
-        let data = Data(bytes: memory.advanced(by: Self.headerSize), count: byteCount - Self.headerSize)
+        let data = Data(
+            bytes: memory.advanced(by: Self.headerSize), count: byteCount - Self.headerSize)
         guard let provider = CGDataProvider(data: data as CFData),
-              let image = CGImage(width: pixelWidth, height: pixelHeight, bitsPerComponent: 8, bitsPerPixel: 32,
+            let image = CGImage(
+                width: pixelWidth, height: pixelHeight, bitsPerComponent: 8, bitsPerPixel: 32,
                 bytesPerRow: pixelWidth * 4, space: CGColorSpaceCreateDeviceRGB(),
-                bitmapInfo: CGBitmapInfo(rawValue: CGBitmapInfo.byteOrder32Little.rawValue | CGImageAlphaInfo.premultipliedFirst.rawValue),
-                provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent) else { return nil }
+                bitmapInfo: CGBitmapInfo(
+                    rawValue: CGBitmapInfo.byteOrder32Little.rawValue
+                        | CGImageAlphaInfo.premultipliedFirst.rawValue),
+                provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent)
+        else { return nil }
         return Frame(image: image, sequence: value(.sequence))
     }
 
     /// Reads one aligned header word from the validated mapping.
-    private func value(_ field: Field) -> UInt64 { memory.load(fromByteOffset: field.rawValue * 8, as: UInt64.self) }
+    private func value(_ field: Field) -> UInt64 {
+        memory.load(fromByteOffset: field.rawValue * 8, as: UInt64.self)
+    }
 
     /// Updates one aligned header word while holding the producer lock.
-    private func store(_ value: UInt64, at field: Field) { memory.storeBytes(of: value, toByteOffset: field.rawValue * 8, as: UInt64.self) }
+    private func store(_ value: UInt64, at field: Field) {
+        memory.storeBytes(of: value, toByteOffset: field.rawValue * 8, as: UInt64.self)
+    }
 
     private static func invalidBuffer() -> NSError {
-        NSError(domain: "dev.patsch.MatrixWallpaper.SharedFrame", code: 1,
-                userInfo: [NSLocalizedDescriptionKey: "Invalid or incompatible wallpaper frame buffer"])
+        NSError(
+            domain: "dev.patsch.MatrixWallpaper.SharedFrame", code: 1,
+            userInfo: [NSLocalizedDescriptionKey: "Invalid or incompatible wallpaper frame buffer"])
     }
 
     /// Removes the offer before releasing producer memory so readers fall back immediately.

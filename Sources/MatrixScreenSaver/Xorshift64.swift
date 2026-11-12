@@ -7,7 +7,7 @@ struct Xorshift64: RandomNumberGenerator {
     private var state: UInt64
 
     init(seed: UInt64) {
-        state = seed == 0 ? 6364136223846793005 : seed
+        state = seed == 0 ? 6_364_136_223_846_793_005 : seed
     }
 
     mutating func next() -> UInt64 {

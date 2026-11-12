@@ -1,5 +1,5 @@
-import Foundation
 import Darwin
+import Foundation
 
 /// The drawing state snapshot the view uses to render the current cmd capture frame.
 struct CmdCaptureRenderState {
@@ -60,9 +60,11 @@ struct CmdCaptureScene {
     ///   - seed: Shared content seed for identical command timing across displays.
     ///   - holdDuration: Seconds to retain output after exit; zero advances immediately.
     ///   - size: Available character viewport, excluding renderer margins.
-    mutating func reset(startTime: TimeInterval, command: String, speedFactor: Double = 1,
-                        seed: UInt64 = 1, holdDuration: TimeInterval = 10,
-                        size: TerminalSize = TerminalSize(columns: 80, rows: 24)) {
+    mutating func reset(
+        startTime: TimeInterval, command: String, speedFactor: Double = 1,
+        seed: UInt64 = 1, holdDuration: TimeInterval = 10,
+        size: TerminalSize = TerminalSize(columns: 80, rows: 24)
+    ) {
         self.startTime = startTime
         self.command = command
         self.holdDuration = holdDuration.isFinite && holdDuration >= 0 ? holdDuration : 10
@@ -70,8 +72,9 @@ struct CmdCaptureScene {
         viewportColumns = max(size.columns, 1)
         var rng = Xorshift64(seed: seed)
         let speed = speedFactor.isFinite && speedFactor > 0 ? speedFactor : 1
-        charTimings = NativeMatrixRenderer.naturalTypingTimings(for: displayCommand,
-                                                               baseInterval: 1.0 / 40 / speed, rng: &rng)
+        charTimings = NativeMatrixRenderer.naturalTypingTimings(
+            for: displayCommand,
+            baseInterval: 1.0 / 40 / speed, rng: &rng)
         typingEnd = 2 + (charTimings.last ?? 0)
         launchTime = typingEnd + Double.random(in: 1...3, using: &rng)
         visibleCommandCount = 0
@@ -90,8 +93,10 @@ struct CmdCaptureScene {
     ///   - maxColumns: Maximum characters per row, clamped to at least one.
     ///   - now: Same reference-relative clock used by ``advance(now:)``.
     ///   - isComplete: Whether the shell has exited; only then can the final hold begin.
-    mutating func receiveCapture(_ output: String, maxLines: Int, maxColumns: Int, now: TimeInterval,
-                                 isComplete: Bool = true) {
+    mutating func receiveCapture(
+        _ output: String, maxLines: Int, maxColumns: Int, now: TimeInterval,
+        isComplete: Bool = true
+    ) {
         guard phase == .launching || phase == .presenting, holdStart == nil else { return }
         guard !output.isEmpty || isComplete else { return }
         viewportRows = max(maxLines, 1)
@@ -136,12 +141,14 @@ struct CmdCaptureScene {
     /// Snapshot for the native renderer at the current presentation stage.
     var renderState: CmdCaptureRenderState {
         let elapsed = max(0, lastAdvanceTime - startTime)
-        let cursorElapsed = phase == .typingCommand
+        let cursorElapsed =
+            phase == .typingCommand
             ? (elapsed < 2 ? elapsed : elapsed < typingEnd ? elapsed - 2 : elapsed - typingEnd)
             : elapsed
         let cursorVisible = Int(cursorElapsed / NeoMessageScene.cursorBlinkInterval) % 2 == 0
-        let commandLine = String(String.UnicodeScalarView(
-            displayCommand.prefix(visibleCommandCount).unicodeScalars.prefix(viewportColumns)))
+        let commandLine = String(
+            String.UnicodeScalarView(
+                displayCommand.prefix(visibleCommandCount).unicodeScalars.prefix(viewportColumns)))
         switch phase {
         case .done:
             return CmdCaptureRenderState(lines: [], cursorVisible: false)
@@ -150,7 +157,8 @@ struct CmdCaptureScene {
         case .launching:
             return CmdCaptureRenderState(lines: [""], cursorVisible: cursorVisible)
         case .presenting:
-            return CmdCaptureRenderState(lines: Array(lines.suffix(viewportRows)), cursorVisible: cursorVisible)
+            return CmdCaptureRenderState(
+                lines: Array(lines.suffix(viewportRows)), cursorVisible: cursorVisible)
         }
     }
 }
@@ -204,17 +212,24 @@ final class CmdCaptureTask {
     ///   - size: Character dimensions exposed through COLUMNS, LINES and stdin's terminal size.
     /// - Returns: Combined terminal output, including partial output on timeout. Invalid UTF-8
     ///   uses replacement characters. Empty on cancellation, launch failure, or repeated use.
-    func captureOutput(command: String, timeout: TimeInterval? = CmdCaptureScene.captureTimeout,
-                       size: TerminalSize = TerminalSize(columns: 80, rows: 24)) -> String {
+    func captureOutput(
+        command: String, timeout: TimeInterval? = CmdCaptureScene.captureTimeout,
+        size: TerminalSize = TerminalSize(columns: 80, rows: 24)
+    ) -> String {
         guard !command.isEmpty, !command.utf8.contains(0),
-              timeout.map({ $0.isFinite && $0 > 0 }) ?? true else { return "" }
+            timeout.map({ $0.isFinite && $0 > 0 }) ?? true
+        else { return "" }
         let deadline = timeout.map { ProcessInfo.processInfo.systemUptime + $0 } ?? .infinity
         var master: Int32 = -1
         var slave: Int32 = -1
-        var windowSize = winsize(ws_row: UInt16(clamping: max(size.rows, 1)),
-                                 ws_col: UInt16(clamping: max(size.columns, 1)), ws_xpixel: 0, ws_ypixel: 0)
+        var windowSize = winsize(
+            ws_row: UInt16(clamping: max(size.rows, 1)),
+            ws_col: UInt16(clamping: max(size.columns, 1)), ws_xpixel: 0, ws_ypixel: 0)
         guard openpty(&master, &slave, nil, nil, &windowSize) == 0 else { return "" }
-        defer { close(master); if slave >= 0 { close(slave) } }
+        defer {
+            close(master)
+            if slave >= 0 { close(slave) }
+        }
         // Keep terminal-size ioctls available without waiting for input in an unattended host.
         var inputSettings = termios()
         guard tcgetattr(slave, &inputSettings) == 0 else { return "" }
@@ -226,8 +241,9 @@ final class CmdCaptureTask {
         }
         guard tcsetattr(slave, TCSANOW, &inputSettings) == 0 else { return "" }
         guard fcntl(master, F_SETFD, FD_CLOEXEC) == 0,
-              fcntl(slave, F_SETFD, FD_CLOEXEC) == 0,
-              fcntl(master, F_SETFL, O_NONBLOCK) == 0 else { return "" }
+            fcntl(slave, F_SETFD, FD_CLOEXEC) == 0,
+            fcntl(master, F_SETFL, O_NONBLOCK) == 0
+        else { return "" }
 
         var actions: posix_spawn_file_actions_t?
         guard posix_spawn_file_actions_init(&actions) == 0 else { return "" }
@@ -235,18 +251,22 @@ final class CmdCaptureTask {
         var attributes: posix_spawnattr_t?
         guard posix_spawnattr_init(&attributes) == 0 else { return "" }
         defer { posix_spawnattr_destroy(&attributes) }
-        guard posix_spawnattr_setflags(&attributes, Int16(POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_CLOEXEC_DEFAULT)) == 0,
-              posix_spawnattr_setpgroup(&attributes, 0) == 0,
-              posix_spawn_file_actions_adddup2(&actions, slave, STDIN_FILENO) == 0,
-              posix_spawn_file_actions_adddup2(&actions, slave, STDOUT_FILENO) == 0,
-              posix_spawn_file_actions_adddup2(&actions, slave, STDERR_FILENO) == 0 else { return "" }
+        guard
+            posix_spawnattr_setflags(
+                &attributes, Int16(POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_CLOEXEC_DEFAULT)) == 0,
+            posix_spawnattr_setpgroup(&attributes, 0) == 0,
+            posix_spawn_file_actions_adddup2(&actions, slave, STDIN_FILENO) == 0,
+            posix_spawn_file_actions_adddup2(&actions, slave, STDOUT_FILENO) == 0,
+            posix_spawn_file_actions_adddup2(&actions, slave, STDERR_FILENO) == 0
+        else { return "" }
 
         var environment = ProcessInfo.processInfo.environment
         environment["COLUMNS"] = String(windowSize.ws_col)
         environment["LINES"] = String(windowSize.ws_row)
         let existingPath = environment["PATH"] ?? ""
         let existingComponents = Set(existingPath.split(separator: ":").map(String.init))
-        environment["PATH"] = (Self.extraPathDirectories.filter { !existingComponents.contains($0) } + [existingPath])
+        environment["PATH"] =
+            (Self.extraPathDirectories.filter { !existingComponents.contains($0) } + [existingPath])
             .filter { !$0.isEmpty }.joined(separator: ":")
         let arguments = ["/bin/sh", "-c", command].map { $0.withCString { strdup($0) } }
         let variables = environment.map { "\($0.key)=\($0.value)".withCString { strdup($0) } }
@@ -268,7 +288,8 @@ final class CmdCaptureTask {
 
         // Arm before observing exit, but do not reap until the process group has been killed.
         let reaped = DispatchSemaphore(value: 0)
-        let exitSource = DispatchSource.makeProcessSource(identifier: pid, eventMask: .exit, queue: .global())
+        let exitSource = DispatchSource.makeProcessSource(
+            identifier: pid, eventMask: .exit, queue: .global())
         exitSource.setEventHandler {
             var status: Int32 = 0
             // An exit event can arrive before the child is waitable; reap on this background queue.
@@ -294,13 +315,15 @@ final class CmdCaptureTask {
             }
             var info = siginfo_t()
             // Keep the leader unreaped until group cleanup to prevent PID/group-ID reuse.
-            let exited = waitid(P_PID, id_t(pid), &info, WEXITED | WNOHANG | WNOWAIT) == 0 && info.si_pid == pid
+            let exited =
+                waitid(P_PID, id_t(pid), &info, WEXITED | WNOHANG | WNOWAIT) == 0
+                && info.si_pid == pid
             if exited && !outputOpen {
                 completed = true
                 break
             }
             var descriptors = [
-                pollfd(fd: outputOpen ? master : -1, events: Int16(POLLIN), revents: 0),
+                pollfd(fd: outputOpen ? master : -1, events: Int16(POLLIN), revents: 0)
             ]
             _ = poll(&descriptors, nfds_t(descriptors.count), 20)
         }

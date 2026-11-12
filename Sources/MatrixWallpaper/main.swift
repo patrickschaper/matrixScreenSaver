@@ -18,7 +18,8 @@ if CommandLine.arguments.contains("--unregister-login-item") {
 }
 
 // Homebrew can write the cleanup agent but cannot bootstrap it from sandboxed cask hooks.
-ScreenSaverInstallationController.runLifecycle(action: "activate", appURL: Bundle.main.bundleURL) { result in
+ScreenSaverInstallationController.runLifecycle(action: "activate", appURL: Bundle.main.bundleURL) {
+    result in
     if case .failure(let error) = result {
         NSLog("Could not activate Matrix cleanup: %@", error.localizedDescription)
     }
