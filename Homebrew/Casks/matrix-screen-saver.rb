@@ -67,7 +67,8 @@ cask "matrix-screen-saver" do |dsl|
     { type: :run, command: "/bin/echo",
       args: ["➡️ There is no spoon. There is coffee: https://www.buymeacoffee.com/yesman82"], print_stdout: true },
     { type: :run, command: "/bin/echo",
-      args: ["➡️ Open System Settings > Wallpaper > Screen Saver and select MatrixScreenSaver."], print_stdout: true },
+      args: ["➡️ Open System Settings > Wallpaper > Screen Saver and select MatrixScreenSaver."],
+      print_stdout: true },
     { type: :run, command: "/bin/echo",
       args: ["➡️ Open {{appdir}}/Matrix Wallpaper.app to start Matrix Wallpaper. " \
              "Launch at Login is optional in its Matrix menu."], print_stdout: true },

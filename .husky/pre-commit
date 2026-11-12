@@ -1,0 +1,2 @@
+# Format staged files; lint-staged preserves unstaged edits and aborts on failure.
+npm run format:staged

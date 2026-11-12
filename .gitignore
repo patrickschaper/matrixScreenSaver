@@ -4,6 +4,10 @@ build/
 DerivedData/
 out/
 
+# Commit-time formatting dependencies and generated Husky launchers
+node_modules/
+.husky/_/
+
 # Local agent tooling
 .serena/
 .projectatlas/

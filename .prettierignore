@@ -1,0 +1,7 @@
+# Generated outputs and dependencies are not contributor-authored files.
+build/
+.build/
+DerivedData/
+out/
+node_modules/
+package-lock.json

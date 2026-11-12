@@ -28,6 +28,26 @@ See the [project roadmap](plans/2026-11-10-1812-project-roadmap-plan.md) for pla
 
 Full Xcode is not required.
 
+### Commit-time formatting
+
+Install Node.js 22.22.1 or newer, then run `npm ci` once per clone to install
+the development tools and enable the pre-commit hook. Swift builds do not need Node.js.
+
+Commits run Prettier on staged Markdown, YAML, and JSON files. The Homebrew cask
+uses `brew style --fix` instead; Homebrew must be available when committing cask
+changes. Violations that Homebrew cannot fix automatically still block the commit.
+Staged Swift files use `swift format format --in-place`, with four-space indentation
+configured in `.swift-format`. Committing Swift changes requires a toolchain with
+`swift format` available (`swift format --version` checks this).
+Python and shell files are not formatted by this hook.
+Only staged files are formatted. Unstaged edits in partially staged files are
+preserved; formatter errors stop the commit. Run `npm run format:staged` to format
+the staged changes without committing.
+
+Cask formatting changes also affect the tap updater's exact structure check.
+Preserve reviewed predecessor hashes in `Scripts/update-homebrew-tap.py` and
+test upgrades in `Tests/Homebrew/tap_update_test.py` when changing the cask layout.
+
 ## Build
 
 ```bash
