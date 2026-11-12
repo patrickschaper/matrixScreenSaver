@@ -36,7 +36,6 @@ swiftc "$OPTIMIZATION" -framework Foundation -framework AppKit -framework Screen
   "$WALLPAPER_DIR/DesktopWindow.swift" \
   "$WALLPAPER_DIR/WallpaperPlaybackState.swift" \
   "$WALLPAPER_DIR/LoginItemController.swift" \
-  "$WALLPAPER_DIR/DesktopWallpaperController.swift" \
   "$WALLPAPER_DIR/ScreenSaverInstallationController.swift" \
   "$WALLPAPER_DIR/WallpaperApp.swift" \
   "$TEST_DIR/SharedSaverTests.swift" \
@@ -46,7 +45,6 @@ swiftc "$OPTIMIZATION" -framework Foundation -framework AppKit -framework Screen
   "$TEST_DIR/WallpaperAppTests.swift" \
   "$TEST_DIR/ScreenSaverInstallationTests.swift" \
   "$TEST_DIR/LoginItemTests.swift" \
-  "$TEST_DIR/DesktopWallpaperTests.swift" \
   "$TEST_DIR/main.swift" \
   -o "$TEST_BIN"
 

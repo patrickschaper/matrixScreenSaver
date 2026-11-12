@@ -469,6 +469,7 @@ jobs:
           set -euo pipefail
           ./build-wallpaper.sh --saver "build/MatrixScreenSaver.saver"
           bash Scripts/sign-bundle.sh "build/Matrix Wallpaper.app/Contents/MacOS/MatrixScreenSaverInstaller"
+          bash Scripts/sign-bundle.sh "build/Matrix Wallpaper.app/Contents/MacOS/MatrixScreenSaverSelector"
           bash Scripts/sign-bundle.sh "build/Matrix Wallpaper.app"
           codesign --verify --deep --strict "build/Matrix Wallpaper.app"
 

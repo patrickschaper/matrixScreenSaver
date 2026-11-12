@@ -2,10 +2,10 @@ import AppKit
 
 /// Exercises the real host's menu actions, notifications, rebuilds, and cleanup.
 func wallpaperAppTests() {
+    wallpaperSelectionPreservationTests()
     wallpaperIconTests()
     wallpaperSyncMenuTests()
     wallpaperDeferredLaunchTests()
-    wallpaperBackgroundFailureTests()
     let suite = "MatrixWallpaperPlaybackTests.\(UUID().uuidString)"
     let defaults = UserDefaults(suiteName: suite)!
     defer { defaults.removePersistentDomain(forName: suite) }
@@ -18,11 +18,12 @@ func wallpaperAppTests() {
         options: 0)
     try! saverMetadata.write(to: saverContents.appendingPathComponent("Info.plist"))
     defer { try? FileManager.default.removeItem(at: saverDirectory) }
-    let desktop = DesktopWallpaperFixture()
-    let desktopController = desktop.controller()
-    let host = WallpaperApp(
-        defaults: defaults, screenSaverDirectories: [saverDirectory],
-        desktopWallpaper: desktopController)
+    let selectionURL = saverDirectory.appendingPathComponent("selection.plist")
+    try! writeScreenSaverSelection(
+        at: selectionURL, saver: saverContents.deletingLastPathComponent())
+    let installation = ScreenSaverInstallationController(
+        directories: [saverDirectory], recordURL: nil, selectionURL: selectionURL)
+    let host = WallpaperApp(defaults: defaults, screenSaverInstallation: installation)
     host.applicationDidFinishLaunching(
         Notification(name: NSApplication.didFinishLaunchingNotification))
     defer {
@@ -50,6 +51,12 @@ func wallpaperAppTests() {
         ] && menuItems.allSatisfy { $0.view == nil } && pauseItem?.image != nil
             && stopItem?.image != nil,
         "playback commands lead the menu as native items with symbols")
+    for item in [pauseItem, stopItem].compactMap({ $0 })
+    where item.responds(to: NSSelectorFromString("preferredImageVisibility")) {
+        check(
+            item.value(forKey: "preferredImageVisibility") as? Int == 1,
+            "playback symbols explicitly stay visible on macOS 27")
+    }
     let settingsItem = menuItems.first { $0.action == NSSelectorFromString("showOptions:") }
     check(
         settingsItem?.title == "Settings…" && settingsItem?.keyEquivalent == ","
@@ -58,6 +65,7 @@ func wallpaperAppTests() {
     if let loginIndex = menuItems.firstIndex(where: { $0.title.hasPrefix("Launch at Login") }),
         let syncIndex = menuItems.firstIndex(where: {
             $0.title == "Sync with Screen Saver" || $0.title == "Install Screen Saver"
+                || $0.title == "Set Matrix Screen Saver"
         })
     {
         check(
@@ -71,17 +79,12 @@ func wallpaperAppTests() {
     }
     check(
         stored("windows", in: host, as: [DesktopWindow].self)?.isEmpty == true
-            && ScreenSyncCoordinator.shared.registeredCount == 0
-            && desktop.images["first"]?.url.path == "/original-a.jpg"
-            && desktop.images["second"]?.url.path == "/original-b.jpg",
-        "launch returns before creating views, registering playback, or acquiring desktops")
+            && ScreenSyncCoordinator.shared.registeredCount == 0,
+        "launch returns before creating views or registering playback")
     // AppKit can spend over two seconds drawing the previous fixture before servicing queued startup on CI.
     let started = eventually(10) { desktopWindowCount() == NSScreen.screens.count }
     check(started, "queued launch starts playback on the main run loop")
     guard started else { return }
-    check(
-        desktop.images.values.allSatisfy { $0.url == desktopController.blackImageURL },
-        "host launch applies black desktop images")
     check(
         desktopWindowCount() == NSScreen.screens.count, "app creates one desktop window per display"
     )
@@ -136,9 +139,6 @@ func wallpaperAppTests() {
             },
         "Resume continues the original views after the system suspension ends")
     workspace.post(name: NSWorkspace.willSleepNotification, object: nil)
-    check(
-        desktop.images.values.allSatisfy { $0.url == desktopController.blackImageURL },
-        "temporary sleep retains black desktops and backups")
     check(
         desktopWindowCount() == 0
             && ScreenSyncCoordinator.shared.registeredCount == originalWindows.count,
@@ -327,10 +327,6 @@ func wallpaperAppTests() {
             && pauseItem?.isEnabled == false,
         "Stop offers Start Wallpaper and leaves Pause Animation visible but disabled")
     NSApp.sendAction(NSSelectorFromString("togglePause:"), to: host, from: nil)
-    check(
-        desktop.images["first"]?.url.path == "/original-a.jpg"
-            && desktop.images["second"]?.url.path == "/original-b.jpg",
-        "Stop restores desktop images even during suspension")
     NSApp.sendAction(NSSelectorFromString("toggleScreenSaverSync:"), to: host, from: nil)
     NSApp.sendAction(NSSelectorFromString("toggleScreenSaverSync:"), to: host, from: nil)
     workspace.post(name: NSWorkspace.didWakeNotification, object: nil)
@@ -371,9 +367,6 @@ func wallpaperAppTests() {
             && (stored("windows", in: host, as: [DesktopWindow].self) ?? []).allSatisfy {
                 ($0.contentView as? MatrixScreenSaverView)?.isAnimating == true
             }, "Start runs normally after stopping a paused session")
-    check(
-        desktop.images.values.allSatisfy { $0.url == desktopController.blackImageURL },
-        "Start reapplies black desktops")
     NotificationCenter.default.post(
         name: NSApplication.didChangeScreenParametersNotification, object: nil)
     check(
@@ -384,15 +377,36 @@ func wallpaperAppTests() {
     check(
         desktopWindowCount() == 0 && ScreenSyncCoordinator.shared.registeredCount == 0,
         "Quit removes windows and animation participants")
-    check(
-        desktop.images["first"]?.url.path == "/original-a.jpg"
-            && desktop.images["second"]?.url.path == "/original-b.jpg",
-        "Quit restores desktop images after display reconciliation")
     workspace.post(name: NSWorkspace.didWakeNotification, object: nil)
     NotificationCenter.default.post(
         name: NSApplication.didChangeScreenParametersNotification, object: nil)
     check(desktopWindowCount() == 0, "Quit unregisters system observers")
-    wallpaperTerminationRecoveryTests()
+}
+
+/// Guards against reintroducing desktop-image changes or legacy wallpaper backup handling.
+private func wallpaperSelectionPreservationTests() {
+    let sources = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        .deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Sources")
+    guard let files = FileManager.default.enumerator(at: sources, includingPropertiesForKeys: nil)
+    else {
+        check(false, "wallpaper preservation guard can read runtime sources")
+        return
+    }
+    do {
+        let swiftFiles = files.compactMap { $0 as? URL }.filter { $0.pathExtension == "swift" }
+        guard !swiftFiles.isEmpty else {
+            check(false, "wallpaper preservation guard finds runtime sources")
+            return
+        }
+        let source = try swiftFiles.map { try String(contentsOf: $0, encoding: .utf8) }.joined(
+            separator: "\n")
+        check(
+            !source.contains("setDesktopImageURL"),
+            "runtime sources never set the native desktop image")
+        check(
+            !source.contains("DesktopWallpaperController") && !source.contains("originals.plist"),
+            "runtime sources cannot acquire or restore legacy wallpaper backups")
+    } catch { check(false, "wallpaper preservation source guard: \(error)") }
 }
 
 /// Checks registered shortcuts against the real field editor without requiring foreground activation.
@@ -460,46 +474,7 @@ private func wallpaperDeferredLaunchTests() {
     defer { defaults.removePersistentDomain(forName: suite) }
     let workspace = NSWorkspace.shared.notificationCenter
     do {
-        let desktop = DesktopWallpaperFixture()
-        let controller = desktop.controller()
-        try controller.start()
-        var recoveredBeforeAcquiring = false
-        desktop.beforeWrite = {
-            if desktop.images["first"]?.url.path == "/original-a.jpg"
-                && desktop.images["second"]?.url.path == "/original-b.jpg"
-            {
-                recoveredBeforeAcquiring = true
-            }
-        }
-        defer { desktop.beforeWrite = nil }
-        let host = WallpaperApp(defaults: defaults, desktopWallpaper: desktop.controller())
-        host.applicationDidFinishLaunching(
-            Notification(name: NSApplication.didFinishLaunchingNotification))
-        defer {
-            host.applicationWillTerminate(
-                Notification(name: NSApplication.willTerminateNotification))
-        }
-        check(
-            !recoveredBeforeAcquiring && ScreenSyncCoordinator.shared.registeredCount == 0,
-            "stale desktop recovery is deferred until after launch returns")
-        check(
-            eventually { desktopWindowCount() == NSScreen.screens.count },
-            "queued launch recovers a stale desktop backup")
-        check(
-            recoveredBeforeAcquiring
-                && desktop.images.values.allSatisfy { $0.url == controller.blackImageURL },
-            "queued launch restores every original before acquiring black desktops again")
-        NSApp.sendAction(NSSelectorFromString("togglePlayback:"), to: host, from: nil)
-        check(
-            desktop.images["first"]?.url.path == "/original-a.jpg"
-                && desktop.images["second"]?.url.path == "/original-b.jpg",
-            "Stop after deferred recovery restores the original images")
-    } catch {
-        check(false, "deferred recovery fixture: \(error)")
-    }
-    do {
-        let desktop = DesktopWallpaperFixture()
-        let host = WallpaperApp(defaults: defaults, desktopWallpaper: desktop.controller())
+        let host = WallpaperApp(defaults: defaults)
         host.applicationDidFinishLaunching(
             Notification(name: NSApplication.didFinishLaunchingNotification))
         defer {
@@ -521,10 +496,7 @@ private func wallpaperDeferredLaunchTests() {
             }, "Resume starts the session paused during launch")
     }
     for action in ["Stop", "Quit", "Stop then Start"] {
-        let desktop = DesktopWallpaperFixture()
-        var writes = 0
-        desktop.beforeWrite = { writes += 1 }
-        let host = WallpaperApp(defaults: defaults, desktopWallpaper: desktop.controller())
+        let host = WallpaperApp(defaults: defaults)
         host.applicationDidFinishLaunching(
             Notification(name: NSApplication.didFinishLaunchingNotification))
         defer {
@@ -537,8 +509,8 @@ private func wallpaperDeferredLaunchTests() {
         } else {
             NSApp.sendAction(NSSelectorFromString("togglePlayback:"), to: host, from: nil)
             check(
-                writes == 0 && ScreenSyncCoordinator.shared.registeredCount == 0,
-                "immediate Stop cancels launch without acquiring desktops")
+                ScreenSyncCoordinator.shared.registeredCount == 0,
+                "immediate Stop cancels launch before registering playback")
             if action == "Stop then Start" {
                 NSApp.sendAction(NSSelectorFromString("togglePlayback:"), to: host, from: nil)
                 check(
@@ -560,9 +532,8 @@ private func wallpaperDeferredLaunchTests() {
                     ObjectIdentifier.init)) == windowIDs,
             "\(action) cannot be undone or duplicated by queued launch work")
         check(
-            writes == (action == "Stop then Start" ? desktop.connected.count : 0)
-                && ScreenSyncCoordinator.shared.registeredCount == windows.count,
-            "\(action) leaves only the requested desktop ownership and session membership")
+            ScreenSyncCoordinator.shared.registeredCount == windows.count,
+            "\(action) leaves only the requested session membership")
         if action == "Quit" {
             check(
                 stored("observers", in: host, as: [(NotificationCenter, NSObjectProtocol)].self)?
@@ -572,10 +543,7 @@ private func wallpaperDeferredLaunchTests() {
         }
     }
 
-    let desktop = DesktopWallpaperFixture()
-    var writes = 0
-    desktop.beforeWrite = { writes += 1 }
-    let host = WallpaperApp(defaults: defaults, desktopWallpaper: desktop.controller())
+    let host = WallpaperApp(defaults: defaults)
     host.applicationDidFinishLaunching(
         Notification(name: NSApplication.didFinishLaunchingNotification))
     defer {
@@ -584,14 +552,14 @@ private func wallpaperDeferredLaunchTests() {
     NotificationCenter.default.post(
         name: NSApplication.didChangeScreenParametersNotification, object: nil)
     check(
-        writes == 0 && ScreenSyncCoordinator.shared.registeredCount == 0,
+        ScreenSyncCoordinator.shared.registeredCount == 0,
         "display reconciliation cannot bypass pending launch")
     NSApp.sendAction(NSSelectorFromString("showOptions:"), to: host, from: nil)
     let optionsController: MatrixScreenSaverOptionsSheetController? = stored(
         "optionsController", in: host)
     check(optionsController != nil, "pending launch exposes the options controller")
     check(
-        writes == 0 && ScreenSyncCoordinator.shared.registeredCount == 0,
+        ScreenSyncCoordinator.shared.registeredCount == 0,
         "opening options cannot bypass pending launch")
     workspace.post(name: NSWorkspace.willSleepNotification, object: nil)
     workspace.post(name: NSWorkspace.sessionDidResignActiveNotification, object: nil)
@@ -607,17 +575,19 @@ private func wallpaperDeferredLaunchTests() {
             object: String(displayID), userInfo: nil, deliverImmediately: true)
     }
     check(
-        writes == 0 && stored("windows", in: host, as: [DesktopWindow].self)?.isEmpty == true,
-        "pending launch notifications and sync changes cannot acquire desktops or create views")
+        stored("windows", in: host, as: [DesktopWindow].self)?.isEmpty == true,
+        "pending launch notifications and sync changes cannot create views")
     var drained = false
     DispatchQueue.main.async { drained = true }
     check(eventually { drained }, "suspended launch continuation drains")
     check(
-        writes == 0 && ScreenSyncCoordinator.shared.registeredCount == 0,
+        ScreenSyncCoordinator.shared.registeredCount == 0,
         "sleep and session suspension prevent queued startup and frame requests from starting playback"
     )
     workspace.post(name: NSWorkspace.didWakeNotification, object: nil)
-    check(writes == 0, "wake during launch suspension does not override an inactive session")
+    check(
+        ScreenSyncCoordinator.shared.registeredCount == 0,
+        "wake during launch suspension does not override an inactive session")
     workspace.post(name: NSWorkspace.sessionDidBecomeActiveNotification, object: nil)
     check(
         desktopWindowCount() == NSScreen.screens.count
@@ -625,102 +595,7 @@ private func wallpaperDeferredLaunchTests() {
         "resuming deferred launch starts one session using the current displays")
 }
 
-/// A desktop without readable originals must not block animation or lose its wallpaper.
-private func wallpaperBackgroundFailureTests() {
-    let suite = "MatrixWallpaperBackgroundFailureTests.\(UUID().uuidString)"
-    let defaults = UserDefaults(suiteName: suite)!
-    defer { defaults.removePersistentDomain(forName: suite) }
-    let desktop = DesktopWallpaperFixture()
-    desktop.unreadable = ["first"]
-    let controller = desktop.controller()
-    let host = WallpaperApp(defaults: defaults, desktopWallpaper: controller)
-    var alerts = 0
-    // Dismiss a regression's modal alert so the failing test cannot hang waiting for a click.
-    let dismissAlert = Timer(timeInterval: 0.02, repeats: true) { _ in
-        guard let window = NSApp.modalWindow else { return }
-        alerts += 1
-        NSApp.abortModal()
-        window.orderOut(nil)
-    }
-    RunLoop.main.add(dismissAlert, forMode: .default)
-    RunLoop.main.add(dismissAlert, forMode: .modalPanel)
-    defer {
-        dismissAlert.invalidate()
-        host.applicationWillTerminate(Notification(name: NSApplication.willTerminateNotification))
-    }
-    host.applicationDidFinishLaunching(
-        Notification(name: NSApplication.didFinishLaunchingNotification))
-    check(
-        eventually(10) { desktopWindowCount() == NSScreen.screens.count },
-        "an unreadable original wallpaper does not block animation on any display")
-    check(
-        alerts == 0 && NSApp.modalWindow == nil,
-        "failure to set the black background is logged without a modal alert")
-    check(
-        desktop.images["first"]?.url.path == "/original-a.jpg"
-            && desktop.images["second"]?.url == controller.blackImageURL,
-        "a display without a saved original stays untouched while other backgrounds turn black")
-    NSApp.sendAction(NSSelectorFromString("togglePlayback:"), to: host, from: nil)
-    check(
-        desktop.images["second"]?.url.path == "/original-b.jpg",
-        "Stop restores saved backgrounds after a partial black-background failure")
-    desktop.unreadable = []
-    NSApp.sendAction(NSSelectorFromString("togglePlayback:"), to: host, from: nil)
-    check(
-        desktop.images.values.allSatisfy { $0.url == controller.blackImageURL },
-        "a later Start retries the background once its original is readable")
-}
-
-/// Ensures a failed restore cannot block Quit and stale entries cannot replace a newer choice.
-private func wallpaperTerminationRecoveryTests() {
-    let suite = "MatrixWallpaperRecoveryTests.\(UUID().uuidString)"
-    let defaults = UserDefaults(suiteName: suite)!
-    defer { defaults.removePersistentDomain(forName: suite) }
-    let desktop = DesktopWallpaperFixture()
-    let controller = desktop.controller()
-    let host = WallpaperApp(defaults: defaults, desktopWallpaper: controller)
-    host.applicationDidFinishLaunching(
-        Notification(name: NSApplication.didFinishLaunchingNotification))
-    // Match the background-failure fixture's allowance for queued AppKit startup on CI.
-    let started = eventually(10) { desktopWindowCount() == NSScreen.screens.count }
-    check(started, "recovery fixture awaits launch playback")
-    guard started else {
-        host.applicationWillTerminate(Notification(name: NSApplication.willTerminateNotification))
-        return
-    }
-    desktop.unreadable = ["first"]
-    host.applicationWillTerminate(Notification(name: NSApplication.willTerminateNotification))
-    check(
-        NSApp.modalWindow == nil && desktopWindowCount() == 0,
-        "restore failure during Quit returns without a modal dialog")
-    check(
-        desktop.images["first"]?.url == controller.blackImageURL
-            && desktop.images["second"]?.url.path == "/original-b.jpg",
-        "Quit retains the failed display backup and restores other displays")
-
-    desktop.unreadable = []
-    desktop.images["first"] = .init(
-        url: URL(fileURLWithPath: "/new-after-failed-quit.jpg"), options: [:])
-    let relaunched = WallpaperApp(defaults: defaults, desktopWallpaper: desktop.controller())
-    relaunched.applicationDidFinishLaunching(
-        Notification(name: NSApplication.didFinishLaunchingNotification))
-    defer {
-        relaunched.applicationWillTerminate(
-            Notification(name: NSApplication.willTerminateNotification))
-    }
-    let restarted = eventually(10) { desktopWindowCount() == NSScreen.screens.count }
-    check(restarted, "relaunch awaits recovery and playback")
-    guard restarted else { return }
-    check(
-        desktop.images.values.allSatisfy { $0.url == controller.blackImageURL },
-        "relaunch recovers stale entries and starts black")
-    NSApp.sendAction(NSSelectorFromString("togglePlayback:"), to: relaunched, from: nil)
-    check(
-        desktop.images["first"]?.url.path == "/new-after-failed-quit.jpg",
-        "relaunch captures a newer user choice instead of restoring a stale original")
-}
-
-/// Exercises installation discovery and persistent menu state without touching real installations.
+/// Exercises installation, selection, and persistent menu state using temporary bundles and stores.
 private func wallpaperSyncMenuTests() {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     let user = root.appendingPathComponent("user")
@@ -733,10 +608,13 @@ private func wallpaperSyncMenuTests() {
     }
     var loginStatus = LoginItemController.Status.notRegistered
     let login = LoginItemController(readStatus: { loginStatus })
-    let desktop = DesktopWallpaperFixture()
+    let selection = root.appendingPathComponent("selection.plist")
+    let app = root.appendingPathComponent("Test App.app")
+    try! writeSelectionHelper(at: app)
+    let installation = ScreenSaverInstallationController(
+        directories: [user, local], appURL: app, recordURL: nil, selectionURL: selection)
     let host = WallpaperApp(
-        loginItems: login, defaults: defaults, screenSaverDirectories: [user, local],
-        desktopWallpaper: desktop.controller())
+        loginItems: login, defaults: defaults, screenSaverInstallation: installation)
     NSApp.sendAction(NSSelectorFromString("togglePlayback:"), to: host, from: nil)
     host.applicationDidFinishLaunching(
         Notification(name: NSApplication.didFinishLaunchingNotification))
@@ -755,7 +633,10 @@ private func wallpaperSyncMenuTests() {
     check(
         status.button?.accessibilityLabel() == "Matrix Wallpaper",
         "status icon has no version-warning state")
+    /// Reopens the menu so external installation and selection changes are rediscovered.
     func refresh() { menu.delegate?.menuWillOpen?(menu) }
+    /// Creates a discoverable fixture bundle without installing a real screen saver.
+    /// - Returns: The temporary bundle URL used by the selection fixture.
     func install(_ directory: URL, name: String, identifier: String) -> URL {
         let bundle = directory.appendingPathComponent(name)
         let contents = bundle.appendingPathComponent("Contents")
@@ -777,10 +658,73 @@ private func wallpaperSyncMenuTests() {
     let installed = install(user, name: "Renamed.saver", identifier: "dev.patsch.MatrixScreenSaver")
     refresh()
     check(
-        !sync.isHidden && sync.state == .on,
+        sync.title == "Set Matrix Screen Saver" && sync.state == .off && sync.isEnabled
+            && sync.action == NSSelectorFromString("selectScreenSaver:"),
+        "installed but unselected saver offers a direct unchecked selection action")
+    check(
+        defaults.bool(forKey: "syncWithScreenSaver"),
+        "selection action preserves default sync intent")
+    NSApp.sendAction(NSSelectorFromString("showOptions:"), to: host, from: nil)
+    guard
+        let options: MatrixScreenSaverOptionsSheetController = stored(
+            "optionsController", in: host),
+        let banner: NSStackView = stored("installationBanner", in: options),
+        let button: NSButton = stored("installScreenSaverButton", in: options),
+        let name: NSTextField = stored("nameField", in: options)
+    else {
+        check(false, "settings exposes the screen saver selection banner")
+        return
+    }
+    name.stringValue = "Unsaved selection edit"
+    check(
+        !banner.isHidden && button.title == "Set Matrix Screen Saver" && button.isEnabled
+            && button.keyEquivalent.isEmpty
+            && banner.arrangedSubviews.compactMap { ($0 as? NSTextField)?.stringValue }
+                .contains("Matrix isn’t the selected screen saver."),
+        "installed but unselected saver offers a non-default selection button in settings")
+    try! writeScreenSaverSelection(
+        at: root.appendingPathComponent("selected.plist"), saver: installed)
+    menu.performActionForItem(at: menu.index(of: sync))
+    check(
+        !sync.isEnabled && sync.title == "Setting Matrix Screen Saver…"
+            && !button.isEnabled && button.title == "Setting Matrix Screen Saver…",
+        "direct selection disables both surfaces while the helper runs")
+    check(
+        eventually(10) { sync.title == "Sync with Screen Saver" && sync.isEnabled },
+        "successful selection restores the sync menu without reopening it")
+    check(
+        banner.isHidden && name.stringValue == "Unsaved selection edit",
+        "verified selection hides the settings banner without applying edits")
+    refresh()
+    check(
+        !sync.isHidden && sync.title == "Sync with Screen Saver" && sync.state == .on
+            && sync.action == NSSelectorFromString("toggleScreenSaverSync:"),
         "renamed user installation exposes default-enabled sync")
     menu.performActionForItem(at: menu.index(of: sync))
     check(sync.state == .off, "sync menu action unchecks the persisted preference")
+    try! writeScreenSaverSelection(at: selection, saver: nil)
+    refresh()
+    check(
+        sync.title == "Set Matrix Screen Saver" && sync.state == .off,
+        "switching to a built-in saver replaces sync with selection")
+    check(
+        !defaults.bool(forKey: "syncWithScreenSaver"),
+        "changing selection preserves explicit sync-off intent")
+    check(
+        !banner.isHidden && button.isEnabled,
+        "external selection changes restore the settings banner")
+    button.performClick(nil)
+    check(
+        !sync.isEnabled && !button.isEnabled,
+        "settings selection uses the same busy operation as the menu")
+    check(
+        eventually(10) { installation.isSelected && banner.isHidden && sync.isEnabled },
+        "settings button selects Matrix and hides the banner")
+    check(
+        !defaults.bool(forKey: "syncWithScreenSaver")
+            && name.stringValue == "Unsaved selection edit",
+        "settings selection retains sync-off intent and unsaved edits")
+    options.configureSheet().close()
     try! FileManager.default.removeItem(at: installed)
     refresh()
     check(
@@ -788,6 +732,7 @@ private func wallpaperSyncMenuTests() {
         "removal offers installation without resetting sync choice")
     let localInstall = install(
         local, name: "Matrix.saver", identifier: "dev.patsch.MatrixScreenSaver")
+    try! writeScreenSaverSelection(at: selection, saver: localInstall)
     refresh()
     check(
         !sync.isHidden && sync.state == .off,
@@ -800,6 +745,7 @@ private func wallpaperSyncMenuTests() {
     let target = install(root, name: "Target.saver", identifier: "dev.patsch.MatrixScreenSaver")
     try! FileManager.default.createSymbolicLink(
         at: local.appendingPathComponent("Linked.saver"), withDestinationURL: target)
+    try! writeScreenSaverSelection(at: selection, saver: target)
     loginStatus = .enabled
     refresh()
     check(
@@ -807,8 +753,7 @@ private func wallpaperSyncMenuTests() {
         "menu refresh follows saver symlinks and refreshes Launch at Login")
     host.applicationWillTerminate(Notification(name: NSApplication.willTerminateNotification))
     let relaunched = WallpaperApp(
-        defaults: UserDefaults(suiteName: suite)!, screenSaverDirectories: [user, local],
-        desktopWallpaper: desktop.controller())
+        defaults: UserDefaults(suiteName: suite)!, screenSaverInstallation: installation)
     NSApp.sendAction(NSSelectorFromString("togglePlayback:"), to: relaunched, from: nil)
     relaunched.applicationDidFinishLaunching(
         Notification(name: NSApplication.didFinishLaunchingNotification))

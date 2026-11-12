@@ -382,11 +382,14 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
     private let onApply: (MatrixScreenSaverOptions) -> Void
     var onClose: (() -> Void)?
 
-    /// Optional wallpaper-host action; omitted by the saver and preview to hide installation UI.
-    var onInstallScreenSaver: (() -> Void)?
-    /// Host-controlled notice above all tabs, removed from layout when the saver is installed.
+    /// Handles the notice's install or select button on the main thread without applying edits.
+    /// Set before updating the notice; the saver and preview omit it to keep the notice hidden.
+    var onScreenSaverAction: (() -> Void)?
+    /// Host-controlled notice above all tabs, removed when the saver is installed and selected.
     private let installationBanner = NSStackView()
-    /// Explicit recovery action that never replaces the settings window's default Save button.
+    /// Explains whether the companion needs installation or selection without blocking settings edits.
+    private let installationMessage = NSTextField(wrappingLabelWithString: "")
+    /// Installation or selection action that never replaces the settings window's default Save button.
     private let installScreenSaverButton = NSButton(
         title: "Install Screen Saver", target: nil, action: nil)
 
@@ -566,24 +569,25 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         return window
     }
 
-    /// Updates the optional recovery notice without reloading or saving any edited options.
+    /// Updates the optional installation or selection notice without reloading or saving edited options.
     ///
     /// - Parameters:
-    ///   - isMissing: Whether discovery found no installed companion saver.
-    ///   - isInstalling: Whether the host already has an installation in progress.
-    func updateScreenSaverInstallation(isMissing: Bool, isInstalling: Bool) {
-        let hidden = onInstallScreenSaver == nil || (!isMissing && !isInstalling)
+    ///   - message: Host-provided explanation; `nil` hides the notice when Matrix is ready.
+    ///   - actionTitle: The menu's current install, select, settings, or progress label.
+    ///   - isEnabled: Whether an explicit click can start an operation; false while busy.
+    func updateScreenSaverNotice(message: String?, actionTitle: String, isEnabled: Bool) {
+        let hidden = onScreenSaverAction == nil || message == nil
         let changedVisibility = installationBanner.isHidden != hidden
         installationBanner.isHidden = hidden
-        installScreenSaverButton.title =
-            isInstalling ? "Installing Screen Saver…" : "Install Screen Saver"
-        installScreenSaverButton.isEnabled = !isInstalling
+        installationMessage.stringValue = message ?? ""
+        installScreenSaverButton.title = actionTitle
+        installScreenSaverButton.isEnabled = isEnabled
         if changedVisibility { sizeWindowToFitContent() }
     }
 
-    /// Forwards an explicit install click to the wallpaper host without applying settings.
-    @objc private func installScreenSaver(_ sender: Any?) {
-        onInstallScreenSaver?()
+    /// Forwards an explicit install or select click to the wallpaper host without applying settings.
+    @objc private func performScreenSaverAction(_ sender: Any?) {
+        onScreenSaverAction?()
     }
 
     /// Validates and applies the edited options.
@@ -656,8 +660,6 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         rootStack.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
         rootStack.translatesAutoresizingMaskIntoConstraints = false
 
-        let installationMessage = NSTextField(
-            wrappingLabelWithString: "Screen saver isn’t installed.")
         installationMessage.textColor = .secondaryLabelColor
         installationBanner.orientation = .horizontal
         installationBanner.alignment = .centerY
@@ -665,7 +667,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         installationBanner.isHidden = true
         installScreenSaverButton.bezelStyle = .rounded
         installScreenSaverButton.target = self
-        installScreenSaverButton.action = #selector(installScreenSaver(_:))
+        installScreenSaverButton.action = #selector(performScreenSaverAction(_:))
         installScreenSaverButton.setContentHuggingPriority(.required, for: .horizontal)
         installScreenSaverButton.setContentCompressionResistancePriority(
             .required, for: .horizontal)

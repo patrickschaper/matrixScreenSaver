@@ -9,11 +9,6 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Owns login controls independently of wallpaper playback and preferences.
     private let loginItems: LoginItemController
 
-    /// Owns the original desktop images independently of animation windows.
-    private let desktopWallpaper: DesktopWallpaperController
-    /// Avoids repeating the same alert for every system notification.
-    private var lastWallpaperError: String?
-
     /// Wallpaper-only preferences, separate from shared rendering options.
     private let defaults: UserDefaults
     /// Shares companion discovery and explicit recovery between menu and settings.
@@ -21,7 +16,7 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// Persists user intent even while no saver is installed.
     private static let syncPreferenceKey = "syncWithScreenSaver"
-    /// Offers synchronization when installed, or explicit recovery when the saver is missing.
+    /// Offers selection before synchronization, or recovery when the saver is missing.
     private let syncItem = NSMenuItem(
         title: "Sync with Screen Saver", action: #selector(toggleScreenSaverSync(_:)),
         keyEquivalent: "")
@@ -32,7 +27,6 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     ///   - loginItems: Menu controller backed by macOS registration.
     ///   - defaults: Store for wallpaper-only preferences.
     ///   - screenSaverDirectories: User and local installed-saver directories.
-    ///   - desktopWallpaper: Durable desktop settings controller, isolated in tests.
     ///   - screenSaverInstallation: Optional isolated discovery and installation controller.
     init(
         loginItems: LoginItemController = LoginItemController(), defaults: UserDefaults = .standard,
@@ -41,7 +35,6 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 "Library/Screen Savers"),
             URL(fileURLWithPath: "/Library/Screen Savers"),
         ],
-        desktopWallpaper: DesktopWallpaperController = DesktopWallpaperController(),
         screenSaverInstallation: ScreenSaverInstallationController? = nil
     ) {
         self.loginItems = loginItems
@@ -49,7 +42,6 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         self.screenSaverInstallation =
             screenSaverInstallation
             ?? ScreenSaverInstallationController(directories: screenSaverDirectories)
-        self.desktopWallpaper = desktopWallpaper
         super.init()
         defaults.register(defaults: [Self.syncPreferenceKey: true])
         self.screenSaverInstallation.onChange = { [weak self] in self?.updateScreenSaverControls() }
@@ -61,7 +53,7 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// User intent and independent suspension conditions for this session.
     private var playback = WallpaperPlaybackState()
 
-    /// Gates reconciliation until launch has yielded and desktop recovery has completed.
+    /// Gates reconciliation until launch has yielded to the main run loop.
     private var pendingLaunch: DispatchWorkItem?
 
     /// Prevents queued notifications or menu callbacks from restarting a terminated host.
@@ -107,7 +99,7 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }.sorted { $0.id < $1.id }
     }
 
-    /// Installs menu controls and observers, then queues desktop recovery and playback on the main run loop.
+    /// Installs menu controls and observers, then queues playback without changing macOS wallpaper settings.
     func applicationDidFinishLaunching(_ notification: Notification) {
         installEditingMenu()
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -196,9 +188,6 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
             })
         let startup = DispatchWorkItem { [weak self] in
             guard let self, !self.isTerminating, self.pendingLaunch != nil else { return }
-            if self.playback.isRequested { self.updateDesktopWallpaper(restoring: true) }
-            // Recovery alerts can pump the run loop and receive Stop or Quit.
-            guard !self.isTerminating, self.pendingLaunch != nil else { return }
             self.pendingLaunch = nil
             self.reconcilePlayback()
         }
@@ -224,7 +213,7 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         NSApp.mainMenu = mainMenu
     }
 
-    /// Refreshes login status and companion presence each time the menu is opened.
+    /// Refreshes login status, companion presence, and current selection when the menu opens.
     func menuWillOpen(_ menu: NSMenu) {
         loginItems.menuWillOpen(menu)
         screenSaverInstallation.refresh()
@@ -235,20 +224,65 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func updateScreenSaverControls() {
         guard !isTerminating else { return }
         let state = screenSaverInstallation.state
-        syncItem.isEnabled = state != .installing
+        let isSelected = state == .installed && screenSaverInstallation.isSelected
+        let isSelecting = screenSaverInstallation.isSelecting
+        syncItem.isEnabled = state != .installing && !isSelecting
         syncItem.state =
-            state == .installed && defaults.bool(forKey: Self.syncPreferenceKey) ? .on : .off
+            isSelected && !isSelecting && defaults.bool(forKey: Self.syncPreferenceKey) ? .on : .off
         switch state {
         case .installed:
-            syncItem.title = "Sync with Screen Saver"
-            syncItem.action = #selector(toggleScreenSaverSync(_:))
+            if isSelecting {
+                syncItem.title = "Setting Matrix Screen Saver…"
+                syncItem.action = #selector(selectScreenSaver(_:))
+            } else if isSelected {
+                syncItem.title = "Sync with Screen Saver"
+                syncItem.action = #selector(toggleScreenSaverSync(_:))
+            } else if #available(macOS 14, *) {
+                syncItem.title = "Set Matrix Screen Saver"
+                syncItem.action = #selector(selectScreenSaver(_:))
+            } else {
+                syncItem.title = "Set Matrix Screen Saver…"
+                syncItem.action = #selector(openScreenSaverSettings(_:))
+            }
         case .missing, .installing:
             syncItem.title =
                 state == .installing ? "Installing Screen Saver…" : "Install Screen Saver"
             syncItem.action = #selector(installScreenSaver(_:))
         }
-        optionsController?.updateScreenSaverInstallation(
-            isMissing: state == .missing, isInstalling: state == .installing)
+        let message: String?
+        if state != .installed {
+            message = "Screen saver isn’t installed."
+        } else {
+            message = isSelected && !isSelecting ? nil : "Matrix isn’t the selected screen saver."
+        }
+        optionsController?.updateScreenSaverNotice(
+            message: message, actionTitle: syncItem.title, isEnabled: syncItem.isEnabled)
+    }
+
+    /// Selects Matrix directly; a failed operation offers the native Screen Saver settings as recovery.
+    @objc private func selectScreenSaver(_ sender: Any?) {
+        guard !isTerminating else { return }
+        statusItem?.menu?.cancelTracking()
+        screenSaverInstallation.select { [weak self] result in
+            guard let self, !self.isTerminating, case .failure(let error) = result else { return }
+            let alert = NSAlert()
+            alert.messageText = "Couldn’t select Matrix Screen Saver"
+            alert.informativeText = error.localizedDescription
+            alert.addButton(withTitle: "Open Screen Saver Settings…")
+            alert.addButton(withTitle: "Cancel")
+            NSApp.activate(ignoringOtherApps: true)
+            if alert.runModal() == .alertFirstButtonReturn {
+                self.openScreenSaverSettings(nil)
+            }
+        }
+    }
+
+    /// Opens native Screen Saver settings on older macOS versions or after automatic selection fails.
+    @objc private func openScreenSaverSettings(_ sender: Any?) {
+        guard !isTerminating else { return }
+        statusItem?.menu?.cancelTracking()
+        NSWorkspace.shared.open(
+            URL(string: "x-apple.systempreferences:com.apple.ScreenSaver-Settings.extension")!)
     }
 
     /// Restores the companion without interrupting wallpaper playback or saving settings edits.
@@ -289,7 +323,6 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusItem?.menu?.cancelTracking()
         pendingLaunch?.cancel()
         pendingLaunch = nil
-        if !playback.isRequested { updateDesktopWallpaper(restoring: true) }
         playback.isRequested.toggle()
         playback.isPaused = false
         reconcilePlayback()
@@ -315,7 +348,16 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self?.applyOptions(options)
         }
         controller.onClose = { [weak self] in self?.optionsController = nil }
-        controller.onInstallScreenSaver = { [weak self] in self?.installScreenSaver(nil) }
+        controller.onScreenSaverAction = { [weak self] in
+            guard let self, !self.isTerminating else { return }
+            self.screenSaverInstallation.refresh()
+            guard self.syncItem.isEnabled,
+                self.screenSaverInstallation.state == .missing
+                    || !self.screenSaverInstallation.isSelected,
+                let action = self.syncItem.action
+            else { return }
+            NSApp.sendAction(action, to: self, from: nil)
+        }
         controller.prepare(using: MatrixScreenSaverView.loadSaverOptions())
         optionsController = controller
         updateScreenSaverControls()
@@ -353,12 +395,7 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard !isTerminating else { return }
         updatePlaybackMenu()
         guard pendingLaunch == nil else { return }
-        if !playback.isRequested { updateDesktopWallpaper(restoring: true) }
         if !playback.isRequested || restart { removeDesktopWindows() }
-        guard playback.isRequested else { return }
-        if playback.shouldRun || playback.shouldShowDesktop {
-            updateDesktopWallpaper(restoring: false)
-        }
         guard !isTerminating, playback.isRequested else { return }
         if windows.isEmpty && (playback.shouldRun || playback.shouldShowDesktop) {
             currentOptions = MatrixScreenSaverView.loadSaverOptions()
@@ -424,26 +461,10 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
             systemSymbolName: playback.isPaused ? "play.fill" : "pause.fill",
             accessibilityDescription: nil)
         pauseItem.isEnabled = playback.isRequested
-    }
-
-    /// Changes desktop ownership without coupling it to transient animation windows.
-    /// - Parameter restoring: Restores originals instead of acquiring newly connected desktops.
-    private func updateDesktopWallpaper(restoring: Bool) {
-        do {
-            if restoring { try desktopWallpaper.restore() } else { try desktopWallpaper.start() }
-            lastWallpaperError = nil
-        } catch {
-            let message = error.localizedDescription
-            NSLog("Matrix Wallpaper desktop image: %@", message)
-            // Black is cosmetic; keep animation running without hiding restore failures.
-            guard restoring else { return }
-            guard lastWallpaperError != message else { return }
-            lastWallpaperError = message
-            let alert = NSAlert()
-            alert.messageText = "Could not restore the desktop wallpaper"
-            alert.informativeText =
-                "\(message)\nSaved wallpaper settings are kept for retry on Stop or the next launch."
-            alert.runModal()
+        // macOS 27 normally hides menu images; use the same explicit preference as the coffee icon.
+        for item in [playbackItem, pauseItem]
+        where item.responds(to: NSSelectorFromString("setPreferredImageVisibility:")) {
+            item.setValue(1, forKey: "preferredImageVisibility")
         }
     }
 
@@ -594,12 +615,6 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         frameLeaseTimer = nil
         for (center, token) in observers { center.removeObserver(token) }
         observers.removeAll()
-        // Installers request Quit too; a recovery error must not hold termination in a modal loop.
-        do { try desktopWallpaper.restore() } catch {
-            NSLog(
-                "Matrix Wallpaper desktop restore deferred until next launch: %@",
-                error.localizedDescription)
-        }
         removeDesktopWindows()
         optionsController?.configureSheet().close()
         optionsController = nil

@@ -41,3 +41,6 @@ jobs:
 
       - name: Run wallpaper AppKit checks
         run: ./wallpaper-tests.sh
+
+      - name: Test PaperSaver selection integration
+        run: swift run --package-path Tools/ScreenSaverSelector SelectionChecks

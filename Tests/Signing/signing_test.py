@@ -117,6 +117,7 @@ if [[ "$1 $2" == 'stapler staple' ]]; then exit "${STAPLE_FAILURE:-0}"; fi
         for name in ("WallpaperIcon.icns", "MenuBarIcon.pdf", "BuyMeACoffee.png"):
             (resources / name).touch()
         shutil.copy(ROOT / "Resources/Wallpaper-Info.plist", resources)
+        shutil.copytree(ROOT / "Resources/ThirdParty", resources / "ThirdParty")
         shutil.copy(ROOT / "build-wallpaper.sh", root)
         (root / "Scripts").mkdir()
         (root / "Scripts/product-lifecycle.sh").write_text("#!/bin/bash\nexit 0\n")
@@ -139,6 +140,16 @@ shift
 printf compiled > "$1"
 chmod +x "$1"
 ''')
+        self.stub("swift", '''[[ "$1" == build && "$2" == --package-path ]]
+output="$3/.build/release"
+if [[ "$*" == *--show-bin-path* ]]; then
+  echo "$output"
+else
+  mkdir -p "$output"
+  printf selector > "$output/MatrixScreenSaverSelector"
+  chmod +x "$output/MatrixScreenSaverSelector"
+fi
+''')
         return root, saver
 
     def run_recovery_build(self, root, *args):
@@ -158,6 +169,8 @@ chmod +x "$1"
         subprocess.run(["/usr/bin/ditto", "-x", "-k", str(archive), str(extraction)], check=True)
         self.assertEqual("fresh", (extraction / "MatrixScreenSaver.saver/Contents/MacOS/MatrixScreenSaver").read_text())
         self.assertTrue((app / "Contents/MacOS/MatrixScreenSaverInstaller").exists())
+        self.assertTrue((app / "Contents/MacOS/MatrixScreenSaverSelector").exists())
+        self.assertTrue((app / "Contents/Resources/ThirdParty/PaperSaver-LICENSE.txt").exists())
         self.assertTrue((app / "Contents/Resources/ScreenSaver/product-lifecycle.sh").exists())
 
     def test_prepared_saver_requires_the_recoverable_archive_root(self):

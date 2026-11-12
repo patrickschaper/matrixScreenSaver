@@ -216,11 +216,26 @@ Unrelated bundles and symlinks at the old path are left alone. The executable re
 
 ## Screen saver synchronization
 
-When MatrixScreenSaver is installed in `~/Library/Screen Savers` or `/Library/Screen Savers`,
+When MatrixScreenSaver is installed and selected in macOS,
 the wallpaper menu shows **Sync with Screen Saver**. It is checked by default: the saver
 shares the wallpaper's animation. Uncheck it to let the saver animate independently.
 The choice survives app restarts and saver reinstallation; opening the menu refreshes
 installation detection. This does not change visual options or synchronization between monitors.
+
+If another saver is selected, **Set Matrix Screen Saver** selects Matrix on every display
+and Space. The app runs the bundled `MatrixScreenSaverSelector` helper asynchronously.
+Its Swift package in `Tools/ScreenSaverSelector` pins [PaperSaver](https://github.com/AerialScreensaver/PaperSaver)
+0.4.3; `build-wallpaper.sh` resolves and compiles it, and releases sign it before the outer app.
+PaperSaver backs up the wallpaper store, preserves desktop choices, restarts `WallpaperAgent`,
+and verifies the selection, restoring the backup if verification fails. The restart can briefly
+redraw the desktop. Sync intent and animation playback are retained.
+
+PaperSaver requires macOS 14 and resolves traditional savers by name in standard directories.
+The helper checks that the resolved bundle is the exact Matrix installation discovered by the app.
+Older macOS uses **Set Matrix Screen Saver…** to open settings; failed selection, custom locations,
+or shadowed bundle names offer settings as recovery. These operations use an undocumented macOS
+store format. Run `swift run --package-path Tools/ScreenSaverSelector SelectionChecks` for isolated
+package checks. Like the main test suite, these need only Command Line Tools, not Xcode.
 
 When the saver is absent, that menu item becomes **Install Screen Saver**, and the wallpaper settings show the same action in a compact banner. `ScreenSaverInstallationController` refreshes both surfaces on menu opening, settings focus, app activation, and transaction completion without resetting pending options edits. The actual screen saver host has no installation controls.
 
@@ -246,18 +261,16 @@ these warnings until they are updated.
 
 ## Desktop wallpaper lifecycle
 
-While Matrix Wallpaper runs, it saves each display's desktop image and display options,
-then sets the underlying wallpaper to plain black. The menu starts with **Pause Animation**
-and **Stop Wallpaper**. **Pause Animation** freezes the visible frame; **Resume Animation** continues the scene.
+Matrix Wallpaper draws desktop-level animation windows without changing the macOS wallpaper selection.
+Aerial videos, images, and solid colors remain selected underneath the animation.
+The menu starts with **Pause Animation** and **Stop Wallpaper**.
+**Pause Animation** freezes the visible frame; **Resume Animation** continues the scene.
 Pausing is session-only and does not persist across launches. With **Sync with Screen Saver**
 enabled, the saver temporarily advances the shared scene even while the wallpaper is paused.
-When the saver exits, the wallpaper pauses again at the updated scene. **Stop Wallpaper** and
-**Quit Matrix Wallpaper** restore the original wallpaper settings. Temporary pauses
-and animation restarts keep the original backup.
-If you choose a different wallpaper while Matrix runs, that newer choice is preserved.
+When the saver exits, the wallpaper pauses again at the updated scene.
+**Stop Wallpaper** and **Quit Matrix Wallpaper** remove the animation windows without setting or restoring a desktop image.
+Launch, sleep/wake, display changes, and animation restarts also leave wallpaper settings alone.
 
-Backups are stored in `~/Library/Application Support/MatrixWallpaper/DesktopWallpaper/`.
-After a crash or force-quit, reopen Matrix Wallpaper and choose **Stop Wallpaper** to restore the desktop.
-Disconnected displays and failed restores keep their backups for a later retry.
-Exact restoration is supported for static images; macOS's public API cannot preserve every
-dynamic/aerial wallpaper, rotating collection, or separate Space configuration.
+Older versions may have left files in `~/Library/Application Support/MatrixWallpaper/DesktopWallpaper/`.
+These legacy backups and black images are no longer read, restored, or deleted by the app.
+If an older version left a black wallpaper selected, choose the desired aerial video or other wallpaper once in **System Settings > Wallpaper**.
