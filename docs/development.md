@@ -246,18 +246,16 @@ these warnings until they are updated.
 
 ## Desktop wallpaper lifecycle
 
-While Matrix Wallpaper runs, it saves each display's desktop image and display options,
-then sets the underlying wallpaper to plain black. The menu starts with **Pause Animation**
-and **Stop Wallpaper**. **Pause Animation** freezes the visible frame; **Resume Animation** continues the scene.
+Matrix Wallpaper draws desktop-level animation windows without changing the macOS wallpaper selection.
+Aerial videos, images, and solid colors remain selected underneath the animation.
+The menu starts with **Pause Animation** and **Stop Wallpaper**.
+**Pause Animation** freezes the visible frame; **Resume Animation** continues the scene.
 Pausing is session-only and does not persist across launches. With **Sync with Screen Saver**
 enabled, the saver temporarily advances the shared scene even while the wallpaper is paused.
-When the saver exits, the wallpaper pauses again at the updated scene. **Stop Wallpaper** and
-**Quit Matrix Wallpaper** restore the original wallpaper settings. Temporary pauses
-and animation restarts keep the original backup.
-If you choose a different wallpaper while Matrix runs, that newer choice is preserved.
+When the saver exits, the wallpaper pauses again at the updated scene.
+**Stop Wallpaper** and **Quit Matrix Wallpaper** remove the animation windows without setting or restoring a desktop image.
+Launch, sleep/wake, display changes, and animation restarts also leave wallpaper settings alone.
 
-Backups are stored in `~/Library/Application Support/MatrixWallpaper/DesktopWallpaper/`.
-After a crash or force-quit, reopen Matrix Wallpaper and choose **Stop Wallpaper** to restore the desktop.
-Disconnected displays and failed restores keep their backups for a later retry.
-Exact restoration is supported for static images; macOS's public API cannot preserve every
-dynamic/aerial wallpaper, rotating collection, or separate Space configuration.
+Older versions may have left files in `~/Library/Application Support/MatrixWallpaper/DesktopWallpaper/`.
+These legacy backups and black images are no longer read, restored, or deleted by the app.
+If an older version left a black wallpaper selected, choose the desired aerial video or other wallpaper once in **System Settings > Wallpaper**.
