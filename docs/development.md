@@ -143,6 +143,32 @@ Homebrew's sandbox cannot start or stop LaunchAgents. Its registration hook writ
 
 Homebrew integration tests use real `launchctl` in sandboxed hooks so an accidental bootstrap fails. App-side activation and native service-removal effects remain mocked to protect the logged-in user's installation. The tap updater accepts the reviewed 0.5.0 cask structure; the next release must publish both the updated cask and the archive containing the fixed app and lifecycle script.
 
+### Recovering an interrupted Homebrew upgrade
+
+If an upgrade reports that the installed `MatrixScreenSaver.saver` source is
+missing, Homebrew is failing while backing up the old installation. It may have
+already moved the wallpaper app into Caskroom. The new cask's install hooks have
+not run yet. Changing those hooks cannot repair this old-version removal failure.
+
+Back up the cask's Caskroom directory and Matrix preferences before recovery.
+Check the configured app and screen-saver destinations for unrelated files:
+`--force` allows replacement at those destinations. Then run:
+
+```bash
+brew reinstall --cask --force patrickschaper/tap/matrix-screen-saver
+```
+
+This reinstalls both bundles using Homebrew's recorded destinations. It retains
+preferences; do not use `--zap` or manually delete Homebrew receipts. Verify the
+installed version with `brew list --cask --versions matrix-screen-saver` and check
+both bundles. Default destinations are `/Applications/Matrix Wallpaper.app` and
+`~/Library/Screen Savers/MatrixScreenSaver.saver`.
+
+`bash Tests/Homebrew/integration_lifecycle.sh` covers missing legacy apps, missing
+savers, and an upgrade interrupted after backing up the old app. Each recovery
+uses Homebrew's native forced-reinstall path and verifies both bundles, the
+installed receipt, and preference retention in isolated directories.
+
 ## Origin
 
 This project started as an attempt to wrap `cxxmatrix` inside a macOS screen saver.
