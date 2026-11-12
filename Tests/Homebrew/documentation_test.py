@@ -21,10 +21,11 @@ class DocumentationTest(unittest.TestCase):
         self.assertIn("docs/bmc_qr.png", text)
 
     def test_wallpaper_internals_live_in_developer_notes(self):
+        """Keep wallpaper preservation and installation internals in developer notes."""
         readme = (ROOT / "README.md").read_text()
         developer = (ROOT / "docs/development.md").read_text()
         self.assertIn("(docs/development.md)", readme)
-        for detail in ["dev.patsch.MatrixWallpaper", "Disconnected displays and failed restores",
+        for detail in ["dev.patsch.MatrixWallpaper", "without changing the macOS wallpaper selection",
                        "Checks compare the loaded host", "restoring the previous installation if replacement fails"]:
             self.assertNotIn(detail, readme)
             self.assertIn(detail, developer)
