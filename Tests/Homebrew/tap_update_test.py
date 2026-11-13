@@ -1,5 +1,6 @@
 import base64
 import importlib.util
+import re
 from pathlib import Path
 import unittest
 from unittest.mock import patch
@@ -7,8 +8,15 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "Scripts/update-homebrew-tap.py"
 TEMPLATE = (ROOT / "Homebrew/Casks/matrix-screen-saver.rb").read_text()
+# Reconstruct the reviewed predecessor without fresh-install selection.
+PRE_SELECTION_TEMPLATE = re.sub(
+    r"  # Select only on fresh installs;.*?(?=  postflight_steps)", "",
+    TEMPLATE.removeprefix("select_on_install = nil\n\n"), flags=re.S
+).replace("    *selection_steps,\n", "").replace(
+    "Open System Settings > Wallpaper > Screen Saver if MatrixScreenSaver is not selected.",
+    "Open System Settings > Wallpaper > Screen Saver and select MatrixScreenSaver.")
 # Reviewed cask layout before the long System Settings message was wrapped.
-PRE_FORMAT_TEMPLATE = TEMPLATE.replace(
+PRE_FORMAT_TEMPLATE = PRE_SELECTION_TEMPLATE.replace(
     'args: ["➡️ Open System Settings > Wallpaper > Screen Saver and select MatrixScreenSaver."],\n'
     '      print_stdout: true },',
     'args: ["➡️ Open System Settings > Wallpaper > Screen Saver and select MatrixScreenSaver."], print_stdout: true },')
@@ -47,6 +55,18 @@ class TapUpdateTest(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("tap_update", SCRIPT)
         self.module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(self.module)
+
+    def test_manual_selection_cask_migrates_only_when_unmodified(self):
+        """Publish the new install behavior without overwriting independent tap edits."""
+        for app in ("MatrixWallpaper.app", "Matrix Wallpaper.app"):
+            previous = PRE_SELECTION_TEMPLATE.replace("MatrixWallpaper.app", app)
+            api = FakeAPI(previous)
+            self.module.update(api, "owner/homebrew-test", "1.2.3", cask())
+            self.assertEqual(cask(), api.content)
+            api = FakeAPI(previous + "# unreviewed change\n")
+            with self.assertRaises(ValueError):
+                self.module.update(api, "owner/homebrew-test", "1.2.3", cask())
+            self.assertTrue(all(method == "GET" for method, _, _ in api.calls))
 
     def test_known_saver_only_cask_migrates_without_allowing_unrelated_changes(self):
         self.assertIn('app "Matrix Wallpaper.app", target: "Matrix Wallpaper.app"', cask())
