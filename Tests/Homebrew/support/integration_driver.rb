@@ -219,6 +219,52 @@ puts "PASS AE1 sandboxed native fresh install and actual coffee stdout"
 restore_saver
 verify_target("1.2.3")
 uninstall(fresh)
+
+# A recorded local pair must reach native conflict/force handling before ownership transfers.
+[FIXTURE_HOME/"Applications/Matrix Wallpaper.app", APP_TARGET].each do |local_app|
+  payload = ROOT/"local-payload"
+  payload.mkpath
+  SystemCommand.run!("/usr/bin/ditto", args: ["-x", "-k", (ROOT/"1.2.3.zip").to_s, payload.to_s])
+  FileUtils.mkdir_p(local_app.dirname)
+  FileUtils.cp_r(payload/"MatrixWallpaper.app", local_app)
+  FileUtils.cp_r(payload/"MatrixScreenSaver.saver", TARGET)
+  (local_app/"Contents/MacOS/MatrixWallpaper").chmod(0755)
+  (TARGET/"Contents/MacOS/MatrixScreenSaver").chmod(0755)
+  SystemCommand.run!("/bin/bash", args: ["Scripts/product-lifecycle.sh", "register", local_app.to_s, TARGET.to_s, "local"],
+                    env: { "HOME" => FIXTURE_HOME.to_s,
+                           "PATH" => "#{FIXTURE_SERVICES}:#{FIXTURE_BIN}:/usr/bin:/bin:/usr/sbin:/sbin" })
+  record = FIXTURE_HOME/"Library/Application Support/MatrixWallpaper/Installation/installation.plist"
+  registration = record.binread
+  app_inode = local_app.stat.ino
+  saver_inode = TARGET.stat.ino
+  migration = definition("1.2.4")
+  output = capture do
+    begin
+      Cask::Installer.new(migration).install
+      raise "Local installation unexpectedly replaced without force"
+    rescue Cask::CaskError => error
+      check(error.message.include?("already"), "Local migration did not reach native conflict handling: #{error}")
+    end
+  end
+  check(output.include?("brew install --cask --force"), "Local migration guidance missing")
+  check(record.binread == registration, "Rejected migration changed local ownership")
+  check(local_app.stat.ino == app_inode && TARGET.stat.ino == saver_inode, "Rejected migration changed local bundles")
+  check(!APP_TARGET.exist?, "Rejected migration left a new app") unless local_app == APP_TARGET
+  migration = definition("1.2.4")
+  capture { Cask::Installer.new(migration, force: true).install }
+  verify_target("1.2.4")
+  { "owner" => "homebrew", "app" => APP_TARGET.to_s, "saver" => TARGET.to_s }.each do |key, expected|
+    result = SystemCommand.run!("/usr/libexec/PlistBuddy", args: ["-c", "Print :#{key}", record.to_s])
+    check(result.stdout.strip == expected, "Migration recorded the wrong #{key}")
+  end
+  uninstall(migration)
+  unless local_app == APP_TARGET
+    check(local_app.stat.ino == app_inode, "Migration removed the off-target local app")
+    local_app.rmtree
+  end
+end
+puts "PASS recorded local migration preserves conflicts and transfers ownership after native force replacement"
+
 OSASCRIPT_CALLS.clear
 legacy = definition("1.2.2", legacy: :saver)
 capture { Cask::Installer.new(legacy).install }
