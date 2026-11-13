@@ -58,8 +58,9 @@ cask "matrix-screen-saver" do |dsl|
       writable_paths: ["{{staged_path}}/MatrixWallpaper.app"] },
   ]
 
-  # Select only on fresh installs; snapshot receipts before Homebrew stages the new version.
-  select_on_install = !dsl.cask.installed? if select_on_install.nil?
+  # Select on fresh installs and explicit reinstalls; retain the decision across staging.
+  reinstall = Homebrew.running_command_with_args.split[1] == "reinstall"
+  select_on_install = !dsl.cask.installed? || reinstall if select_on_install.nil?
   selection_steps = []
   if select_on_install
     selection_steps << {
