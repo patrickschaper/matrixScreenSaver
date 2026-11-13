@@ -53,17 +53,33 @@ raise "Cask must not launch Settings" if check_source.include?("/usr/bin/open")
 # Keep native directive dispatch and successor checks, but never cross the
 # AppleScript boundary into the user's running app or real login items.
 OSASCRIPT_CALLS = []
-# Records native service-removal dispatch without unloading the user's real cleanup agent.
+# Records the user-only command without unloading the user's real cleanup agent.
 LAUNCHCTL_CALLS = []
 FAILED_STATUS = SystemCommand.run("/usr/bin/false").status
+
+# Keep Homebrew's script execution and error handling, replacing only the OS effect.
+class IsolatedCleanupCommand < SystemCommand
+  def self.run(executable, **options)
+    args = ["bootout", "gui/#{Process.uid}/dev.patsch.MatrixWallpaper.cleanup"]
+    raise "Unexpected cleanup command" unless executable.to_s == "/bin/launchctl" && options[:args] == args
+    raise "Cleanup must not use sudo" unless options[:sudo] == false
+    raise "Inactive cleanup must be harmless" unless options[:must_succeed] == false
+
+    LAUNCHCTL_CALLS << args
+    result = super((ROOT/"job").exist? ? "/usr/bin/true" : "/usr/bin/false", **options)
+    FileUtils.rm_f(ROOT/"job")
+    result
+  end
+end
+
 # Intercepts desktop/service effects after Homebrew's real uninstall directive dispatch.
 module IsolatedUninstallAutomation
-  # Models service removal without consulting or changing the real user's launchd domain.
-  def uninstall_launchctl(*services, command:, **_kwargs)
-    raise "Unexpected service removal" unless services == ["dev.patsch.MatrixWallpaper.cleanup"]
+  def uninstall_launchctl(*)
+    raise "Root-probing service cleanup must not run"
+  end
 
-    LAUNCHCTL_CALLS.concat(services)
-    FileUtils.rm_f(ROOT/"job")
+  def uninstall_script(directives, command:, **kwargs)
+    super(directives, command: IsolatedCleanupCommand, **kwargs)
   end
 
   def system_command(executable, **options)
@@ -129,7 +145,9 @@ ensure
   $stdout, $stderr = old_out, old_err
 end
 
-def definition(version, legacy: nil)
+def definition(version, legacy: nil, command: "install")
+  previous_command = Homebrew.running_command_with_args.split[1]
+  Homebrew.running_command = command
   source = case legacy
   when :saver then Pathname("Tests/Homebrew/fixtures/legacy-screen-saver.rb")
   when :wallpaper then Pathname("Tests/Homebrew/fixtures/legacy-wallpaper.rb")
@@ -147,6 +165,8 @@ def definition(version, legacy: nil)
   output = capture { loaded = Cask::CaskLoader::FromContentLoader.new(content, tap: TAP).load(config: CONFIG) }
   check(!output.match?(/deprecated/i), "Definition load emitted deprecation warnings: #{output}")
   loaded
+ensure
+  Homebrew.running_command = previous_command
 end
 
 def verify_target(version, targets: TARGETS)
@@ -181,7 +201,8 @@ def uninstall(cask)
   check(output.include?("failed"), "Failed login cleanup did not warn")
   check(PREFS.read == "saved options\x00", "Uninstall changed preferences")
   check(!(FIXTURE_HOME/"Library/LaunchAgents/dev.patsch.MatrixWallpaper.cleanup.plist").exist?, "Cleanup registration survived uninstall")
-  check(LAUNCHCTL_CALLS == ["dev.patsch.MatrixWallpaper.cleanup"], "Native cleanup service removal not dispatched")
+  check(LAUNCHCTL_CALLS == [["bootout", "gui/#{Process.uid}/dev.patsch.MatrixWallpaper.cleanup"]],
+        "User-only cleanup command not dispatched")
   check(!(ROOT/"job").exist?, "Cleanup service survived uninstall")
 end
 
@@ -344,13 +365,14 @@ check(OSASCRIPT_CALLS.none? { |args| args.join.include?("delete every login item
 check(SELECTION_ATTEMPTS.binread == selection_before_upgrade, "Upgrade changed screen saver selection")
 puts "PASS AE4 real two-version native upgrade"
 
-reinstall = definition("1.2.4")
+reinstall = definition("1.2.4", command: "reinstall")
 OSASCRIPT_CALLS.clear
 output = capture { Cask::Installer.new(reinstall, reinstall: true).install }
 check(OSASCRIPT_CALLS.none? { |args| args.join.include?("delete every login item") }, "Reinstall removed login items")
 check(output.scan(COFFEE).length == 1, "Reinstall coffee output count wrong")
 verify_target("1.2.4")
-check(SELECTION_ATTEMPTS.binread == selection_before_upgrade, "Reinstall changed screen saver selection")
+check(SELECTION_ATTEMPTS.readlines.length == selection_before_upgrade.lines.length + 1,
+      "Explicit reinstall did not select the screen saver exactly once")
 uninstall(reinstall)
 puts "PASS AE5 native uninstall and managed reinstall preference retention"
 
@@ -360,10 +382,15 @@ failed_selection = definition("1.2.3")
 output = capture { Cask::Installer.new(failed_selection).install }
 verify_target("1.2.3")
 check(output.include?("Open System Settings"), "Selection failure hid manual recovery guidance")
-check(SELECTION_ATTEMPTS.readlines.length == selection_before_upgrade.lines.length + 1,
+check(SELECTION_ATTEMPTS.readlines.length == selection_before_upgrade.lines.length + 2,
       "Fresh installation did not attempt the failing selector")
 (SELECTION_STORE/"fail-selection").unlink
-uninstall(failed_selection)
+newer_reinstall = definition("1.2.4", command: "reinstall")
+capture { Cask::Installer.new(newer_reinstall, reinstall: true).install }
+verify_target("1.2.4")
+check(SELECTION_ATTEMPTS.readlines.length == selection_before_upgrade.lines.length + 3,
+      "Reinstalling an outdated version did not select the screen saver exactly once")
+uninstall(newer_reinstall)
 puts "PASS selection failure preserves native installation and manual recovery guidance"
 
 # The receipt owns the old filename; native upgrade must restore it on failure.
@@ -429,7 +456,7 @@ puts "PASS native old-name app upgrade, conflict rollback, and preference retent
     check(!LEGACY_APP_TARGET.exist?, "Failed upgrade did not reproduce removed legacy app")
     check((legacy.staged_path/"MatrixWallpaper.app").directory?, "Failed upgrade lost app backup")
   end
-  recovery = definition("1.2.4")
+  recovery = definition("1.2.4", command: "reinstall")
   output = capture { Cask::Installer.new(recovery, reinstall: true, force: true).install }
   verify_target("1.2.4")
   check(!LEGACY_APP_TARGET.exist?, "Recovery left the old app filename")

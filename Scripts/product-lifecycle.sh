@@ -402,7 +402,7 @@ case "${1:-}" in
   unregister)
     [[ $# == 1 || ( $# == 2 && "$2" == homebrew ) ]] || fail "unregister accepts only homebrew"
     lock
-    # Homebrew's native launchctl uninstall directive owns service removal.
+    # Homebrew's user-only uninstall command owns service removal outside the sandbox.
     if [[ "${2:-}" != homebrew ]]; then unload; fi
     unregister
     ;;

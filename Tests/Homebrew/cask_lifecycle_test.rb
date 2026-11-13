@@ -14,7 +14,9 @@ class CaskLifecycleTest < TestHarness
 
   def teardown = FileUtils.remove_entry(@root)
 
-  def definition(occupied: false, broken: false, artifact_index: 1, installed: false)
+  def definition(occupied: false, broken: false, artifact_index: 1, installed: false, command: "install")
+    previous_command = Homebrew.running_command_with_args.split[1]
+    Homebrew.running_command = command
     dsl = FakeCaskDSL.new(@root)
     dsl.installed = installed
     dsl.load_definition
@@ -31,6 +33,8 @@ class CaskLifecycleTest < TestHarness
       (artifact.target/"executable").write("manual")
     end
     dsl
+  ensure
+    Homebrew.running_command = previous_command
   end
 
   def assert_success(dsl)
@@ -66,7 +70,7 @@ class CaskLifecycleTest < TestHarness
     assert dsl.messages.any? { |m| m.include?("Gatekeeper") }
   end
 
-  # Only an installation without a prior receipt may replace the user's selection.
+  # Initial receipt state must survive Homebrew's post-staging reload.
   def test_fresh_install_selects_after_registration_with_scoped_store_access
     dsl = definition
     dsl.install
@@ -83,12 +87,21 @@ class CaskLifecycleTest < TestHarness
     assert_success(dsl)
   end
 
-  def test_upgrade_and_reinstall_preserve_selection_from_prior_receipt
-    dsl = definition(installed: true)
+  def test_upgrade_preserves_selection_from_prior_receipt
+    dsl = definition(installed: true, command: "upgrade")
     # Staging changes receipt state; the definition must retain the earlier snapshot.
     dsl.installed = false
     dsl.install
     refute dsl.commands.any? { |cmd, _| cmd.end_with?("/MatrixScreenSaverSelector") }
+    assert_success(dsl)
+  end
+
+  def test_explicit_reinstall_selects_despite_an_existing_receipt
+    dsl = definition(installed: true, command: "reinstall")
+    dsl.install
+    selections = dsl.commands.select { |cmd, _| cmd.end_with?("/MatrixScreenSaverSelector") }
+    assert_equal 1, selections.length
+    assert_equal [dsl.artifacts.last.target.to_s], selections.first[1]
     assert_success(dsl)
   end
 
@@ -142,12 +155,14 @@ class CaskLifecycleTest < TestHarness
     refute_includes dsl.messages, COFFEE
   end
 
-  # Native service removal must coexist with preference-preserving uninstall hooks.
+  # User-only service removal must never ask Homebrew to probe root services.
   def test_no_preference_cleanup_artifact
     dsl = definition
     assert_equal ["MatrixWallpaper.app", "MatrixScreenSaver.saver"], dsl.artifacts.map { |a| a.source.basename.to_s }
     assert_equal ["Matrix Wallpaper.app", "MatrixScreenSaver.saver"], dsl.artifacts.map { |a| a.target.basename.to_s }
-    assert_equal({launchctl: "dev.patsch.MatrixWallpaper.cleanup",
+    assert_equal({script: { executable: "/bin/launchctl",
+                           args: ["bootout", "gui/#{Process.uid}/dev.patsch.MatrixWallpaper.cleanup"],
+                           sudo: false, must_succeed: false },
                   quit: "dev.patsch.MatrixWallpaper", login_item: "Matrix Wallpaper"}, dsl.uninstall_directives)
     source = File.read(File.expand_path("../../Homebrew/Casks/matrix-screen-saver.rb", __dir__))
     refute_match(/\b(zap|defaults)\b/, source)

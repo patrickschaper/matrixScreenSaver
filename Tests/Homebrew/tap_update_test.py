@@ -8,10 +8,21 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "Scripts/update-homebrew-tap.py"
 TEMPLATE = (ROOT / "Homebrew/Casks/matrix-screen-saver.rb").read_text()
+# Reconstruct the reviewed predecessor that used Homebrew's root-probing directive.
+SUDO_CLEANUP_TEMPLATE = re.sub(
+    r"  # The launchctl directive also probes root services.*?\n(?=end\n)",
+    '  uninstall launchctl: "dev.patsch.MatrixWallpaper.cleanup",\n'
+    '            quit: "dev.patsch.MatrixWallpaper", login_item: "Matrix Wallpaper"\n',
+    TEMPLATE, flags=re.S)
+FRESH_ONLY_TEMPLATE = SUDO_CLEANUP_TEMPLATE.replace(
+    '  reinstall = Homebrew.running_command_with_args.split[1] == "reinstall"\n', ""
+).replace(" || reinstall", "").replace(
+    "Select on fresh installs and explicit reinstalls; retain the decision across staging.",
+    "Select only on fresh installs; snapshot receipts before Homebrew stages the new version.")
 # Reconstruct the reviewed predecessor without fresh-install selection.
 PRE_SELECTION_TEMPLATE = re.sub(
     r"  # Select only on fresh installs;.*?(?=  postflight_steps)", "",
-    TEMPLATE.removeprefix("select_on_install = nil\n\n"), flags=re.S
+    FRESH_ONLY_TEMPLATE.removeprefix("select_on_install = nil\n\n"), flags=re.S
 ).replace("    *selection_steps,\n", "").replace(
     "Open System Settings > Wallpaper > Screen Saver if MatrixScreenSaver is not selected.",
     "Open System Settings > Wallpaper > Screen Saver and select MatrixScreenSaver.")
@@ -55,6 +66,18 @@ class TapUpdateTest(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("tap_update", SCRIPT)
         self.module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(self.module)
+
+    def test_fresh_only_selection_cask_migrates_only_when_unmodified(self):
+        """Allow the reviewed 0.6.2 template to gain reinstall selection."""
+        for app in ("MatrixWallpaper.app", "Matrix Wallpaper.app"):
+            previous = FRESH_ONLY_TEMPLATE.replace("MatrixWallpaper.app", app)
+            api = FakeAPI(previous)
+            self.module.update(api, "owner/homebrew-test", "1.2.3", cask())
+            self.assertEqual(cask(), api.content)
+            api = FakeAPI(previous + "# unreviewed change\n")
+            with self.assertRaises(ValueError):
+                self.module.update(api, "owner/homebrew-test", "1.2.3", cask())
+            self.assertTrue(all(method == "GET" for method, _, _ in api.calls))
 
     def test_manual_selection_cask_migrates_only_when_unmodified(self):
         """Publish the new install behavior without overwriting independent tap edits."""
@@ -137,6 +160,18 @@ class TapUpdateTest(unittest.TestCase):
         """Upgrade reviewed pre-arrow casks without accepting unrelated tap edits."""
         for app in ("MatrixWallpaper.app", "Matrix Wallpaper.app"):
             previous = PRE_FORMAT_TEMPLATE.replace("➡️ ", "").replace("MatrixWallpaper.app", app)
+            api = FakeAPI(previous)
+            self.module.update(api, "owner/homebrew-test", "1.2.3", cask())
+            self.assertEqual(cask(), api.content)
+            api = FakeAPI(previous + "# unreviewed change\n")
+            with self.assertRaises(ValueError):
+                self.module.update(api, "owner/homebrew-test", "1.2.3", cask())
+            self.assertTrue(all(method == "GET" for method, _, _ in api.calls))
+
+    def test_sudo_cleanup_cask_migrates_only_when_unmodified(self):
+        """Publish user-only cleanup without accepting unrelated tap edits."""
+        for app in ("MatrixWallpaper.app", "Matrix Wallpaper.app"):
+            previous = SUDO_CLEANUP_TEMPLATE.replace("MatrixWallpaper.app", app)
             api = FakeAPI(previous)
             self.module.update(api, "owner/homebrew-test", "1.2.3", cask())
             self.assertEqual(cask(), api.content)

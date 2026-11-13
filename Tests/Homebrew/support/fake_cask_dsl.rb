@@ -1,6 +1,15 @@
 require "pathname"
 require "fileutils"
 
+unless defined?(Homebrew)
+  module Homebrew
+    class << self
+      attr_accessor :running_command
+      def running_command_with_args = "brew #{running_command}".strip
+    end
+  end
+end
+
 # Models only modern run/guard/steps; real sandbox and artifacts have integration coverage.
 class FakeCaskDSL
   Artifact = Struct.new(:source, :target)
