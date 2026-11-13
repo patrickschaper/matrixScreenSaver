@@ -157,6 +157,10 @@ Run `python3 Tests/Installation/lifecycle_test.py` for isolated failure, cleanup
 
 `./uninstall.sh` removes a local pair. Homebrew owns its native artifacts and invokes the same lifecycle script only for validation, registration, and cleanup state. The cleanup record contains exact destinations and ownership; options are never deleted. A shared lock protects local operations, and a PID lock held by the outer Homebrew process protects native artifact replacement. Native upgrade rollback reruns the previous registration hook.
 
+A recorded local installation can migrate to Homebrew. Preflight preserves its record while native artifacts handle conflicts. Existing bundles at Homebrew's destinations require `brew install --cask --force patrickschaper/tap/matrix-screen-saver`. Postflight transfers ownership only after both installed bundles validate. Preferences and copies outside Homebrew's destinations remain untouched. Quit the local wallpaper app before migrating, then open the Homebrew copy. Local installers still reject Homebrew ownership, and a Homebrew installation cannot silently change destinations.
+
+The lifecycle tests cover validation before ownership transfer. The native Homebrew integration tests cover unforced rejection and forced migration, with both shared and different app destinations. This fix must ship in a new release archive; changing the cask alone cannot update the lifecycle script in an existing download.
+
 Release bundles must have identical `CFBundleShortVersionString` and `CFBundleVersion`. There are no runtime companion-version warnings or playback restrictions. Shared-frame validation still rejects incompatible or malformed frames.
 
 Homebrew's sandbox cannot start or stop LaunchAgents. Its registration hook writes the cleanup files only; opening Matrix Wallpaper activates cleanup asynchronously. macOS also loads the agent at the next login. Local installation and explicit saver recovery still activate cleanup immediately. Homebrew's native `uninstall launchctl:` directive removes the running service, while the sandboxed hook removes its files.

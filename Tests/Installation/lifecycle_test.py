@@ -467,6 +467,38 @@ elif name != 'pkill': sys.exit(1)
         self.run_script("check")
         self.assertFalse(self.saver.exists())
 
+    def test_homebrew_migration_commits_only_after_pair_validation(self):
+        """A local record transfers after validation, retaining preferences and off-target copies."""
+        self.install()
+        record = (self.state / "installation.plist").read_bytes()
+        preferences = self.home / "Library/Preferences/sentinel"
+        preferences.parent.mkdir()
+        preferences.write_text("keep")
+        self.metadata(self.saver, CFBundleVersion="9")
+        self.run_script("register", self.app, self.saver, "homebrew", success=False)
+        self.assertEqual((self.state / "installation.plist").read_bytes(), record)
+        self.metadata(self.saver, CFBundleVersion="1.2.3")
+        (self.root / "deny-launchctl").touch()
+        self.run_script("register", self.app, self.saver, "homebrew")
+        migrated = plistlib.loads((self.state / "installation.plist").read_bytes())
+        self.assertEqual(migrated, {"app": str(self.app), "saver": str(self.saver), "owner": "homebrew"})
+        self.assertTrue(self.installed_app.exists() and self.installed_saver.exists())
+        self.assertEqual(preferences.read_text(), "keep")
+        self.run_script("install", self.app, self.saver, success=False)
+        self.run_script("register", self.installed_app, self.installed_saver, "homebrew", success=False)
+        self.assertEqual(plistlib.loads((self.state / "installation.plist").read_bytes()), migrated)
+
+    def test_homebrew_migration_can_reuse_local_destinations(self):
+        """Homebrew may take ownership of the same pair without replacing its bundles."""
+        self.install()
+        app_inode = self.installed_app.stat().st_ino
+        saver_inode = self.installed_saver.stat().st_ino
+        self.run_script("register", self.installed_app, self.installed_saver, "homebrew")
+        record = plistlib.loads((self.state / "installation.plist").read_bytes())
+        self.assertEqual(record["owner"], "homebrew")
+        self.assertEqual(self.installed_app.stat().st_ino, app_inode)
+        self.assertEqual(self.installed_saver.stat().st_ino, saver_inode)
+
     def test_homebrew_registration_defers_launch_services_until_app_launch(self):
         """Sandboxed hooks retain ownership without launchctl; app activation starts cleanup."""
         (self.root / "deny-launchctl").touch()
