@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+
+## [0.6.3] - 2026-11-13
+
+### Bug Fixes
+
+- ship Homebrew reinstall and uninstall fixes (#153)
+
 ## [0.6.2] - 2026-11-13
 
 ### Bug Fixes
