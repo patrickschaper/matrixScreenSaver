@@ -8,7 +8,13 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "Scripts/update-homebrew-tap.py"
 TEMPLATE = (ROOT / "Homebrew/Casks/matrix-screen-saver.rb").read_text()
-FRESH_ONLY_TEMPLATE = TEMPLATE.replace(
+# Reconstruct the reviewed predecessor that used Homebrew's root-probing directive.
+SUDO_CLEANUP_TEMPLATE = re.sub(
+    r"  # The launchctl directive also probes root services.*?\n(?=end\n)",
+    '  uninstall launchctl: "dev.patsch.MatrixWallpaper.cleanup",\n'
+    '            quit: "dev.patsch.MatrixWallpaper", login_item: "Matrix Wallpaper"\n',
+    TEMPLATE, flags=re.S)
+FRESH_ONLY_TEMPLATE = SUDO_CLEANUP_TEMPLATE.replace(
     '  reinstall = Homebrew.running_command_with_args.split[1] == "reinstall"\n', ""
 ).replace(" || reinstall", "").replace(
     "Select on fresh installs and explicit reinstalls; retain the decision across staging.",
@@ -154,6 +160,18 @@ class TapUpdateTest(unittest.TestCase):
         """Upgrade reviewed pre-arrow casks without accepting unrelated tap edits."""
         for app in ("MatrixWallpaper.app", "Matrix Wallpaper.app"):
             previous = PRE_FORMAT_TEMPLATE.replace("➡️ ", "").replace("MatrixWallpaper.app", app)
+            api = FakeAPI(previous)
+            self.module.update(api, "owner/homebrew-test", "1.2.3", cask())
+            self.assertEqual(cask(), api.content)
+            api = FakeAPI(previous + "# unreviewed change\n")
+            with self.assertRaises(ValueError):
+                self.module.update(api, "owner/homebrew-test", "1.2.3", cask())
+            self.assertTrue(all(method == "GET" for method, _, _ in api.calls))
+
+    def test_sudo_cleanup_cask_migrates_only_when_unmodified(self):
+        """Publish user-only cleanup without accepting unrelated tap edits."""
+        for app in ("MatrixWallpaper.app", "Matrix Wallpaper.app"):
+            previous = SUDO_CLEANUP_TEMPLATE.replace("MatrixWallpaper.app", app)
             api = FakeAPI(previous)
             self.module.update(api, "owner/homebrew-test", "1.2.3", cask())
             self.assertEqual(cask(), api.content)

@@ -53,17 +53,33 @@ raise "Cask must not launch Settings" if check_source.include?("/usr/bin/open")
 # Keep native directive dispatch and successor checks, but never cross the
 # AppleScript boundary into the user's running app or real login items.
 OSASCRIPT_CALLS = []
-# Records native service-removal dispatch without unloading the user's real cleanup agent.
+# Records the user-only command without unloading the user's real cleanup agent.
 LAUNCHCTL_CALLS = []
 FAILED_STATUS = SystemCommand.run("/usr/bin/false").status
+
+# Keep Homebrew's script execution and error handling, replacing only the OS effect.
+class IsolatedCleanupCommand < SystemCommand
+  def self.run(executable, **options)
+    args = ["bootout", "gui/#{Process.uid}/dev.patsch.MatrixWallpaper.cleanup"]
+    raise "Unexpected cleanup command" unless executable.to_s == "/bin/launchctl" && options[:args] == args
+    raise "Cleanup must not use sudo" unless options[:sudo] == false
+    raise "Inactive cleanup must be harmless" unless options[:must_succeed] == false
+
+    LAUNCHCTL_CALLS << args
+    result = super((ROOT/"job").exist? ? "/usr/bin/true" : "/usr/bin/false", **options)
+    FileUtils.rm_f(ROOT/"job")
+    result
+  end
+end
+
 # Intercepts desktop/service effects after Homebrew's real uninstall directive dispatch.
 module IsolatedUninstallAutomation
-  # Models service removal without consulting or changing the real user's launchd domain.
-  def uninstall_launchctl(*services, command:, **_kwargs)
-    raise "Unexpected service removal" unless services == ["dev.patsch.MatrixWallpaper.cleanup"]
+  def uninstall_launchctl(*)
+    raise "Root-probing service cleanup must not run"
+  end
 
-    LAUNCHCTL_CALLS.concat(services)
-    FileUtils.rm_f(ROOT/"job")
+  def uninstall_script(directives, command:, **kwargs)
+    super(directives, command: IsolatedCleanupCommand, **kwargs)
   end
 
   def system_command(executable, **options)
@@ -185,7 +201,8 @@ def uninstall(cask)
   check(output.include?("failed"), "Failed login cleanup did not warn")
   check(PREFS.read == "saved options\x00", "Uninstall changed preferences")
   check(!(FIXTURE_HOME/"Library/LaunchAgents/dev.patsch.MatrixWallpaper.cleanup.plist").exist?, "Cleanup registration survived uninstall")
-  check(LAUNCHCTL_CALLS == ["dev.patsch.MatrixWallpaper.cleanup"], "Native cleanup service removal not dispatched")
+  check(LAUNCHCTL_CALLS == [["bootout", "gui/#{Process.uid}/dev.patsch.MatrixWallpaper.cleanup"]],
+        "User-only cleanup command not dispatched")
   check(!(ROOT/"job").exist?, "Cleanup service survived uninstall")
 end
 
