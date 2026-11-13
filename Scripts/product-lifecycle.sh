@@ -102,14 +102,16 @@ read_record() {
   [[ "$OWNER" == local || "$OWNER" == homebrew ]] || fail "Invalid installation owner."
 }
 
-# Retains the recorded owner and destinations; reports the conflicting installation on mismatch.
+# Checks requested destinations, allowing local ownership to transfer to Homebrew.
+# Only register persists the transfer after pair validation; suspend leaves the record intact.
 check_destinations() {
   local app="$1" saver="$2" owner="$3"
   safe_path "$app"; safe_path "$saver"
   [[ "$(basename "$app")" == 'Matrix Wallpaper.app' && "$(basename "$saver")" == MatrixScreenSaver.saver ]] || fail "Invalid installation destinations."
   if [[ -e "$RECORD" ]]; then
     read_record
-    [[ "$APP" == "$app" && "$SAVER" == "$saver" && "$OWNER" == "$owner" ]] ||
+    [[ ( "$APP" == "$app" && "$SAVER" == "$saver" && "$OWNER" == "$owner" ) ||
+       ( "$OWNER" == local && "$owner" == homebrew ) ]] ||
       fail "Uninstall the existing managed installation first. Owner: $OWNER; app: $APP; screen saver: $SAVER."
   fi
   APP="$app"; SAVER="$saver"; OWNER="$owner"
