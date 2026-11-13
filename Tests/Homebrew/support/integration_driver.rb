@@ -129,7 +129,9 @@ ensure
   $stdout, $stderr = old_out, old_err
 end
 
-def definition(version, legacy: nil)
+def definition(version, legacy: nil, command: "install")
+  previous_command = Homebrew.running_command_with_args.split[1]
+  Homebrew.running_command = command
   source = case legacy
   when :saver then Pathname("Tests/Homebrew/fixtures/legacy-screen-saver.rb")
   when :wallpaper then Pathname("Tests/Homebrew/fixtures/legacy-wallpaper.rb")
@@ -147,6 +149,8 @@ def definition(version, legacy: nil)
   output = capture { loaded = Cask::CaskLoader::FromContentLoader.new(content, tap: TAP).load(config: CONFIG) }
   check(!output.match?(/deprecated/i), "Definition load emitted deprecation warnings: #{output}")
   loaded
+ensure
+  Homebrew.running_command = previous_command
 end
 
 def verify_target(version, targets: TARGETS)
@@ -344,13 +348,14 @@ check(OSASCRIPT_CALLS.none? { |args| args.join.include?("delete every login item
 check(SELECTION_ATTEMPTS.binread == selection_before_upgrade, "Upgrade changed screen saver selection")
 puts "PASS AE4 real two-version native upgrade"
 
-reinstall = definition("1.2.4")
+reinstall = definition("1.2.4", command: "reinstall")
 OSASCRIPT_CALLS.clear
 output = capture { Cask::Installer.new(reinstall, reinstall: true).install }
 check(OSASCRIPT_CALLS.none? { |args| args.join.include?("delete every login item") }, "Reinstall removed login items")
 check(output.scan(COFFEE).length == 1, "Reinstall coffee output count wrong")
 verify_target("1.2.4")
-check(SELECTION_ATTEMPTS.binread == selection_before_upgrade, "Reinstall changed screen saver selection")
+check(SELECTION_ATTEMPTS.readlines.length == selection_before_upgrade.lines.length + 1,
+      "Explicit reinstall did not select the screen saver exactly once")
 uninstall(reinstall)
 puts "PASS AE5 native uninstall and managed reinstall preference retention"
 
@@ -360,10 +365,15 @@ failed_selection = definition("1.2.3")
 output = capture { Cask::Installer.new(failed_selection).install }
 verify_target("1.2.3")
 check(output.include?("Open System Settings"), "Selection failure hid manual recovery guidance")
-check(SELECTION_ATTEMPTS.readlines.length == selection_before_upgrade.lines.length + 1,
+check(SELECTION_ATTEMPTS.readlines.length == selection_before_upgrade.lines.length + 2,
       "Fresh installation did not attempt the failing selector")
 (SELECTION_STORE/"fail-selection").unlink
-uninstall(failed_selection)
+newer_reinstall = definition("1.2.4", command: "reinstall")
+capture { Cask::Installer.new(newer_reinstall, reinstall: true).install }
+verify_target("1.2.4")
+check(SELECTION_ATTEMPTS.readlines.length == selection_before_upgrade.lines.length + 3,
+      "Reinstalling an outdated version did not select the screen saver exactly once")
+uninstall(newer_reinstall)
 puts "PASS selection failure preserves native installation and manual recovery guidance"
 
 # The receipt owns the old filename; native upgrade must restore it on failure.
@@ -429,7 +439,7 @@ puts "PASS native old-name app upgrade, conflict rollback, and preference retent
     check(!LEGACY_APP_TARGET.exist?, "Failed upgrade did not reproduce removed legacy app")
     check((legacy.staged_path/"MatrixWallpaper.app").directory?, "Failed upgrade lost app backup")
   end
-  recovery = definition("1.2.4")
+  recovery = definition("1.2.4", command: "reinstall")
   output = capture { Cask::Installer.new(recovery, reinstall: true, force: true).install }
   verify_target("1.2.4")
   check(!LEGACY_APP_TARGET.exist?, "Recovery left the old app filename")

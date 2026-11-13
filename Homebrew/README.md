@@ -43,8 +43,8 @@ Homebrew moves them. This bypasses Gatekeeper quarantine checks; it does not mak
 or Apple-approved. Install only if you trust the release publisher. The cask
 prints this disclosure before invoking `/usr/bin/xattr`; failure aborts installation.
 
-Fresh Homebrew installs select **MatrixScreenSaver** automatically. Upgrades and
-reinstalls preserve the current selection. Selection uses the app's existing helper
+Fresh Homebrew installs and explicit `brew reinstall` select **MatrixScreenSaver**
+automatically. Upgrades preserve the current selection. Selection uses the app's existing helper
 after both native artifacts and cleanup registration succeed. It preserves desktop
 wallpaper and backs up the macOS selection store. Unsupported custom saver locations
 or selection failures leave installation intact. Use **Set Matrix Screen Saver** in
@@ -86,7 +86,8 @@ brew uninstall --cask patrickschaper/tap/matrix-screen-saver
 Upgrades and reinstalls remain native Homebrew operations. An upgrade may print
 the existing-target guidance because Homebrew can leave an empty target directory
 during replacement. Selection retains the initial receipt snapshot across Homebrew's
-post-staging cask reload. Upgrades and reinstalls never reset the user's screen saver.
+post-staging cask reload. Explicit reinstalls select Matrix again; upgrades never
+reset the user's screen saver.
 Custom destinations are honored, and other saver copies are not removed.
 When upgrading a managed `MatrixWallpaper.app`, Homebrew uses its prior receipt
 to remove the old filename and installs `Matrix Wallpaper.app`. A conflict at the
@@ -227,7 +228,7 @@ not access the actual defaults domain. HOME alone is not used as isolation.
 
 Native integration covers saver-only migration, old-name app migration and rollback,
 old/new archive names, dual install, conflict failure, forced migration, upgrade,
-reinstall, uninstall, fresh-only selection attempts and selection failure fallback,
+reinstall, uninstall, fresh/reinstall selection attempts and selection failure fallback,
 quarantine removal, broken-symlink conflict/force semantics,
 and developer-mode acceptance without legacy warnings on definition load or
 uninstall. Run workflow lint (for example `actionlint`) separately; never conceal
