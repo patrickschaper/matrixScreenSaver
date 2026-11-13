@@ -43,11 +43,15 @@ Homebrew moves them. This bypasses Gatekeeper quarantine checks; it does not mak
 or Apple-approved. Install only if you trust the release publisher. The cask
 prints this disclosure before invoking `/usr/bin/xattr`; failure aborts installation.
 
-After installation, open **System Settings > Wallpaper > Screen Saver** and
-select **MatrixScreenSaver** manually. Modern Homebrew's sandbox blocks opening
-Settings, so automatic opening was intentionally removed. The cask never selects
-the saver, launches the wallpaper on a fresh install, enables login startup, or opens
-a browser. The command above launches **Matrix Wallpaper** from your shell after Homebrew
+Fresh Homebrew installs select **MatrixScreenSaver** automatically. Upgrades and
+reinstalls preserve the current selection. Selection uses the app's existing helper
+after both native artifacts and cleanup registration succeed. It preserves desktop
+wallpaper and backs up the macOS selection store. Unsupported custom saver locations
+or selection failures leave installation intact. Use **Set Matrix Screen Saver** in
+the app, or select it in **System Settings > Wallpaper > Screen Saver**.
+
+The cask does not open Settings, launch wallpaper, enable login startup, or open a
+browser. The command above launches **Matrix Wallpaper** from your shell after Homebrew
 finishes; use its single **Launch at Login** checkbox if wanted.
 Homebrew may reopen an already-running app following an upgrade. Successful install,
 upgrade, and reinstall print:
@@ -81,8 +85,9 @@ brew uninstall --cask patrickschaper/tap/matrix-screen-saver
 
 Upgrades and reinstalls remain native Homebrew operations. An upgrade may print
 the existing-target guidance because Homebrew can leave an empty target directory
-during replacement; no prior-receipt snapshot or initial-install-only behavior
-is needed. Custom destinations are honored, and other saver copies are not removed.
+during replacement. Selection retains the initial receipt snapshot across Homebrew's
+post-staging cask reload. Upgrades and reinstalls never reset the user's screen saver.
+Custom destinations are honored, and other saver copies are not removed.
 When upgrading a managed `MatrixWallpaper.app`, Homebrew uses its prior receipt
 to remove the old filename and installs `Matrix Wallpaper.app`. A conflict at the
 new path aborts the upgrade and restores the previous managed bundles. Unmanaged
@@ -109,7 +114,8 @@ After publication, the Release workflow downloads the **existing published**
 versioned zip, including on reruns. Release preparation and publication build both
 products and the archive contains both bundle roots. Validation checks the asset
 digest, both bundle identities and matching versions, archive layout, thin ARM64
-Mach-O bundle/executable types, and the greater of their minimum macOS versions.
+Mach-O bundle/executable types, the bundled selection helper, and the greatest of
+their minimum macOS versions.
 It uploads `homebrew-handoff-VERSION-ATTEMPT`, containing `Casks/matrix-screen-saver.rb`
 and `manifest.json` with version, URL, SHA-256, architecture, OS floor, both bundle
 identifiers, and provenance.
@@ -211,8 +217,8 @@ as the compatibility baseline. It redirects the native
 destination, all artifact directories, Caskroom, cache, logs, and fixture tap into
 one temporary directory. It uses real installers, upgrade orchestration, downloads,
 native moves for both bundles, sandboxed install steps, echo stdout, and quarantine operations.
-Only the operating-system process/login-item command boundary is substituted, so
-the fixture never quits a real app or changes real login settings. Homebrew's
+The operating-system process/login-item boundary and selection helper are substituted,
+so the fixture never quits a real app or changes live screen-saver or login settings. Homebrew's
 actual uninstall dispatch and successor handling still run.
 There is no Settings-launch mock: the cask contains no Settings-launch command.
 A separate
@@ -221,7 +227,8 @@ not access the actual defaults domain. HOME alone is not used as isolation.
 
 Native integration covers saver-only migration, old-name app migration and rollback,
 old/new archive names, dual install, conflict failure, forced migration, upgrade,
-reinstall, uninstall, quarantine removal, broken-symlink conflict/force semantics,
+reinstall, uninstall, fresh-only selection attempts and selection failure fallback,
+quarantine removal, broken-symlink conflict/force semantics,
 and developer-mode acceptance without legacy warnings on definition load or
 uninstall. Run workflow lint (for example `actionlint`) separately; never conceal
 unrelated style/audit failures with exclusions. Compatibility is verified against

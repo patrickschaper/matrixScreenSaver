@@ -1,3 +1,5 @@
+select_on_install = nil
+
 cask "matrix-screen-saver" do |dsl|
   version "0.2.0"
   sha256 "7a60c8ec2855a2df4cb008da7f79ea9e8526385897e3048bb53bb42421e07acd"
@@ -56,6 +58,20 @@ cask "matrix-screen-saver" do |dsl|
       writable_paths: ["{{staged_path}}/MatrixWallpaper.app"] },
   ]
 
+  # Select only on fresh installs; snapshot receipts before Homebrew stages the new version.
+  select_on_install = !dsl.cask.installed? if select_on_install.nil?
+  selection_steps = []
+  if select_on_install
+    selection_steps << {
+      type: :run, command: "{{appdir}}/Matrix Wallpaper.app/Contents/MacOS/MatrixScreenSaverSelector",
+      args: [saver_destination], env: { "HOME" => user_home },
+      allow_failure: true, print_stdout: true, print_stderr: true,
+      writable_paths: ["{{appdir}}/Matrix Wallpaper.app", saver_destination,
+                       "#{user_home}/Library/Screen Savers",
+                       "#{user_home}/Library/Application Support/com.apple.wallpaper/Store"]
+    }
+  end
+
   postflight_steps [
     { type: :run, command: "/bin/bash",
       args: ["{{staged_path}}/Scripts/product-lifecycle.sh", "register",
@@ -64,10 +80,11 @@ cask "matrix-screen-saver" do |dsl|
       writable_paths: ["{{appdir}}/Matrix Wallpaper.app", saver_destination,
                        "#{user_home}/Library/Application Support/MatrixWallpaper",
                        "#{user_home}/Library/LaunchAgents"] },
+    *selection_steps,
     { type: :run, command: "/bin/echo",
       args: ["➡️ There is no spoon. There is coffee: https://www.buymeacoffee.com/yesman82"], print_stdout: true },
     { type: :run, command: "/bin/echo",
-      args: ["➡️ Open System Settings > Wallpaper > Screen Saver and select MatrixScreenSaver."],
+      args: ["➡️ Open System Settings > Wallpaper > Screen Saver if MatrixScreenSaver is not selected."],
       print_stdout: true },
     { type: :run, command: "/bin/echo",
       args: ["➡️ Open {{appdir}}/Matrix Wallpaper.app to start Matrix Wallpaper. " \

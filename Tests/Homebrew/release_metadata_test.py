@@ -104,6 +104,8 @@ class ReleaseMetadataTest(unittest.TestCase):
 
     def test_rejects_missing_bundles(self):
         write_archive(self.archive, wallpaper=False)
+        with zipfile.ZipFile(self.archive) as archive:
+            self.assertFalse(any(name.startswith("Matrix Wallpaper.app/") for name in archive.namelist()))
         self.assertNotEqual(0, self.run_render().returncode)
         write_archive(self.archive)
         with zipfile.ZipFile(self.archive) as archive:
@@ -116,7 +118,8 @@ class ReleaseMetadataTest(unittest.TestCase):
         self.assertFalse((self.root / "out").exists())
 
     def test_requires_combined_installer_payload(self):
-        for missing in ["Install.command", "Scripts/product-lifecycle.sh"]:
+        for missing in ["Install.command", "Scripts/product-lifecycle.sh",
+                        "Matrix Wallpaper.app/Contents/MacOS/MatrixScreenSaverSelector"]:
             with self.subTest(missing=missing):
                 write_archive(self.archive)
                 with zipfile.ZipFile(self.archive) as archive:
@@ -139,6 +142,7 @@ class ReleaseMetadataTest(unittest.TestCase):
         cases += [(binary_path, offset, value) for offset, value in [
             (4, 0x01000007), (12, 8), (40, 2), (44, 27 << 16), (32, 0)]]
         cases.append(("MatrixScreenSaver.saver/Contents/MacOS/MatrixScreenSaver", 12, 2))
+        cases.append(("Matrix Wallpaper.app/Contents/MacOS/MatrixScreenSaverSelector", 12, 8))
         for path, field, value in cases:
             with self.subTest(field=field, value=value):
                 write_archive(self.archive)

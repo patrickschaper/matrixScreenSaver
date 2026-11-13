@@ -99,6 +99,8 @@ def render(archive_path, version, url, digest, provenance, output):
                 raise ValueError("Bundle identity, executable, or version mismatch")
             identifiers.append(info["CFBundleIdentifier"])
             minimum = max(minimum, binary_minimum(archive.read(f"{root}/MacOS/{name}"), kind))
+        selector = f"{app_root}/Contents/MacOS/MatrixScreenSaverSelector"
+        minimum = max(minimum, binary_minimum(archive.read(selector), 2))
     # Select the next known OS floor, never silently understate the binary requirement.
     if minimum <= (15, 0, 0):
         floor, symbol = "15.0", "sequoia"

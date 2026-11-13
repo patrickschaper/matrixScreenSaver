@@ -4,7 +4,7 @@ require "fileutils"
 # Models only modern run/guard/steps; real sandbox and artifacts have integration coverage.
 class FakeCaskDSL
   Artifact = Struct.new(:source, :target)
-  attr_accessor :fail_quarantine
+  attr_accessor :fail_quarantine, :fail_selection, :installed
   attr_reader :artifacts, :commands, :dependencies, :messages, :uninstall_directives
 
   def initialize(root)
@@ -18,9 +18,13 @@ class FakeCaskDSL
   end
 
   def cask(_token = nil, &block)
-    block ? instance_eval(&block) : self
+    return self unless block
+
+    @definition = block
+    instance_eval(&block)
   end
   def config = self
+  def installed? = !!@installed
   def screen_saverdir = @root/"custom savers"
   def version(value = nil)
     @version = value if value
@@ -100,7 +104,12 @@ class FakeCaskDSL
       next if guard && !Pathname(guard).exist? # Homebrew 7.0.7 does not include broken symlinks.
 
       args = options.fetch(:args).map { |arg| expand(arg) }
+      command = expand(command)
       @commands << [command, args, options]
+      if command.end_with?("/MatrixScreenSaverSelector")
+        raise "selection ran before app installation" unless @artifacts.first.target.directory?
+        raise "selection failed" if @fail_selection && options[:allow_failure] != true
+      end
       @messages.concat(args) if command == "/bin/echo" && options[:print_stdout]
       if command == "/usr/bin/xattr"
         raise "quarantine failed" if @fail_quarantine || !Pathname(args.last).directory?
@@ -119,6 +128,11 @@ class FakeCaskDSL
       FileUtils.mkdir_p(artifact.target.dirname)
       FileUtils.mv(artifact.source, artifact.target)
     end
+    # Homebrew saves the receipt, then re-evaluates the same DSL block with configured paths.
+    @installed = true
+    @artifacts = []
+    @preflight, @postflight = [], []
+    instance_eval(&@definition)
     execute(@postflight)
   end
 end

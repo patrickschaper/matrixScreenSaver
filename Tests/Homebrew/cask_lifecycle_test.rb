@@ -14,8 +14,9 @@ class CaskLifecycleTest < TestHarness
 
   def teardown = FileUtils.remove_entry(@root)
 
-  def definition(occupied: false, broken: false, artifact_index: 1)
+  def definition(occupied: false, broken: false, artifact_index: 1, installed: false)
     dsl = FakeCaskDSL.new(@root)
+    dsl.installed = installed
     dsl.load_definition
     dsl.artifacts.each do |item|
       FileUtils.mkdir_p(item.source)
@@ -63,6 +64,40 @@ class CaskLifecycleTest < TestHarness
     assert_success(dsl)
     assert_equal({arch: :arm64, macos: :sequoia}, dsl.dependencies)
     assert dsl.messages.any? { |m| m.include?("Gatekeeper") }
+  end
+
+  # Only an installation without a prior receipt may replace the user's selection.
+  def test_fresh_install_selects_after_registration_with_scoped_store_access
+    dsl = definition
+    dsl.install
+    selections = dsl.commands.select { |cmd, _| cmd.end_with?("/MatrixScreenSaverSelector") }
+    assert_equal 1, selections.length
+    command, args, options = selections.first
+    assert_equal "#{dsl.artifacts.first.target}/Contents/MacOS/MatrixScreenSaverSelector", command
+    assert_equal [dsl.artifacts.last.target.to_s], args
+    assert_equal({ "HOME" => Dir.home }, options[:env])
+    assert_equal true, options[:allow_failure]
+    assert options[:writable_paths].include?("#{Dir.home}/Library/Application Support/com.apple.wallpaper/Store")
+    registration = dsl.commands.index { |_, arguments| arguments.include?("register") }
+    assert registration < dsl.commands.index(selections.first)
+    assert_success(dsl)
+  end
+
+  def test_upgrade_and_reinstall_preserve_selection_from_prior_receipt
+    dsl = definition(installed: true)
+    # Staging changes receipt state; the definition must retain the earlier snapshot.
+    dsl.installed = false
+    dsl.install
+    refute dsl.commands.any? { |cmd, _| cmd.end_with?("/MatrixScreenSaverSelector") }
+    assert_success(dsl)
+  end
+
+  def test_selection_failure_keeps_installation_and_manual_recovery_guidance
+    dsl = definition
+    dsl.fail_selection = true
+    dsl.install
+    assert dsl.commands.any? { |cmd, _| cmd.end_with?("/MatrixScreenSaverSelector") }
+    assert_success(dsl)
   end
 
   def test_unforced_conflict_is_delegated_and_never_prints_success
