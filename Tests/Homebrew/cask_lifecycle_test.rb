@@ -155,12 +155,14 @@ class CaskLifecycleTest < TestHarness
     refute_includes dsl.messages, COFFEE
   end
 
-  # Native service removal must coexist with preference-preserving uninstall hooks.
+  # User-only service removal must never ask Homebrew to probe root services.
   def test_no_preference_cleanup_artifact
     dsl = definition
     assert_equal ["MatrixWallpaper.app", "MatrixScreenSaver.saver"], dsl.artifacts.map { |a| a.source.basename.to_s }
     assert_equal ["Matrix Wallpaper.app", "MatrixScreenSaver.saver"], dsl.artifacts.map { |a| a.target.basename.to_s }
-    assert_equal({launchctl: "dev.patsch.MatrixWallpaper.cleanup",
+    assert_equal({script: { executable: "/bin/launchctl",
+                           args: ["bootout", "gui/#{Process.uid}/dev.patsch.MatrixWallpaper.cleanup"],
+                           sudo: false, must_succeed: false },
                   quit: "dev.patsch.MatrixWallpaper", login_item: "Matrix Wallpaper"}, dsl.uninstall_directives)
     source = File.read(File.expand_path("../../Homebrew/Casks/matrix-screen-saver.rb", __dir__))
     refute_match(/\b(zap|defaults)\b/, source)

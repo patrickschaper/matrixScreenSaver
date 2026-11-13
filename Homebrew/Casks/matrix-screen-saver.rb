@@ -106,6 +106,13 @@ cask "matrix-screen-saver" do |dsl|
                        "#{user_home}/Library/LaunchAgents/dev.patsch.MatrixWallpaper.cleanup.plist"] },
   ]
 
-  uninstall launchctl: "dev.patsch.MatrixWallpaper.cleanup",
-            quit: "dev.patsch.MatrixWallpaper", login_item: "Matrix Wallpaper"
+  # The launchctl directive also probes root services, unnecessarily requesting sudo.
+  uninstall quit:       "dev.patsch.MatrixWallpaper",
+            login_item: "Matrix Wallpaper",
+            script:     {
+              executable:   "/bin/launchctl",
+              args:         ["bootout", "gui/#{Process.uid}/dev.patsch.MatrixWallpaper.cleanup"],
+              sudo:         false,
+              must_succeed: false,
+            }
 end
