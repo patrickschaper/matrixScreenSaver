@@ -44,6 +44,8 @@ SH
 (FIXTURE_SERVICES/"launchctl").chmod(0755)
 PREFS = ROOT/"preferences-sentinel"
 PREFS.write("saved options\x00")
+SELECTION_STORE = FIXTURE_HOME/"Library/Application Support/com.apple.wallpaper/Store"
+SELECTION_ATTEMPTS = SELECTION_STORE/"selection-attempts"
 COFFEE = "There is no spoon. There is coffee: https://www.buymeacoffee.com/yesman82".freeze
 check_source = Pathname("Homebrew/Casks/matrix-screen-saver.rb").read
 raise "Cask must not launch Settings" if check_source.include?("/usr/bin/open")
@@ -91,6 +93,23 @@ module StageObservation
       [artifact.source, artifact.source/"Contents/MacOS"/executable].each do |path|
         SystemCommand.run!("/usr/bin/xattr", args: ["-w", "com.apple.quarantine", "0081;00000000;fixture;", path.to_s])
       end
+      next unless artifact.source.extname == ".app"
+
+      # Exercise the real sandbox/command boundary without touching macOS selection or WallpaperAgent.
+      selector = artifact.source/"Contents/MacOS/MatrixScreenSaverSelector"
+      selector.write(<<~SH)
+        #!/bin/bash
+        set -eu
+        test "$1" = #{TARGET.to_s.shellescape}
+        store="$HOME/Library/Application Support/com.apple.wallpaper/Store"
+        mkdir -p "$store"
+        printf '%s\n' "$1" >> "$store/selection-attempts"
+        if test -f "$store/fail-selection"; then
+          echo 'Fixture selection failed' >&2
+          exit 1
+        fi
+      SH
+      selector.chmod(0755)
     end
   end
 end
@@ -214,6 +233,7 @@ check(!output.match?(/deprecated/i), "Install emitted deprecation warnings")
 verify_target("1.2.3")
 check(!(ROOT/"job").exist?, "Sandboxed install unexpectedly activated cleanup")
 check(OSASCRIPT_CALLS.empty?, "Install attempted startup or cleanup")
+check(SELECTION_ATTEMPTS.readlines.length == 1, "Fresh install did not attempt selection exactly once")
 puts "PASS AE1 sandboxed native fresh install and actual coffee stdout"
 
 restore_saver
@@ -308,6 +328,7 @@ verify_target("1.2.3")
 
 # AE4: successor evaluates while prior metadata exists, before native upgrade.
 successor = definition("1.2.4")
+selection_before_upgrade = SELECTION_ATTEMPTS.binread
 OSASCRIPT_CALLS.clear
 check(successor.installed?, "Successor did not observe prior metadata")
 output = capture do
@@ -320,6 +341,7 @@ verify_target("1.2.4")
 check(output.scan(COFFEE).length == 1, "Upgrade coffee output count wrong")
 check(!output.match?(/deprecated/i), "Upgrade emitted deprecation warnings")
 check(OSASCRIPT_CALLS.none? { |args| args.join.include?("delete every login item") }, "Upgrade removed login items")
+check(SELECTION_ATTEMPTS.binread == selection_before_upgrade, "Upgrade changed screen saver selection")
 puts "PASS AE4 real two-version native upgrade"
 
 reinstall = definition("1.2.4")
@@ -328,8 +350,21 @@ output = capture { Cask::Installer.new(reinstall, reinstall: true).install }
 check(OSASCRIPT_CALLS.none? { |args| args.join.include?("delete every login item") }, "Reinstall removed login items")
 check(output.scan(COFFEE).length == 1, "Reinstall coffee output count wrong")
 verify_target("1.2.4")
+check(SELECTION_ATTEMPTS.binread == selection_before_upgrade, "Reinstall changed screen saver selection")
 uninstall(reinstall)
 puts "PASS AE5 native uninstall and managed reinstall preference retention"
+
+# A denied/unsupported selection must not roll back valid native artifacts or hide recovery guidance.
+(SELECTION_STORE/"fail-selection").write("fail")
+failed_selection = definition("1.2.3")
+output = capture { Cask::Installer.new(failed_selection).install }
+verify_target("1.2.3")
+check(output.include?("Open System Settings"), "Selection failure hid manual recovery guidance")
+check(SELECTION_ATTEMPTS.readlines.length == selection_before_upgrade.lines.length + 1,
+      "Fresh installation did not attempt the failing selector")
+(SELECTION_STORE/"fail-selection").unlink
+uninstall(failed_selection)
+puts "PASS selection failure preserves native installation and manual recovery guidance"
 
 # The receipt owns the old filename; native upgrade must restore it on failure.
 old_name = definition("1.2.1", legacy: :wallpaper)

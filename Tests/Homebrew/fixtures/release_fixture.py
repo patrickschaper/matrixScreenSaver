@@ -27,5 +27,6 @@ def write_archive(path, version="1.2.3", cpu=0x0100000C, minimum=15, root="Matri
                                   "CFBundleExecutable": "MatrixWallpaper",
                                   "CFBundlePackageType": "APPL", "CFBundleName": "Matrix Wallpaper"})
             for name, data in [(f"{wallpaper_root}/Contents/Info.plist", info),
-                               (f"{wallpaper_root}/Contents/MacOS/MatrixWallpaper", binary)]:
+                               (f"{wallpaper_root}/Contents/MacOS/MatrixWallpaper", binary),
+                               (f"{wallpaper_root}/Contents/MacOS/MatrixScreenSaverSelector", binary)]:
                 archive.writestr(zipfile.ZipInfo(name, (2026, 1, 1, 0, 0, 0)), data)
