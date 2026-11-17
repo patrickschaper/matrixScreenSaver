@@ -265,15 +265,42 @@ these warnings until they are updated.
 
 ## Desktop wallpaper lifecycle
 
-Matrix Wallpaper draws desktop-level animation windows without changing the macOS wallpaper selection.
-Aerial videos, images, and solid colors remain selected underneath the animation.
+Matrix Wallpaper draws desktop-level animation windows above the macOS wallpaper.
+By default, it also updates the desktop and lock-screen image from the current Matrix scene.
+Turn off **Use Matrix Image on Lock Screen** below **Sync with Screen Saver**, or in **Settings > General > Animated wallpaper**, to stop these updates.
+Both controls share one saved preference. Existing saved choices are preserved.
+Turning this off does not restore a previous wallpaper.
 The menu starts with **Pause Animation** and **Stop Wallpaper**.
 **Pause Animation** freezes the visible frame; **Resume Animation** continues the scene.
 Pausing is session-only and does not persist across launches. With **Sync with Screen Saver**
 enabled, the saver temporarily advances the shared scene even while the wallpaper is paused.
 When the saver exits, the wallpaper pauses again at the updated scene.
 **Stop Wallpaper** and **Quit Matrix Wallpaper** remove the animation windows without setting or restoring a desktop image.
-Launch, sleep/wake, display changes, and animation restarts also leave wallpaper settings alone.
+Ordinary sleep/wake, display changes, and renderer restarts do not rearm an already-completed startup capture.
+A pending startup capture waits for visible characters on every display, skipping empty frames. Further animation ticks do not continuously replace the wallpaper.
+
+### Optional desktop and lock-screen images
+
+When enabled, updates capture whichever scene is visible: intro messages, command output, the trace program, or rain.
+Visible text is included in the saved desktop and lock-screen image.
+The shared `UseMatrixImageForLockScreen` preference defaults to true. A saved false value remains an opt-out; the retired `AutomaticWallpaperStills` key is ignored.
+The menu uses a native checkmark. Its toggle updates an open General checkbox without discarding unrelated edits; saving General updates the menu.
+The existing maintenance timer checks for the one pending startup capture; no extra animation timer is added.
+Lock notifications are best-effort. macOS may already have prepared the lock screen, so it can show the previous image instead of the newest capture.
+Lock capture can use retained views already hidden by the screen saver; repeated lock notifications are deduplicated.
+Errors are logged and exposed in the option's tooltip, never through a blocking lock-time alert or continuous retries.
+Image updates work independently of **Sync with Screen Saver** and preserve manual pause.
+The preference can be changed while stopped; capture waits for playback.
+
+Capture draws only the Matrix view at backing resolution. It requires no screen-recording permission and excludes other windows, desktop icons, and the menu bar.
+All PNGs are written before any wallpaper selection changes. A native setter failure identifies affected displays; successful selections are not rolled back.
+The API targets connected screens, not every Space or the pre-login/FileVault screen. Menu-bar and lock-screen appearance remain controlled by macOS.
+
+Images live in unique capture directories under `~/Library/Application Support/MatrixWallpaper/Stills/`.
+They are not overwritten or automatically deleted, including after quitting or uninstalling; another Space may still reference an earlier capture.
+Repeated requests consume additional disk space. Choose another wallpaper in **System Settings > Wallpaper** to replace an image.
+The app never restores the previous wallpaper. When automation is enabled, it captures the current scene on launch rather than reapplying an old file.
+Run `./wallpaper-tests.sh --still-tests` for capture, persistence, default-on behavior and saved opt-outs, shared menu/General state, automatic timing, error, and lifecycle checks with isolated storage and fake desktop setters.
 
 Older versions may have left files in `~/Library/Application Support/MatrixWallpaper/DesktopWallpaper/`.
 These legacy backups and black images are no longer read, restored, or deleted by the app.

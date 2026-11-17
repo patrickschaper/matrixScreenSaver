@@ -93,7 +93,8 @@ func loginItemTests() {
 
     status = .enabled
     menu.removeAllItems()
-    let host = WallpaperApp(loginItems: controller)
+    let host = WallpaperApp(
+        loginItems: controller, stillWallpaper: isolatedStillWallpaperController())
     host.applicationDidFinishLaunching(
         Notification(name: NSApplication.didFinishLaunchingNotification))
     let hostMenu = controller.item.menu!

@@ -33,6 +33,8 @@ struct MatrixScreenSaverOptions: Equatable {
         static let rainGlyphSet = "RainGlyphSet"
         static let scanLinesIntensity = "ScanLinesIntensity"
         static let scanLinesVertical = "ScanLinesVertical"
+        /// Shared preference for desktop and lock-screen images, independent of legacy settings.
+        static let useMatrixImageForLockScreen = "UseMatrixImageForLockScreen"
     }
 
     static let defaultNeoMessageSceneEnabled = true
@@ -142,6 +144,8 @@ struct MatrixScreenSaverOptions: Equatable {
     var rainGlyphSet: RainGlyphSet = .default
     var scanLinesIntensity = defaultScanLinesIntensity
     var scanLinesVertical = defaultScanLinesVertical
+    /// Updates images of the current Matrix scene by default unless the user turns it off.
+    var useMatrixImageForLockScreen = true
 
     /// Identifies changes that rebuild the grid or alter the coordinated scene sequence.
     ///
@@ -251,7 +255,8 @@ struct MatrixScreenSaverOptions: Equatable {
                     .prefix(1)),
             rainGlyphSet: rainGlyphSet,
             scanLinesIntensity: max(0, min(1, scanLinesIntensity)),
-            scanLinesVertical: scanLinesVertical
+            scanLinesVertical: scanLinesVertical,
+            useMatrixImageForLockScreen: useMatrixImageForLockScreen
         )
     }
 
@@ -282,6 +287,7 @@ struct MatrixScreenSaverOptions: Equatable {
             Keys.rainGlyphSet: RainGlyphSet.default.rawValue,
             Keys.scanLinesIntensity: defaultScanLinesIntensity,
             Keys.scanLinesVertical: defaultScanLinesVertical,
+            Keys.useMatrixImageForLockScreen: true,
         ])
     }
 
@@ -313,7 +319,9 @@ struct MatrixScreenSaverOptions: Equatable {
             rainGlyphSet: RainGlyphSet(rawValue: defaults.string(forKey: Keys.rainGlyphSet) ?? "")
                 ?? .default,
             scanLinesIntensity: defaults.double(forKey: Keys.scanLinesIntensity),
-            scanLinesVertical: defaults.bool(forKey: Keys.scanLinesVertical)
+            scanLinesVertical: defaults.bool(forKey: Keys.scanLinesVertical),
+            useMatrixImageForLockScreen: defaults.object(forKey: Keys.useMatrixImageForLockScreen)
+                as? Bool ?? true
         ).sanitized()
     }
 
@@ -344,6 +352,7 @@ struct MatrixScreenSaverOptions: Equatable {
         defaults.set(options.rainGlyphSet.rawValue, forKey: Keys.rainGlyphSet)
         defaults.set(options.scanLinesIntensity, forKey: Keys.scanLinesIntensity)
         defaults.set(options.scanLinesVertical, forKey: Keys.scanLinesVertical)
+        defaults.set(options.useMatrixImageForLockScreen, forKey: Keys.useMatrixImageForLockScreen)
         defaults.synchronize()
     }
 }
@@ -490,6 +499,9 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
     private let rainRunForeverCheckbox = NSButton(
         checkboxWithTitle: "Run forever", target: nil, action: nil)
     private let rainDurationField = NSTextField(string: "")
+    /// Shares the wallpaper menu's image preference without changing the screen saver's rendering.
+    private let lockScreenImageCheckbox = NSButton(
+        checkboxWithTitle: "Use Matrix Image on Lock Screen", target: nil, action: nil)
     private let frameRateField = NSTextField(string: "")
     private let errorRateField = NSTextField(string: "")
     private let charactersField = NSTextField(string: "")
@@ -555,6 +567,7 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         rainDurationField.stringValue = Self.format(options.rainDurationSeconds)
         rainDurationField.isEnabled = !options.rainRunForever
         frameRateField.stringValue = Self.format(options.frameRate)
+        updateLockScreenImage(enabled: options.useMatrixImageForLockScreen)
         errorRateField.stringValue = Self.format(options.errorRate)
         charactersField.stringValue = options.characters
         selectedRainFonts = options.sanitized().rainFonts
@@ -562,6 +575,12 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
         updateRainGlyphControls()
         rebuildRainFontsMenu()
         updateSceneControls()
+    }
+
+    /// Reflects a menu change without discarding other unsaved settings.
+    /// - Parameter enabled: The shared lock-screen image preference.
+    func updateLockScreenImage(enabled: Bool) {
+        lockScreenImageCheckbox.state = enabled ? .on : .off
     }
 
     /// Returns the native sheet window presented by ScreenSaver.framework.
@@ -708,6 +727,15 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
                                 checkbox: twinkleCheckbox,
                                 description:
                                     "Vary character brightness in the rain and trace program."),
+                        ]),
+                    makeOptionsGroup(
+                        title: "Animated wallpaper",
+                        views: [
+                            makeCheckboxSection(
+                                checkbox: lockScreenImageCheckbox,
+                                description:
+                                    "Uses the current Matrix frame for your desktop and lock screen."
+                            )
                         ]),
                 ]))
         tabs.addTabViewItem(
@@ -1858,7 +1886,8 @@ final class MatrixScreenSaverOptionsSheetController: NSObject,
             rainFonts: selectedRainFonts,
             rainGlyphSet: selectedRainGlyphSet,
             scanLinesIntensity: scanLinesSlider.doubleValue / 100,
-            scanLinesVertical: scanLinesDirectionPopup.indexOfSelectedItem == 0
+            scanLinesVertical: scanLinesDirectionPopup.indexOfSelectedItem == 0,
+            useMatrixImageForLockScreen: lockScreenImageCheckbox.state == .on
         ).sanitized()
     }
 
