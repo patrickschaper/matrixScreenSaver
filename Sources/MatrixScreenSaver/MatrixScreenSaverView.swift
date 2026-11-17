@@ -1313,6 +1313,33 @@ final class MatrixScreenSaverView: ScreenSaverView {
         applySaverOptions(options, persist: false, restartAnimation: false)
     }
 
+    /// Allows any current scene to become a wallpaper image, but skips empty startup frames.
+    var hasVisibleWallpaperFrame: Bool {
+        isWallpaperHost && animationActive && nativeRenderer.hasVisibleContent
+    }
+
+    /// Copies the current wallpaper canvas at backing resolution without advancing the scene.
+    ///
+    /// Call on the main thread. Paused views retain their pixels; active frame sharing
+    /// remains untouched. Only this view is drawn, never other desktop content.
+    /// - Returns: An immutable frame, or nil when the wallpaper is inactive or cannot render.
+    func snapshotWallpaperFrame() -> CGImage? {
+        guard isWallpaperHost, animationActive, terminalSize != nil,
+            bounds.width > 0, bounds.height > 0
+        else { return nil }
+        let scale = window?.backingScaleFactor ?? 1
+        guard
+            let context = makeNativeBitmapContext(
+                width: Int(ceil(bounds.width * scale)), height: Int(ceil(bounds.height * scale)))
+        else { return nil }
+        context.scaleBy(x: scale, y: scale)
+        NSGraphicsContext.saveGraphicsState()
+        defer { NSGraphicsContext.restoreGraphicsState() }
+        NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
+        draw(bounds)
+        return context.makeImage()
+    }
+
     /// Offers the current wallpaper frame without copying or restarting its simulation.
     ///
     /// - Returns: A private shared-memory file, or nil if this host cannot publish it.

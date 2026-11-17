@@ -56,6 +56,7 @@ swiftc -O -module-name MatrixWallpaper \
   "$WALLPAPER_DIR/WallpaperPlaybackState.swift" \
   "$WALLPAPER_DIR/LoginItemController.swift" \
   "$WALLPAPER_DIR/ScreenSaverInstallationController.swift" \
+  "$WALLPAPER_DIR/StillWallpaperController.swift" \
   "$WALLPAPER_DIR/WallpaperApp.swift" \
   "$WALLPAPER_DIR/main.swift" \
   -o "$BUNDLE_DIR/Contents/MacOS/MatrixWallpaper"

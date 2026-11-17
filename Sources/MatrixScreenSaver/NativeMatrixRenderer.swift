@@ -522,6 +522,11 @@ final class NativeMatrixRenderer {
     private var numberIntroBlackedColumns = Set<Int>()
     private var rainStartTime: TimeInterval = 0  // wall-clock time when current rain phase began
 
+    /// Allows wallpaper capture from any scene once it contains visible characters.
+    var hasVisibleContent: Bool {
+        running && visibleCountByRow.contains { $0 > 0 }
+    }
+
     /// Returns the rendered cell content at the requested grid position.
     subscript(row: Int, column: Int) -> RenderCell {
         renderCells[(row * columns) + column]

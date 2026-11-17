@@ -14,6 +14,23 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Shares companion discovery and explicit recovery between menu and settings.
     private let screenSaverInstallation: ScreenSaverInstallationController
 
+    /// Persists startup and lock-screen images while the shared preference is enabled.
+    private let stillWallpaper: StillWallpaperController
+    /// Reads shared settings without requiring tests to alter the user's preferences.
+    private let loadOptions: () -> MatrixScreenSaverOptions
+    /// Persists the same option from either UI without touching real preferences in tests.
+    private let saveOptions: (MatrixScreenSaverOptions) -> Void
+    /// One automatic attempt per launch or explicit Start, once every display has visible content.
+    private var startupStillPending = true
+    /// Deduplicates best-effort lock notifications until the matching unlock.
+    private var screenLocked = false
+    /// Prevents reentry during image preparation and native desktop updates.
+    private var isSettingStillWallpaper = false
+    /// Shares the General-tab preference, with the native checkmark indicating enabled updates.
+    private let lockScreenImageItem = NSMenuItem(
+        title: "Use Matrix Image on Lock Screen", action: #selector(toggleLockScreenImage(_:)),
+        keyEquivalent: "")
+
     /// Persists user intent even while no saver is installed.
     private static let syncPreferenceKey = "syncWithScreenSaver"
     /// Offers selection before synchronization, or recovery when the saver is missing.
@@ -28,6 +45,9 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     ///   - defaults: Store for wallpaper-only preferences.
     ///   - screenSaverDirectories: User and local installed-saver directories.
     ///   - screenSaverInstallation: Optional isolated discovery and installation controller.
+    ///   - stillWallpaper: Writer with injectable storage and desktop operations for tests.
+    ///   - loadOptions: Reads persisted rendering and lock-screen image preferences.
+    ///   - saveOptions: Persists changes from both the menu and settings window.
     init(
         loginItems: LoginItemController = LoginItemController(), defaults: UserDefaults = .standard,
         screenSaverDirectories: [URL] = [
@@ -35,10 +55,19 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 "Library/Screen Savers"),
             URL(fileURLWithPath: "/Library/Screen Savers"),
         ],
-        screenSaverInstallation: ScreenSaverInstallationController? = nil
+        screenSaverInstallation: ScreenSaverInstallationController? = nil,
+        stillWallpaper: StillWallpaperController = StillWallpaperController(),
+        loadOptions: @escaping () -> MatrixScreenSaverOptions = MatrixScreenSaverView
+            .loadSaverOptions,
+        saveOptions: @escaping (MatrixScreenSaverOptions) -> Void = {
+            $0.save(to: MatrixScreenSaverView.defaults)
+        }
     ) {
         self.loginItems = loginItems
         self.defaults = defaults
+        self.stillWallpaper = stillWallpaper
+        self.loadOptions = loadOptions
+        self.saveOptions = saveOptions
         self.screenSaverInstallation =
             screenSaverInstallation
             ?? ScreenSaverInstallationController(directories: screenSaverDirectories)
@@ -99,7 +128,7 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }.sorted { $0.id < $1.id }
     }
 
-    /// Installs menu controls and observers, then queues playback without changing macOS wallpaper settings.
+    /// Installs controls and observers, then queues playback and its optional wallpaper image.
     func applicationDidFinishLaunching(_ notification: Notification) {
         installEditingMenu()
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -128,6 +157,10 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         syncItem.target = self
         menu.addItem(loginItems.item)
         menu.addItem(syncItem)
+        lockScreenImageItem.target = self
+        lockScreenImageItem.toolTip =
+            "Uses the current Matrix frame for your desktop and lock screen."
+        menu.addItem(lockScreenImageItem)
         menu.addItem(.separator())
         let coffee = NSMenuItem(
             title: "Buy Me a Coffee", action: #selector(openDonationPage(_:)), keyEquivalent: "")
@@ -154,6 +187,9 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         frameLeaseTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) {
             [weak self] _ in
             guard let self else { return }
+            if self.startupStillPending && self.playback.shouldShowDesktop {
+                self.updateAutomaticWallpaperStill()
+            }
             let now = ProcessInfo.processInfo.systemUptime
             let expired = self.frameRequests.filter {
                 now - $0.value >= SharedWallpaperFrame.freshnessInterval
@@ -216,6 +252,7 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Refreshes login status, companion presence, and current selection when the menu opens.
     func menuWillOpen(_ menu: NSMenu) {
         loginItems.menuWillOpen(menu)
+        updatePlaybackMenu()
         screenSaverInstallation.refresh()
         updateScreenSaverControls()
     }
@@ -324,6 +361,7 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         pendingLaunch?.cancel()
         pendingLaunch = nil
         playback.isRequested.toggle()
+        startupStillPending = playback.isRequested
         playback.isPaused = false
         reconcilePlayback()
     }
@@ -358,7 +396,7 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
             else { return }
             NSApp.sendAction(action, to: self, from: nil)
         }
-        controller.prepare(using: MatrixScreenSaverView.loadSaverOptions())
+        controller.prepare(using: loadOptions())
         optionsController = controller
         updateScreenSaverControls()
         controller.configureSheet().center()
@@ -377,8 +415,14 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func applyOptions(_ options: MatrixScreenSaverOptions) {
         let options = options.sanitized()
         let restart = options.requiresSceneRestart(comparedTo: currentOptions)
-        options.save(to: MatrixScreenSaverView.defaults)
+        if !options.useMatrixImageForLockScreen {
+            startupStillPending = false
+        } else if !currentOptions.useMatrixImageForLockScreen {
+            startupStillPending = true
+        }
+        saveOptions(options)
         currentOptions = options
+        updatePlaybackMenu()
         if restart {
             reconcilePlayback(restart: true)
         } else {
@@ -388,17 +432,83 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
+    // MARK: - Lock-screen image
+
+    /// Toggles the same persisted option shown in General, preserving other edited fields.
+    /// - Parameter sender: Menu item used to enable or disable desktop and lock-screen images.
+    @objc private func toggleLockScreenImage(_ sender: Any?) {
+        guard !isTerminating else { return }
+        var options = loadOptions()
+        options.useMatrixImageForLockScreen.toggle()
+        applyOptions(options)
+        optionsController?.updateLockScreenImage(enabled: options.useMatrixImageForLockScreen)
+    }
+
+    /// Whether the current display surfaces exist, including retained views hidden by locking.
+    private var hasCurrentStillFrames: Bool {
+        !isTerminating && pendingLaunch == nil && playback.isRequested
+            && !windows.isEmpty && windows.count == NSScreen.screens.count
+            && displayLayout == currentDisplayLayout
+    }
+
+    /// Captures the current scene without prompting or interrupting lock handling.
+    /// Failure remains visible in the option's help text and in the system log.
+    private func updateAutomaticWallpaperStill() {
+        guard hasCurrentStillFrames, !isSettingStillWallpaper,
+            windows.allSatisfy({
+                ($0.contentView as? MatrixScreenSaverView)?.hasVisibleWallpaperFrame == true
+            })
+        else { return }
+        startupStillPending = false
+        guard loadOptions().useMatrixImageForLockScreen else { return }
+        isSettingStillWallpaper = true
+        defer {
+            isSettingStillWallpaper = false
+            updatePlaybackMenu()
+        }
+        do {
+            try saveCurrentWallpaperFrames()
+            lockScreenImageItem.toolTip =
+                "Uses the current Matrix frame for your desktop and lock screen."
+        } catch {
+            lockScreenImageItem.toolTip = "Image update failed: \(error.localizedDescription)"
+            NSLog("Matrix wallpaper image update failed: %@", error.localizedDescription)
+        }
+    }
+
+    /// Captures all participating views before the writer performs any file or desktop changes.
+    /// - Throws: A missing frame, preparation failure, or per-display wallpaper-setting error.
+    private func saveCurrentWallpaperFrames() throws {
+        let frames = try windows.map { window -> StillWallpaperController.Frame in
+            guard let screen = window.screen,
+                let view = window.contentView as? MatrixScreenSaverView,
+                let image = view.snapshotWallpaperFrame()
+            else {
+                throw NSError(
+                    domain: "MatrixWallpaper.Still", code: 4,
+                    userInfo: [
+                        NSLocalizedDescriptionKey:
+                            "Could not capture every Matrix display. No wallpapers were changed. Wait for the animation to start and try again."
+                    ])
+            }
+            return StillWallpaperController.Frame(screen: screen, image: image)
+        }
+        try stillWallpaper.apply(frames)
+    }
+
+    // MARK: - Playback lifecycle
+
     /// Rebuilds the whole participating session, never leaving stale scene-barrier members.
     ///
     /// - Parameter restart: Forces coordinated reconstruction after options or display changes.
     private func reconcilePlayback(restart: Bool = false) {
         guard !isTerminating else { return }
-        updatePlaybackMenu()
+        defer { updatePlaybackMenu() }
         guard pendingLaunch == nil else { return }
         if !playback.isRequested || restart { removeDesktopWindows() }
         guard !isTerminating, playback.isRequested else { return }
         if windows.isEmpty && (playback.shouldRun || playback.shouldShowDesktop) {
-            currentOptions = MatrixScreenSaverView.loadSaverOptions()
+            currentOptions = loadOptions()
             displayLayout = currentDisplayLayout
             for screen in NSScreen.screens {
                 guard
@@ -461,6 +571,8 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
             systemSymbolName: playback.isPaused ? "play.fill" : "pause.fill",
             accessibilityDescription: nil)
         pauseItem.isEnabled = playback.isRequested
+        lockScreenImageItem.state = loadOptions().useMatrixImageForLockScreen ? .on : .off
+        lockScreenImageItem.isEnabled = !isTerminating
         // macOS 27 normally hides menu images; use the same explicit preference as the coffee icon.
         for item in [playbackItem, pauseItem]
         where item.responds(to: NSSelectorFromString("setPreferredImageVisibility:")) {
@@ -560,8 +672,17 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         observers.append((center, token))
     }
 
-    /// Applies a system condition without starting a stopped or still-suspended session.
-    private func setSuspended(_ reason: WallpaperPlaybackState.Suspension, _ suspended: Bool) {
+    /// Applies a system condition, refreshing the current image once per lock before hiding views.
+    ///
+    /// - Parameters:
+    ///   - reason: System condition reported by the host's notification observers.
+    ///   - suspended: Whether this condition has begun or ended.
+    func setSuspended(_ reason: WallpaperPlaybackState.Suspension, _ suspended: Bool) {
+        if reason == .locked {
+            let enteringLock = suspended && !screenLocked
+            screenLocked = suspended
+            if enteringLock { updateAutomaticWallpaperStill() }
+        }
         if reason == .screenSaver && !suspended { endFrameSharing() }
         playback.setSuspended(reason, suspended)
         reconcilePlayback()
@@ -576,7 +697,7 @@ final class WallpaperApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         else { return }
         let starting = !playback.isServingScreenSaver
         if starting {
-            let options = MatrixScreenSaverView.loadSaverOptions()
+            let options = loadOptions()
             if options != currentOptions { applyOptions(options) }
         }
         frameRequests[displayID] = ProcessInfo.processInfo.systemUptime
