@@ -26,6 +26,10 @@ func wait(_ seconds: TimeInterval) {
 let app = NSApplication.shared
 app.setActivationPolicy(.accessory)
 app.finishLaunching()
+if CommandLine.arguments.contains("--still-tests") {
+    stillWallpaperTests()
+    exit(failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE)
+}
 if CommandLine.arguments.contains("--installation-tests") {
     screenSaverInstallationTests()
     exit(failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE)
@@ -95,6 +99,7 @@ check(!window.isVisible, "closing removes the desktop window")
 sharedSaverTests()
 sharedCompositionTests()
 wallpaperAppTests()
+stillWallpaperTests()
 screenSaverInstallationTests()
 loginItemTests()
 exit(failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE)

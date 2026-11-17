@@ -23,7 +23,9 @@ func wallpaperAppTests() {
         at: selectionURL, saver: saverContents.deletingLastPathComponent())
     let installation = ScreenSaverInstallationController(
         directories: [saverDirectory], recordURL: nil, selectionURL: selectionURL)
-    let host = WallpaperApp(defaults: defaults, screenSaverInstallation: installation)
+    let host = WallpaperApp(
+        defaults: defaults, screenSaverInstallation: installation,
+        stillWallpaper: isolatedStillWallpaperController())
     host.applicationDidFinishLaunching(
         Notification(name: NSApplication.didFinishLaunchingNotification))
     defer {
@@ -71,9 +73,10 @@ func wallpaperAppTests() {
         check(
             syncIndex == loginIndex + 1 && loginIndex > 1
                 && menuItems[loginIndex - 1] === settingsItem
-                && menuItems[loginIndex - 2].isSeparatorItem && syncIndex + 1 < menuItems.count
-                && menuItems[syncIndex + 1].isSeparatorItem,
-            "settings, login, and screen saver sync form one preference group")
+                && menuItems[loginIndex - 2].isSeparatorItem && syncIndex + 2 < menuItems.count
+                && menuItems[syncIndex + 1].action == NSSelectorFromString("toggleLockScreenImage:")
+                && menuItems[syncIndex + 2].isSeparatorItem,
+            "settings, login, screen saver sync, and lock-screen image form one preference group")
     } else {
         check(false, "menu contains login and screen saver sync controls")
     }
@@ -383,7 +386,7 @@ func wallpaperAppTests() {
     check(desktopWindowCount() == 0, "Quit unregisters system observers")
 }
 
-/// Guards against reintroducing desktop-image changes or legacy wallpaper backup handling.
+/// Restricts desktop setters to the dedicated image writer and forbids legacy restoration.
 private func wallpaperSelectionPreservationTests() {
     let sources = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
         .deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Sources")
@@ -400,9 +403,12 @@ private func wallpaperSelectionPreservationTests() {
         }
         let source = try swiftFiles.map { try String(contentsOf: $0, encoding: .utf8) }.joined(
             separator: "\n")
+        let setters = try swiftFiles.filter {
+            try String(contentsOf: $0, encoding: .utf8).contains("setDesktopImageURL")
+        }
         check(
-            !source.contains("setDesktopImageURL"),
-            "runtime sources never set the native desktop image")
+            setters.map(\.lastPathComponent) == ["StillWallpaperController.swift"],
+            "only the dedicated image writer sets the native desktop image")
         check(
             !source.contains("DesktopWallpaperController") && !source.contains("originals.plist"),
             "runtime sources cannot acquire or restore legacy wallpaper backups")
@@ -474,7 +480,8 @@ private func wallpaperDeferredLaunchTests() {
     defer { defaults.removePersistentDomain(forName: suite) }
     let workspace = NSWorkspace.shared.notificationCenter
     do {
-        let host = WallpaperApp(defaults: defaults)
+        let host = WallpaperApp(
+            defaults: defaults, stillWallpaper: isolatedStillWallpaperController())
         host.applicationDidFinishLaunching(
             Notification(name: NSApplication.didFinishLaunchingNotification))
         defer {
@@ -496,7 +503,8 @@ private func wallpaperDeferredLaunchTests() {
             }, "Resume starts the session paused during launch")
     }
     for action in ["Stop", "Quit", "Stop then Start"] {
-        let host = WallpaperApp(defaults: defaults)
+        let host = WallpaperApp(
+            defaults: defaults, stillWallpaper: isolatedStillWallpaperController())
         host.applicationDidFinishLaunching(
             Notification(name: NSApplication.didFinishLaunchingNotification))
         defer {
@@ -543,7 +551,7 @@ private func wallpaperDeferredLaunchTests() {
         }
     }
 
-    let host = WallpaperApp(defaults: defaults)
+    let host = WallpaperApp(defaults: defaults, stillWallpaper: isolatedStillWallpaperController())
     host.applicationDidFinishLaunching(
         Notification(name: NSApplication.didFinishLaunchingNotification))
     defer {
@@ -614,7 +622,8 @@ private func wallpaperSyncMenuTests() {
     let installation = ScreenSaverInstallationController(
         directories: [user, local], appURL: app, recordURL: nil, selectionURL: selection)
     let host = WallpaperApp(
-        loginItems: login, defaults: defaults, screenSaverInstallation: installation)
+        loginItems: login, defaults: defaults, screenSaverInstallation: installation,
+        stillWallpaper: isolatedStillWallpaperController())
     NSApp.sendAction(NSSelectorFromString("togglePlayback:"), to: host, from: nil)
     host.applicationDidFinishLaunching(
         Notification(name: NSApplication.didFinishLaunchingNotification))
@@ -753,7 +762,8 @@ private func wallpaperSyncMenuTests() {
         "menu refresh follows saver symlinks and refreshes Launch at Login")
     host.applicationWillTerminate(Notification(name: NSApplication.willTerminateNotification))
     let relaunched = WallpaperApp(
-        defaults: UserDefaults(suiteName: suite)!, screenSaverInstallation: installation)
+        defaults: UserDefaults(suiteName: suite)!, screenSaverInstallation: installation,
+        stillWallpaper: isolatedStillWallpaperController())
     NSApp.sendAction(NSSelectorFromString("togglePlayback:"), to: relaunched, from: nil)
     relaunched.applicationDidFinishLaunching(
         Notification(name: NSApplication.didFinishLaunchingNotification))

@@ -103,7 +103,9 @@ func screenSaverInstallationTests() {
         installation.refresh()
 
         defaults.set(false, forKey: "syncWithScreenSaver")
-        let host = WallpaperApp(defaults: defaults, screenSaverInstallation: installation)
+        let host = WallpaperApp(
+            defaults: defaults, screenSaverInstallation: installation,
+            stillWallpaper: isolatedStillWallpaperController())
         // Stop before launch so this UI fixture never starts rendering.
         NSApp.sendAction(NSSelectorFromString("togglePlayback:"), to: host, from: nil)
         host.applicationDidFinishLaunching(
