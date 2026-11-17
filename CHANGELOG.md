@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+
+## [0.7.0] - 2026-11-17
+
+### Features
+
+- promote Matrix desktop and lock-screen images (#157)
+
 ## [0.6.3] - 2026-11-13
 
 ### Bug Fixes
