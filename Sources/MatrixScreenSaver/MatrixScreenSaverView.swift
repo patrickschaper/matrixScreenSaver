@@ -1080,59 +1080,62 @@ final class MatrixScreenSaverView: ScreenSaverView {
         drawing: UnicodeScalar? = nil,
         attributes: [NSAttributedString.Key: Any]
     ) -> CGImage? {
-        let pixelWidth = max(Int(ceil(cellWidth)), 1)
-        let pixelHeight = max(Int(ceil(lineHeight)), 1)
-        guard let glyphContext = makeNativeBitmapContext(width: pixelWidth, height: pixelHeight)
-        else {
-            return nil
-        }
-        let graphicsContext = NSGraphicsContext(cgContext: glyphContext, flipped: false)
+        // Drain temporary AppKit contexts per glyph instead of stalling the next run-loop cycle.
+        return autoreleasepool {
+            let pixelWidth = max(Int(ceil(cellWidth)), 1)
+            let pixelHeight = max(Int(ceil(lineHeight)), 1)
+            guard let glyphContext = makeNativeBitmapContext(width: pixelWidth, height: pixelHeight)
+            else {
+                return nil
+            }
+            let graphicsContext = NSGraphicsContext(cgContext: glyphContext, flipped: false)
 
-        glyphContext.clear(
-            CGRect(origin: .zero, size: CGSize(width: pixelWidth, height: pixelHeight)))
+            glyphContext.clear(
+                CGRect(origin: .zero, size: CGSize(width: pixelWidth, height: pixelHeight)))
 
-        // Full-block cursor: fill the entire cell with the foreground color so the
-        // cursor is always exactly one character cell wide, regardless of font metrics.
-        if scalar == UnicodeScalar(0x2588),
-            let fgColor = attributes[.foregroundColor] as? NSColor
-        {
+            // Full-block cursor: fill the entire cell with the foreground color so the
+            // cursor is always exactly one character cell wide, regardless of font metrics.
+            if scalar == UnicodeScalar(0x2588),
+                let fgColor = attributes[.foregroundColor] as? NSColor
+            {
+                NSGraphicsContext.saveGraphicsState()
+                NSGraphicsContext.current = graphicsContext
+                fgColor.setFill()
+                NSRect(x: 0, y: 0, width: CGFloat(pixelWidth), height: CGFloat(pixelHeight)).fill()
+                NSGraphicsContext.restoreGraphicsState()
+                return glyphContext.makeImage()
+            }
+
+            let text = String(drawing ?? scalar)
+            if drawing != nil {
+                let line = CTLineCreateWithAttributedString(
+                    NSAttributedString(string: text, attributes: attributes))
+                let ink = CTLineGetImageBounds(line, glyphContext)
+                guard !ink.isEmpty, !ink.isNull else { return glyphContext.makeImage() }
+                // Selected fonts can be wider or taller than the system font used to size the grid.
+                let scale = min(
+                    1, max(cellWidth - 2, 1) / ink.width, max(lineHeight - 2, 1) / ink.height)
+                glyphContext.translateBy(
+                    x: (cellWidth - ink.width * scale) / 2 - ink.minX * scale,
+                    y: (lineHeight - ink.height * scale) / 2 - ink.minY * scale)
+                glyphContext.scaleBy(x: scale, y: scale)
+                glyphContext.textPosition = .zero
+                CTLineDraw(line, glyphContext)
+                return glyphContext.makeImage()
+            }
+            let textSize = (text as NSString).size(withAttributes: attributes)
+            let point = NSPoint(
+                x: max(0, floor((cellWidth - textSize.width) / 2)),
+                y: textInsetY
+            )
+
             NSGraphicsContext.saveGraphicsState()
             NSGraphicsContext.current = graphicsContext
-            fgColor.setFill()
-            NSRect(x: 0, y: 0, width: CGFloat(pixelWidth), height: CGFloat(pixelHeight)).fill()
+            (text as NSString).draw(at: point, withAttributes: attributes)
             NSGraphicsContext.restoreGraphicsState()
+
             return glyphContext.makeImage()
         }
-
-        let text = String(drawing ?? scalar)
-        if drawing != nil {
-            let line = CTLineCreateWithAttributedString(
-                NSAttributedString(string: text, attributes: attributes))
-            let ink = CTLineGetImageBounds(line, glyphContext)
-            guard !ink.isEmpty, !ink.isNull else { return glyphContext.makeImage() }
-            // Selected fonts can be wider or taller than the system font used to size the grid.
-            let scale = min(
-                1, max(cellWidth - 2, 1) / ink.width, max(lineHeight - 2, 1) / ink.height)
-            glyphContext.translateBy(
-                x: (cellWidth - ink.width * scale) / 2 - ink.minX * scale,
-                y: (lineHeight - ink.height * scale) / 2 - ink.minY * scale)
-            glyphContext.scaleBy(x: scale, y: scale)
-            glyphContext.textPosition = .zero
-            CTLineDraw(line, glyphContext)
-            return glyphContext.makeImage()
-        }
-        let textSize = (text as NSString).size(withAttributes: attributes)
-        let point = NSPoint(
-            x: max(0, floor((cellWidth - textSize.width) / 2)),
-            y: textInsetY
-        )
-
-        NSGraphicsContext.saveGraphicsState()
-        NSGraphicsContext.current = graphicsContext
-        (text as NSString).draw(at: point, withAttributes: attributes)
-        NSGraphicsContext.restoreGraphicsState()
-
-        return glyphContext.makeImage()
     }
 
     /// Returns the cached glyph image for a rendered cell.
