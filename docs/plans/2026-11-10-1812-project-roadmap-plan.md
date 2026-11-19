@@ -8,7 +8,32 @@ This roadmap records future work for the native macOS screen saver and animated 
 
 - Native Swift/AppKit screen saver and wallpaper app share the Matrix animation and options.
 - `NativeMatrixRenderer.swift` supplies the falling glyphs and intro scenes.
-- `SharedWallpaperCompositor.swift` already uses Metal and Core Image for GPU-assisted wallpaper compositing. This is not a full 3D scene renderer.
+- `SharedWallpaperCompositor.swift` uses Metal and Core Image when the wallpaper publishes frames for a synchronized saver. The standalone saver and wallpaper now use a Metal glyph atlas for dense frames, with Core Graphics for sparse updates and fallback.
+
+## Planned: Check hardware acceleration for the current 2D rain
+
+- [ ] **Profile the current code first.** Trace one frame from animation update through glyph drawing and compositing to display in both the `.saver` host and the wallpaper app. Record which stages already use the GPU, which run on the CPU, and whether the existing paths can use more GPU acceleration without code changes.
+- [ ] **Test the smallest useful change.** If a CPU stage limits playback, prototype accelerating just that stage. For example, if glyph drawing is the bottleneck, keep the animation logic and draw the glyphs in batches with Metal. Compare frame times, CPU/GPU use, and energy impact against the unchanged renderer at the same resolution, frame rate, and rain settings; check that the rain looks the same.
+- [ ] **Record a recommendation for each host.** Use the measurements to recommend keeping the current path or changing the 2D renderer. Separately, identify what could be reused for the 3D proof of concept below and what new rendering code it would need. A 3D scene is optional; it is not a prerequisite for accelerating 2D rain.
+
+### First measurements — 2026-11-19, Apple M5 Pro
+
+**Finding:** No existing setting moves glyph drawing to the GPU. Keep the Swift simulation; the first experiment should replace the per-cell bitmap draws, not the animation rules or the frame-sharing transport.
+
+| Playback path             | What was measured                                                                                                                                                                                                                                                                                    | Implication                                                                                                        |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Ordinary wallpaper        | A 4-second stack sample of the installed 0.7.0 app with three displays attached found 291 main-thread samples in scene drawing versus 10 in simulation advance. The largest raster stacks called `CGContextDrawImage`, `CGContextFillRect`, and `CGContextClearRect`.                                | Accelerating only the final composite would leave the sampled work intact.                                         |
+| Standalone saver          | Release build at `83cd3ba`, real saver view drawing offscreen at 1920×1080, 25 fps, 13×24 cells, diffuse and vertical scanlines. After 100 warmup frames, 100 rain frames averaged 0.38 ms to advance and 17.02 ms to draw (18.43 ms total at p95).                                                  | The same 2D drawing experiment is relevant to the saver. These are bitmap timings, not macOS presentation latency. |
+| Wallpaper serving a saver | `./wallpaper-tests.sh --gpu-composition-benchmark`: at 3456×2234, CPU vs. linear GPU composition and publication averaged 21.14 vs. 6.41 ms including consumer snapshot; at 1920×1080, 5.60 vs. 2.88 ms. Pixel comparisons passed. These fixtures exclude glyph drawing and CPU dirty-band clipping. | Keep the existing GPU compositor. Its speedup is not a prediction for GPU glyph drawing.                           |
+| Synchronized saver        | `./wallpaper-tests.sh --consumer-host` confirmed that receiving a frame stops local simulation and that producer loss restarts standalone playback. `--composition-benchmark` measured 24.22 ms p95 for three producers combined (one Retina, two 1080p), excluding presentation.                    | Optimize the producer once; a connected saver does not need its own glyph renderer running.                        |
+
+### 2D optimization results — 2026-11-19, Apple M5 Pro
+
+The shared saver view now draws dense glyph updates and diffuse backgrounds in one Metal compute pass. The standalone view also skips the part of the background gradient covered by the opaque terminal. The simulation stays in Swift.
+
+Using the same 1920×1080 offscreen saver fixture described above, mean drawing time fell from 17.02 to 10.42 ms over 100 measured rain frames. The 95th percentile for simulation plus drawing fell from 18.43 to 11.62 ms. The Metal-only run averaged 15.45 ms to draw. A frozen 1080p GPU glyph frame matched the Core Graphics reference byte-for-byte. Drawing the background in edge strips matched the full gradient at 437×293, 1728×1117 and 1920×1080 points, each at 1× and 2× scale.
+
+Remaining measurements include full-screen presentation, multi-display GPU utilization and energy use. The current pass returns a bitmap for AppKit. A 3D prototype could write its pixels to a texture for a perspective plane.
 
 ## Planned: GPU-accelerated 3D Matrix hallway scene
 
@@ -65,4 +90,4 @@ The goal is a real 3D scene with depth and perspective, available in both the sc
 
 ## Next planning step
 
-Source the model candidates and confirm the reference composition. Use those findings and the rendering proof of concept to write a bounded implementation plan before starting production changes.
+Measure full-screen presentation and energy use with batched 2D glyph drawing. The 3D model search can proceed independently: confirm the reference composition and use the model shortlist and rendering proof of concept to plan the hallway scene.

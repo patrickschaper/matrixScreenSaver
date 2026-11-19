@@ -25,11 +25,13 @@ swiftc \
   "$SRC/SharedWallpaperFrame.swift" \
   "$SRC/WallpaperFrameReader.swift" \
   "$SRC/NativeMatrixRenderer.swift" \
+  "$SRC/MetalGlyphRasterizer.swift" \
   "$ROOT/Sources/MatrixWallpaper/WallpaperPlaybackState.swift" \
   "$TESTS/Xorshift64Tests.swift" \
   "$TESTS/ScreenSyncCoordinatorTests.swift" \
   "$TESTS/CmdCaptureSceneTests.swift" \
   "$TESTS/NativeMatrixRendererTests.swift" \
+  "$TESTS/MetalGlyphRasterizerTests.swift" \
   "$TESTS/WallpaperPlaybackStateTests.swift" \
   "$TESTS/SharedWallpaperFrameTests.swift" \
   "$TESTS/main.swift" \

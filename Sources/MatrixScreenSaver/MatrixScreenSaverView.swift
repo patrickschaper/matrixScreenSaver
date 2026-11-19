@@ -135,6 +135,9 @@ final class MatrixScreenSaverView: ScreenSaverView {
     private var nativeFrameBuffer: UnsafeMutableRawPointer?
     private var nativeFrameContext: CGContext?
     private var nativeFrameImage: CGImage?
+    private var glyphRasterizer: MetalGlyphRasterizer?
+    private var attemptedGlyphRasterizer = false
+    private var gpuTerminalImage: CGImage?
     private var nativeFrameSize = CGSize.zero
     private let nativeRenderer = NativeMatrixRenderer()
     private var saverOptions = MatrixScreenSaverOptions()
@@ -686,6 +689,8 @@ final class MatrixScreenSaverView: ScreenSaverView {
         releaseNativeFrameResources()
         terminalSize = nil
         nativeRegularGlyphsByLevel.removeAll(keepingCapacity: false)
+        glyphRasterizer = nil
+        attemptedGlyphRasterizer = false
         nativeGlyphCacheKey = nil
         nativeBoldGlyphsByLevel.removeAll(keepingCapacity: false)
         nativeSupplementalGlyphs.removeAll(keepingCapacity: false)
@@ -699,6 +704,34 @@ final class MatrixScreenSaverView: ScreenSaverView {
     private func drawBackground() {
         let canvasBounds = NSRect(origin: .zero, size: bounds.size)
 
+        if !showsWindowChrome, canvasBounds == terminalRect,
+            let context = NSGraphicsContext.current?.cgContext,
+            context.ctm.b == 0, context.ctm.c == 0, context.ctm.a >= 1,
+            abs(context.ctm.d) >= 1,
+            context.convertToDeviceSpace(canvasBounds).integral
+                == context.convertToDeviceSpace(canvasBounds)
+        {
+            // Preserve the gradient's device-pixel dithering phase in both edge strips.
+            let strip = Self.terminalCornerRadius + 2
+            let period = 256 / context.ctm.a
+            let right = floor((canvasBounds.maxX - strip) / period) * period
+            if right <= strip {
+                paintBackground(in: canvasBounds)
+                return
+            }
+            for (x, width) in [(CGFloat.zero, strip), (right, canvasBounds.width - right)] {
+                context.saveGState()
+                context.clip(to: CGRect(x: x, y: 0, width: width, height: canvasBounds.height))
+                paintBackground(in: canvasBounds)
+                context.restoreGState()
+            }
+        } else {
+            paintBackground(in: canvasBounds)
+        }
+    }
+
+    /// Uses full canvas coordinates so the gradient phase is identical in each clipped corner.
+    private func paintBackground(in canvasBounds: CGRect) {
         if let gradient = Self.backgroundGradient {
             gradient.draw(in: canvasBounds, angle: 90)
         } else {
@@ -873,7 +906,7 @@ final class MatrixScreenSaverView: ScreenSaverView {
         ctx.restoreGState()
     }
 
-    /// Repaints dirty rows once and snapshots the bitmap for CPU or GPU composition.
+    /// Batches dense updates on Metal and uses dirty-row Core Graphics drawing for sparse updates.
     private func nativeTerminalImage(_ localTerminalSize: TerminalSize) -> CGImage? {
         let visibleRows = min(localTerminalSize.rows, nativeRenderer.rows)
         let visibleColumns = min(localTerminalSize.columns, nativeRenderer.columns)
@@ -885,9 +918,37 @@ final class MatrixScreenSaverView: ScreenSaverView {
         let hasDiffuseBackground =
             saverOptions.diffuseEnabled && !nativeDiffuseColorsByLevel.isEmpty
 
+        let dirtyCells = (0..<visibleRows).reduce(0) {
+            $0 + (nativeRenderer.isRowDirty($1) ? nativeRenderer.visibleCount(in: $1) : 0)
+        }
+        // A full GPU dispatch and snapshot cost more than drawing a handful of glyphs.
+        if dirtyCells >= 512, localTerminalSize.rows == nativeRenderer.rows,
+            localTerminalSize.columns == nativeRenderer.columns
+        {
+            if !attemptedGlyphRasterizer {
+                attemptedGlyphRasterizer = true
+                glyphRasterizer = MetalGlyphRasterizer(
+                    images: nativeRegularGlyphsByLevel + nativeBoldGlyphsByLevel,
+                    diffuse: nativeDiffuseColorsByLevel)
+            }
+            if let image = glyphRasterizer?.image(
+                renderer: nativeRenderer, diffuse: hasDiffuseBackground,
+                glyph: nativeGlyphImage(for:))
+            {
+                gpuTerminalImage = image
+                nativeRenderer.clearDirtyRows()
+                return image
+            }
+        }
+        // The CPU bitmap predates the last GPU frame. Repaint every row on a transition.
+        if let gpuTerminalImage, !(0..<visibleRows).contains(where: nativeRenderer.isRowDirty) {
+            return gpuTerminalImage
+        }
+        let redrawAll = gpuTerminalImage != nil
+        gpuTerminalImage = nil
         var row = 0
         while row < visibleRows {
-            guard nativeRenderer.isRowDirty(row) else {
+            guard redrawAll || nativeRenderer.isRowDirty(row) else {
                 row += 1
                 continue
             }
@@ -1002,6 +1063,8 @@ final class MatrixScreenSaverView: ScreenSaverView {
             rainFonts: nativeRenderer.activeRainFonts,
             rainSources: nativeRenderer.rainSourceByScalar)
         guard nativeGlyphCacheKey != key else { return }
+        glyphRasterizer = nil
+        attemptedGlyphRasterizer = false
         nativeSupplementalGlyphs.removeAll(keepingCapacity: true)
         nativeRegularGlyphsByLevel = makeNativeGlyphCaches(
             palette: palette, font: regularFont, rainFonts: rainFonts)
@@ -1229,6 +1292,7 @@ final class MatrixScreenSaverView: ScreenSaverView {
             nativeFrameBuffer.deallocate()
             self.nativeFrameBuffer = nil
         }
+        gpuTerminalImage = nil
         nativeFrameSize = .zero
     }
 
