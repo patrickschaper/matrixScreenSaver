@@ -19,6 +19,7 @@ xorshift64Tests()
 screenSyncCoordinatorTests()
 cmdCaptureSceneTests()
 nativeMatrixRendererTests()
+metalGlyphRasterizerTests()
 wallpaperPlaybackStateTests()
 sharedWallpaperFrameTests()
 

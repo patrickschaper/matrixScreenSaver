@@ -32,6 +32,7 @@ swiftc "$OPTIMIZATION" -framework Foundation -framework AppKit -framework Screen
   "$SOURCE_DIR/SharedWallpaperFrame.swift" \
   "$SOURCE_DIR/WallpaperFrameReader.swift" \
   "$SOURCE_DIR/SharedWallpaperCompositor.swift" \
+  "$SOURCE_DIR/MetalGlyphRasterizer.swift" \
   "$SOURCE_DIR/MatrixScreenSaverView.swift" \
   "$WALLPAPER_DIR/DesktopWindow.swift" \
   "$WALLPAPER_DIR/WallpaperPlaybackState.swift" \

@@ -43,6 +43,7 @@ swiftc \
   "$SOURCE_DIR/SharedWallpaperFrame.swift" \
   "$SOURCE_DIR/WallpaperFrameReader.swift" \
   "$SOURCE_DIR/SharedWallpaperCompositor.swift" \
+  "$SOURCE_DIR/MetalGlyphRasterizer.swift" \
   "$SOURCE_DIR/MatrixScreenSaverView.swift"
 
 cp "$INPUT_RESOURCES_DIR/Info.plist" "$CONTENTS_DIR/Info.plist"
